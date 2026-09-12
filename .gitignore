@@ -1,0 +1,12 @@
+# build outputs
+go/**/bin/
+java/target/
+python/build/
+python/dist/
+python/*.egg-info/
+python/**/__pycache__/
+typescript/node_modules/
+typescript/dist/
+csharp/**/bin/
+csharp/**/obj/
+.DS_Store

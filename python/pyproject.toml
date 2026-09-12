@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lounge-sdk"
+version = "1.0.0"
+description = "Server API and OIDC client for the Lounge Account user center"
+requires-python = ">=3.9"
+readme = "README.md"
+license = { text = "Proprietary" }
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["lounge_sdk*"]
