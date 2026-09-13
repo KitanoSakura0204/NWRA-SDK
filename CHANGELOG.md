@@ -2,6 +2,8 @@
 
 ## 1.0.1 — 2026-09-13
 
+- Java：新增 Velocity 代理端插件示例（`examples/velocity/`）。
+
 - Go / Python：拒绝缺少 `code`、缺少或为 `null` 的 `data` 以及 HTTP ≥ 400 的"成功"响应，统一归为 `TransportError`；业务错误（`code != 0`）仍为 `ApiError`。
 - Go：未配置服务器密钥时直接返回 `ErrNotConfigured`，不再发起请求。
 - Python：`HTTPError` 响应体读取后关闭；OIDC 仅允许 `revoke` 返回空响应体，token / userinfo 空体或非 JSON 归为 `TransportError`，RFC 6749 错误对象仍为 `OAuthError`。

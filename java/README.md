@@ -46,6 +46,10 @@ public final class LoungePlugin extends JavaPlugin implements Listener {
 }
 ```
 
+## Velocity 代理端示例
+
+见 [`examples/velocity/README.md`](examples/velocity/README.md)：在代理层做一次校验并缓存，子服用 Paper 示例兜底。
+
 ## OIDC
 
 ```java
