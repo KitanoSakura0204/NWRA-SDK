@@ -1,0 +1,92 @@
+package lounge
+
+import (
+	"context"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+func TestServerProtocol(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Server-Key") != "test-key" {
+			t.Error("missing server authentication header")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/server/v1/whitelist":
+			io.WriteString(w, `{"code":0,"data":{"server":"survival","mode":1,"count":1,"entries":[{"name":"Steve","uid":100001,"nickname":"Player","securityLevel":2,"since":"2026-09-13 10:00:00"}]}}`)
+		case "/server/v1/whitelist/check":
+			if r.URL.Query().Get("name") != "Player & One" {
+				t.Error("player query was not escaped correctly")
+			}
+			io.WriteString(w, `{"code":0,"data":{"allowed":true,"bound":false,"reason":"whitelist disabled"}}`)
+		case "/server/v1/heartbeat":
+			if r.Method != http.MethodPost || r.Header.Get("Content-Type") != "application/json" {
+				t.Error("invalid heartbeat request")
+			}
+			io.WriteString(w, `{"code":0,"data":{"server":"survival","status":"ok"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	c := New(server.URL+"/", WithServerKey("test-key"))
+	wl, err := c.Whitelist(context.Background())
+	if err != nil || wl.Count != 1 || wl.Entries[0].SecurityLevel != 2 || wl.Entries[0].UUID != "" {
+		t.Fatalf("whitelist: %#v, %v", wl, err)
+	}
+	check, err := c.CheckWhitelist(context.Background(), "Player & One", "")
+	if err != nil || !check.Allowed || check.Bound || check.Player != nil {
+		t.Fatalf("check: %#v, %v", check, err)
+	}
+	if err := c.Heartbeat(context.Background(), Heartbeat{Online: 2, Max: 20}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestServerRejectsMalformedSuccess(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{"missing code", 200, `{"data":{"allowed":true}}`},
+		{"missing data", 200, `{"code":0}`},
+		{"null data", 200, `{"code":0,"data":null}`},
+		{"HTTP failure", 503, `{"code":0,"data":{"allowed":true}}`},
+		{"HTML response", 502, `<html>upstream unavailable</html>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+				io.WriteString(w, tc.body)
+			}))
+			defer server.Close()
+			_, err := New(server.URL, WithServerKey("test-key")).CheckWhitelist(context.Background(), "Steve", "")
+			var transport *TransportError
+			if !errors.As(err, &transport) {
+				t.Fatalf("expected TransportError, got %v", err)
+			}
+		})
+	}
+}
+
+func TestServerBusinessErrorAndMissingKey(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		io.WriteString(w, `{"code":401,"message":"invalid server key"}`)
+	}))
+	defer server.Close()
+	_, err := New(server.URL, WithServerKey("invalid-key")).Whitelist(context.Background())
+	var apiErr *ApiError
+	if !errors.As(err, &apiErr) || apiErr.Code != 401 {
+		t.Fatalf("expected 401 ApiError, got %v", err)
+	}
+	_, err = New(server.URL).Whitelist(context.Background())
+	if !errors.Is(err, ErrNotConfigured) {
+		t.Fatalf("expected ErrNotConfigured, got %v", err)
+	}
+}

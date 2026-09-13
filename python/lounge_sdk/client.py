@@ -67,18 +67,31 @@ class LoungeClient:
             req.add_header("Content-Type", "application/json")
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as res:
-                raw = res.read()
+                raw, status = res.read(), int(getattr(res, "status", 200) or 200)
         except urllib.error.HTTPError as e:
-            raw = e.read()
+            try:
+                raw, status = e.read(), e.code
+            finally:
+                e.close()
         except (urllib.error.URLError, OSError) as e:
             raise TransportError(str(e)) from e
         try:
             env = json.loads(raw.decode("utf-8"))
         except ValueError as e:
-            raise TransportError(f"invalid json: {e}") from e
-        if env.get("code", 1) != 0:
-            raise ApiError(int(env.get("code", 1)), str(env.get("message", "")))
-        return env.get("data") or {}
+            raise TransportError(f"invalid json (http {status}): {e}") from e
+        if not isinstance(env, dict):
+            raise TransportError(f"invalid response (http {status}): not an object")
+        code = env.get("code")
+        if isinstance(code, bool) or not isinstance(code, int):
+            raise TransportError(f"invalid response (http {status}): missing code")
+        if code != 0:
+            raise ApiError(code, str(env.get("message", "")))
+        if status >= 400:
+            raise TransportError(f"http {status}")
+        data = env.get("data")
+        if not isinstance(data, dict):
+            raise TransportError(f"invalid response (http {status}): missing data")
+        return data
 
     def whitelist(self) -> Whitelist:
         d = self._call("GET", "/server/v1/whitelist")

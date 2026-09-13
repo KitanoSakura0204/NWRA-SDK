@@ -88,12 +88,15 @@ type Heartbeat struct {
 }
 
 type envelope struct {
-	Code    int             `json:"code"`
+	Code    *int            `json:"code"`
 	Message string          `json:"message"`
 	Data    json.RawMessage `json:"data"`
 }
 
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, body any, out any) error {
+	if c.serverKey == "" {
+		return ErrNotConfigured
+	}
 	u := c.base + path
 	if len(query) > 0 {
 		u += "?" + query.Encode()
@@ -130,10 +133,19 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	if err := json.Unmarshal(raw, &env); err != nil {
 		return &TransportError{fmt.Errorf("decode (%d): %w", res.StatusCode, err)}
 	}
-	if env.Code != 0 {
-		return &ApiError{Code: env.Code, Message: env.Message}
+	if env.Code == nil {
+		return &TransportError{fmt.Errorf("invalid response (%d): missing code", res.StatusCode)}
 	}
-	if out != nil && len(env.Data) > 0 {
+	if *env.Code != 0 {
+		return &ApiError{Code: *env.Code, Message: env.Message}
+	}
+	if res.StatusCode >= 400 {
+		return &TransportError{fmt.Errorf("http %d", res.StatusCode)}
+	}
+	if out != nil {
+		if len(env.Data) == 0 || string(env.Data) == "null" {
+			return &TransportError{fmt.Errorf("invalid response (%d): missing data", res.StatusCode)}
+		}
 		if err := json.Unmarshal(env.Data, out); err != nil {
 			return &TransportError{err}
 		}

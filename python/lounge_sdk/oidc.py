@@ -33,7 +33,7 @@ class LoungeOIDC:
             q["code_challenge_method"] = "S256"
         return f"{self.issuer}/oauth2/authorize?{urllib.parse.urlencode(q)}"
 
-    def _post(self, path: str, form: dict) -> dict:
+    def _post(self, path: str, form: dict, allow_empty: bool = False) -> dict:
         form = {k: v for k, v in form.items() if v is not None}
         form["client_id"] = self.client_id
         if self.client_secret:
@@ -41,19 +41,39 @@ class LoungeOIDC:
         req = urllib.request.Request(self.issuer + path, data=urllib.parse.urlencode(form).encode(), method="POST")
         req.add_header("Content-Type", "application/x-www-form-urlencoded")
         req.add_header("Accept", "application/json")
-        return self._send(req)
+        return self._send(req, allow_empty)
 
-    def _send(self, req: urllib.request.Request) -> dict:
+    def _send(self, req: urllib.request.Request, allow_empty: bool = False) -> dict:
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as res:
-                raw, status = res.read(), res.status
+                raw, status = res.read(), int(getattr(res, "status", 200) or 200)
         except urllib.error.HTTPError as e:
-            raw, status = e.read(), e.code
+            try:
+                raw, status = e.read(), e.code
+            finally:
+                e.close()
         except (urllib.error.URLError, OSError) as e:
             raise TransportError(str(e)) from e
-        body = json.loads(raw.decode("utf-8")) if raw else {}
         if status >= 400:
-            raise OAuthError(body.get("error", "server_error"), body.get("error_description", ""), status)
+            # RFC 6749 error object; anything else is a gateway / transport problem.
+            try:
+                body = json.loads(raw.decode("utf-8")) if raw else {}
+            except ValueError:
+                body = {}
+            if isinstance(body, dict) and body.get("error"):
+                raise OAuthError(str(body["error"]), str(body.get("error_description", "")), status)
+            raise TransportError(f"http {status}")
+        if not raw:
+            # only revocation is allowed to answer with an empty 200 body
+            if allow_empty:
+                return {}
+            raise TransportError(f"empty response (http {status})")
+        try:
+            body = json.loads(raw.decode("utf-8"))
+        except ValueError as e:
+            raise TransportError(f"invalid json (http {status}): {e}") from e
+        if not isinstance(body, dict):
+            raise TransportError(f"invalid response (http {status}): not an object")
         return body
 
     def exchange(self, code: str, code_verifier: str = "") -> dict:
@@ -77,7 +97,7 @@ class LoungeOIDC:
         return self._post("/oauth2/introspect", {"token": token})
 
     def revoke(self, token: str) -> None:
-        self._post("/oauth2/revoke", {"token": token})
+        self._post("/oauth2/revoke", {"token": token}, allow_empty=True)
 
     def userinfo(self, access_token: str) -> dict:
         req = urllib.request.Request(self.issuer + "/oauth2/userinfo")
