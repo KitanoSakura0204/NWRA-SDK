@@ -14,6 +14,7 @@
 | Python | [`python/`](python/) | Python 3.9 | 无（`urllib`） |
 | TypeScript / Node.js | [`typescript/`](typescript/) | Node 18 | 无（全局 `fetch`） |
 | C# / .NET | [`csharp/`](csharp/) | .NET 6 | 无（`System.Net.Http` + `System.Text.Json`） |
+| PHP | [`php/`](php/) | PHP 8.1 | 无（`ext-curl` + `ext-json`） |
 
 所有 SDK 行为一致：方法名、返回结构、错误类型都按同一份 [协议文档](docs/PROTOCOL.md) 实现，便于多语言服务端并存。
 
@@ -45,7 +46,8 @@ SDK/
 ├── java/                 Maven: cyou.lounge:lounge-sdk
 ├── python/               PyPI: lounge-sdk
 ├── typescript/           npm: @lounge/sdk
-└── csharp/               NuGet: Lounge.Sdk
+├── csharp/               NuGet: Lounge.Sdk
+└── php/                  Composer: lounge/sdk
 ```
 
 ## 版本

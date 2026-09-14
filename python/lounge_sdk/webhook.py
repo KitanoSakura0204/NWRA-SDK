@@ -32,14 +32,15 @@ def verify_webhook(secret: str, headers: Mapping[str, str], body: bytes, toleran
     """Verify X-Lounge-Signature / X-Lounge-Timestamp and parse the event.
 
     headers may be any case-insensitive mapping (Flask/Django request.headers work). tolerance is the
-    replay window in seconds (None disables).
+    replay window in seconds (None or 0 disables).
     """
     lookup = {k.lower(): v for k, v in headers.items()}
     try:
         ts = int(str(lookup.get("x-lounge-timestamp", "")).strip())
     except ValueError as e:
         raise WebhookError("missing or invalid X-Lounge-Timestamp") from e
-    if tolerance is not None and abs(time.time() - ts) > tolerance:
+    # tolerance None or 0 disables the replay window (same as the Go / TS / Java / C# / PHP SDKs)
+    if tolerance and abs(time.time() - ts) > tolerance:
         raise WebhookError("webhook timestamp outside tolerance")
     expected = webhook_signature(secret, ts, body)
     given = str(lookup.get("x-lounge-signature", "")).strip()

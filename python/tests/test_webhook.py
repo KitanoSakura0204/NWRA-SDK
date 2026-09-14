@@ -20,6 +20,7 @@ class WebhookTests(unittest.TestCase):
         with self.assertRaises(WebhookError):
             verify_webhook("whsec_test", stale, body)
         self.assertEqual(verify_webhook("whsec_test", stale, body, tolerance=None).id, "e1")
+        self.assertEqual(verify_webhook("whsec_test", stale, body, tolerance=0).id, "e1")
 
 
 if __name__ == "__main__":

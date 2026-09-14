@@ -108,8 +108,8 @@ UserInfo 关键字段：
 | `X-Lounge-Timestamp` | Unix 秒 |
 | `X-Lounge-Signature` | `sha256=` + HMAC-SHA256(secret, `<timestamp>.<body>`) 的十六进制 |
 
-接收方应：校验签名（定时比较）、拒绝时间戳偏差过大的请求（默认 5 分钟）、幂等处理同一 `id`，并在 10 秒内返回 2xx；非 2xx 或超时将按 30s / 2m / 10m / 30m / 2h / 6h 退避重试。
+接收方应：校验签名（定时比较）、拒绝时间戳偏差过大的请求（默认 5 分钟；各语言 SDK 的容差参数传 0 / null 表示关闭该检查）、幂等处理同一 `id`，并在 10 秒内返回 2xx；非 2xx 或超时将按 30s / 2m / 10m / 30m / 2h / 6h 退避重试。
 
 事件：`user.registered` `user.login` `user.login_failed` `user.locked` `user.frozen` `user.level_changed` `user.deleted` `realname.reviewed` `game_role.reviewed` `connection.bound` `connection.unbound` `oauth.consent_granted` `oauth.consent_revoked` `server.offline`。
 
-各语言 SDK 提供校验助手：Go `lounge.VerifyWebhook` / `ReadWebhook`，Java `LoungeWebhook.verify`，Python `lounge_sdk.verify_webhook`，TypeScript `verifyWebhook`，C# `LoungeWebhook.Verify`。
+各语言 SDK 提供校验助手：Go `lounge.VerifyWebhook` / `ReadWebhook`，Java `LoungeWebhook.verify`，Python `lounge_sdk.verify_webhook`，TypeScript `verifyWebhook`，C# `LoungeWebhook.Verify`，PHP `Webhook::verify` / `Webhook::verifyRequest`。
