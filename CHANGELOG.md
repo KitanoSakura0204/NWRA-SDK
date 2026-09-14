@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0 — 2026-09-14
+
+- 五语言新增 Webhook 签名校验助手（`X-Lounge-Signature` = sha256=HMAC-SHA256(secret, `<ts>.<body>`)，含时间戳容差与常量时间比较）；Go / Python / TypeScript 附测试。
+- 协议文档新增第 5 节「Webhook」。
+
 ## 1.0.1 — 2026-09-13
 
 - Java：新增 Velocity 代理端插件示例（`examples/velocity/`）。

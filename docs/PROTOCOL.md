@@ -90,3 +90,26 @@ UserInfo 关键字段：
 - Server API 网络错误 → 抛出/返回 `TransportError`；`code != 0` → `ApiError{code,message}`。
 - OIDC 端点遵循 RFC 6749 错误格式 `{ "error": "...", "error_description": "..." }` → `OAuthError`。
 - 所有 SDK 默认超时 10s，可配置；建议服务器插件对白名单校验做本地缓存与降级（网络异常时按 `mode` 决定放行策略）。
+
+## 5. Webhook（事件推送）
+
+后台「开放平台 → Webhook」注册接收地址后，用户中心会以 `POST` + `application/json` 推送事件：
+
+```json
+{ "id": "5c5b…", "event": "user.login", "timestamp": 1757800000, "data": { "userId": 1, "uid": 100001, "username": "alice", "ip": "…" } }
+```
+
+请求头：
+
+| 头 | 说明 |
+| --- | --- |
+| `X-Lounge-Event` | 事件名 |
+| `X-Lounge-Delivery` | 投递 ID（重投时不变） |
+| `X-Lounge-Timestamp` | Unix 秒 |
+| `X-Lounge-Signature` | `sha256=` + HMAC-SHA256(secret, `<timestamp>.<body>`) 的十六进制 |
+
+接收方应：校验签名（定时比较）、拒绝时间戳偏差过大的请求（默认 5 分钟）、幂等处理同一 `id`，并在 10 秒内返回 2xx；非 2xx 或超时将按 30s / 2m / 10m / 30m / 2h / 6h 退避重试。
+
+事件：`user.registered` `user.login` `user.login_failed` `user.locked` `user.frozen` `user.level_changed` `user.deleted` `realname.reviewed` `game_role.reviewed` `connection.bound` `connection.unbound` `oauth.consent_granted` `oauth.consent_revoked` `server.offline`。
+
+各语言 SDK 提供校验助手：Go `lounge.VerifyWebhook` / `ReadWebhook`，Java `LoungeWebhook.verify`，Python `lounge_sdk.verify_webhook`，TypeScript `verifyWebhook`，C# `LoungeWebhook.Verify`。

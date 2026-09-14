@@ -2,6 +2,7 @@
 from .client import CheckResult, LoungeClient, Whitelist, WhitelistEntry
 from .errors import ApiError, LoungeError, OAuthError, TransportError
 from .oidc import LoungeOIDC
+from .webhook import WebhookError, WebhookEvent, verify_webhook, webhook_signature
 
 __all__ = [
     "LoungeClient",
@@ -13,5 +14,9 @@ __all__ = [
     "TransportError",
     "OAuthError",
     "LoungeOIDC",
+    "WebhookEvent",
+    "WebhookError",
+    "verify_webhook",
+    "webhook_signature",
 ]
-__version__ = "1.0.0"
+__version__ = "1.1.0"

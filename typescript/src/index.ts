@@ -105,18 +105,27 @@ export class LoungeClient {
         signal: ctrl.signal
       });
     } catch (e) {
-      throw new TransportError(String(e), e);
-    } finally {
       clearTimeout(timer);
+      throw new TransportError(String(e), e);
     }
     let env: Envelope<T>;
     try {
+      // The timeout covers reading the body as well, so the timer is only cleared afterwards.
       env = (await res.json()) as Envelope<T>;
     } catch (e) {
       throw new TransportError(`invalid json (${res.status})`, e);
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!env || typeof env !== 'object' || typeof env.code !== 'number') {
+      throw new TransportError(`invalid response (${res.status}): missing code`);
     }
     if (env.code !== 0) throw new ApiError(env.code, env.message ?? '');
-    return (env.data ?? {}) as T;
+    if (res.status >= 400) throw new TransportError(`http ${res.status}`);
+    if (env.data === undefined || env.data === null) {
+      throw new TransportError(`invalid response (${res.status}): missing data`);
+    }
+    return env.data as T;
   }
 
   /** Full whitelist for this server. */
@@ -208,10 +217,26 @@ export class LoungeOIDC {
       throw new TransportError(String(e), e);
     }
     const text = await res.text();
-    const json = text ? JSON.parse(text) : {};
-    if (res.status >= 400) {
-      throw new OAuthError(json.error ?? 'server_error', json.error_description ?? '', res.status);
+    let json: any = null;
+    if (text) {
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = null;
+      }
     }
+    if (res.status >= 400) {
+      if (json && typeof json === 'object' && json.error) {
+        throw new OAuthError(String(json.error), json.error_description ?? '', res.status);
+      }
+      throw new TransportError(`http ${res.status}`);
+    }
+    if (!text) {
+      // only revocation may answer with an empty body
+      if (path === '/oauth2/revoke') return {} as T;
+      throw new TransportError(`empty response (${res.status})`);
+    }
+    if (!json || typeof json !== 'object') throw new TransportError(`invalid json (${res.status})`);
     return json as T;
   }
 
@@ -249,9 +274,17 @@ export class LoungeOIDC {
     } catch (e) {
       throw new TransportError(String(e), e);
     }
-    const json = await res.json();
+    let json: any;
+    try {
+      json = await res.json();
+    } catch (e) {
+      throw new TransportError(`invalid json (${res.status})`, e);
+    }
     if (res.status >= 400) {
-      throw new OAuthError(json.error ?? 'invalid_token', json.error_description ?? '', res.status);
+      if (json && typeof json === 'object' && json.error) {
+        throw new OAuthError(String(json.error), json.error_description ?? '', res.status);
+      }
+      throw new TransportError(`http ${res.status}`);
     }
     return json as UserInfo;
   }
@@ -279,4 +312,76 @@ function base64url(bytes: Uint8Array): string {
   let s = '';
   bytes.forEach((b) => (s += String.fromCharCode(b)));
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/* ---------------- Webhooks ---------------- */
+
+export interface WebhookEvent<T = Record<string, unknown>> {
+  id: string;
+  event: string;
+  timestamp: number;
+  data: T;
+}
+
+export class WebhookError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'WebhookError';
+  }
+}
+
+const hex = (buf: ArrayBuffer) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
+
+/** sha256=HMAC_SHA256(secret, "<ts>.<body>") using Web Crypto (Node 18+, Deno, Bun, workers). */
+export async function webhookSignature(secret: string, ts: number | string, body: string | Uint8Array): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const bodyBytes = typeof body === 'string' ? enc.encode(body) : body;
+  const prefix = enc.encode(`${ts}.`);
+  const msg = new Uint8Array(prefix.length + bodyBytes.length);
+  msg.set(prefix, 0);
+  msg.set(bodyBytes, prefix.length);
+  return 'sha256=' + hex(await crypto.subtle.sign('HMAC', key, msg));
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/**
+ * Verify an incoming webhook. `headers` can be a Headers instance or a plain object (case-insensitive).
+ * `toleranceSeconds` bounds replay (0 disables).
+ */
+export async function verifyWebhook<T = Record<string, unknown>>(
+  secret: string,
+  headers: Headers | Record<string, string | string[] | undefined>,
+  body: string | Uint8Array,
+  toleranceSeconds = 300
+): Promise<WebhookEvent<T>> {
+  const get = (name: string): string => {
+    if (typeof (headers as Headers).get === 'function') return (headers as Headers).get(name) ?? '';
+    const map = headers as Record<string, string | string[] | undefined>;
+    const key = Object.keys(map).find((k) => k.toLowerCase() === name.toLowerCase());
+    const v = key ? map[key] : undefined;
+    return Array.isArray(v) ? v[0] ?? '' : v ?? '';
+  };
+  const ts = Number.parseInt(get('X-Lounge-Timestamp').trim(), 10);
+  if (!Number.isFinite(ts)) throw new WebhookError('missing or invalid X-Lounge-Timestamp');
+  if (toleranceSeconds > 0 && Math.abs(Date.now() / 1000 - ts) > toleranceSeconds) {
+    throw new WebhookError('webhook timestamp outside tolerance');
+  }
+  const expected = await webhookSignature(secret, ts, body);
+  if (!timingSafeEqual(expected, get('X-Lounge-Signature').trim())) throw new WebhookError('invalid webhook signature');
+  const text = typeof body === 'string' ? body : new TextDecoder().decode(body);
+  let payload: any;
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    throw new WebhookError('invalid webhook body');
+  }
+  if (!payload || typeof payload !== 'object') throw new WebhookError('invalid webhook body');
+  return { id: String(payload.id ?? ''), event: String(payload.event ?? ''), timestamp: Number(payload.timestamp ?? 0), data: (payload.data ?? {}) as T };
 }

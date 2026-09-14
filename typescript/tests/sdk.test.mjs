@@ -74,3 +74,18 @@ test('OIDC timeout aborts a pending request', async () => {
   }), 10);
   await assert.rejects(oidc.userInfo('access'), TransportError);
 });
+
+test('Webhook signature verification', async () => {
+  const { verifyWebhook, webhookSignature, WebhookError } = await import('../dist/index.js');
+  const body = JSON.stringify({ id: 'e1', event: 'user.login', timestamp: 1, data: { userId: 7 } });
+  const ts = Math.floor(Date.now() / 1000);
+  const sig = await webhookSignature('whsec_test', ts, body);
+  const ev = await verifyWebhook('whsec_test', { 'x-lounge-timestamp': String(ts), 'X-Lounge-Signature': sig }, body);
+  assert.equal(ev.event, 'user.login');
+  assert.equal(ev.data.userId, 7);
+  await assert.rejects(verifyWebhook('wrong', { 'X-Lounge-Timestamp': String(ts), 'X-Lounge-Signature': sig }, body), WebhookError);
+  const old = ts - 3600;
+  const oldSig = await webhookSignature('whsec_test', old, body);
+  await assert.rejects(verifyWebhook('whsec_test', new Headers({ 'X-Lounge-Timestamp': String(old), 'X-Lounge-Signature': oldSig }), body), WebhookError);
+  assert.equal((await verifyWebhook('whsec_test', { 'X-Lounge-Timestamp': String(old), 'X-Lounge-Signature': oldSig }, body, 0)).id, 'e1');
+});
