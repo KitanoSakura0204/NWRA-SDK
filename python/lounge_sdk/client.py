@@ -55,7 +55,7 @@ class LoungeClient:
         self.server_key = server_key
         self.timeout = timeout
 
-    def _call(self, method: str, path: str, query: Optional[dict] = None, body: Any = None) -> dict:
+    def _call(self, method: str, path: str, query: Optional[dict] = None, body: Any = None, allow_list: bool = False) -> Any:
         url = self.base + path
         if query:
             url += "?" + urllib.parse.urlencode({k: v for k, v in query.items() if v})
@@ -89,7 +89,7 @@ class LoungeClient:
         if status >= 400:
             raise TransportError(f"http {status}")
         data = env.get("data")
-        if not isinstance(data, dict):
+        if not isinstance(data, dict) and not (allow_list and isinstance(data, list)):
             raise TransportError(f"invalid response (http {status}): missing data")
         return data
 
@@ -114,3 +114,21 @@ class LoungeClient:
 
     def heartbeat(self, online: int, max_players: int = 0, version: str = "") -> None:
         self._call("POST", "/server/v1/heartbeat", body={"online": online, "max": max_players, "version": version})
+
+    # ---- Feature modules / GM channel (PROTOCOL 2.4) ----
+
+    def modules(self) -> dict:
+        """Modules enabled for this server, keyed by name, with their per-server config."""
+        return dict(self._call("GET", "/server/v1/modules").get("modules") or {})
+
+    def publish_gm_actions(self, actions: list) -> int:
+        """Replace the GM action catalogue (list of dicts: key/title/description/params); returns the count stored."""
+        return int(self._call("PUT", "/server/v1/gm/actions", body=list(actions)).get("count", 0))
+
+    def poll_gm_commands(self) -> list:
+        """Queued GM commands (each becomes "sent"); poll alongside the heartbeat."""
+        return list(self._call("GET", "/server/v1/gm/commands", allow_list=True) or [])
+
+    def report_gm_result(self, command_id: int, ok: bool, result: str = "") -> None:
+        """Report how a command went; result is free text (<= 4000 chars)."""
+        self._call("POST", f"/server/v1/gm/commands/{int(command_id)}/result", body={"ok": bool(ok), "result": result})

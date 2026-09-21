@@ -142,6 +142,54 @@ export class LoungeClient {
   heartbeat(online: number, max = 0, version = ''): Promise<void> {
     return this.call('POST', '/server/v1/heartbeat', undefined, { online, max, version });
   }
+
+  // ---- Feature modules / GM channel (PROTOCOL §2.4) ----
+
+  /** Modules enabled for this server, keyed by module name, with their per-server config. */
+  async modules(): Promise<Record<string, unknown>> {
+    const d = await this.call<{ modules?: Record<string, unknown> }>('GET', '/server/v1/modules');
+    return d.modules ?? {};
+  }
+
+  /** Replace the GM action catalogue shown in the admin panel (call on start-up and on change). */
+  publishGMActions(actions: GMAction[]): Promise<{ count: number }> {
+    return this.call('PUT', '/server/v1/gm/actions', undefined, actions);
+  }
+
+  /** Fetch queued GM commands (each becomes "sent"); poll alongside the heartbeat. */
+  pollGMCommands(): Promise<GMCommand[]> {
+    return this.call('GET', '/server/v1/gm/commands');
+  }
+
+  /** Report how a command went; result is free text (<= 4000 chars). */
+  reportGMResult(id: number, ok: boolean, result = ''): Promise<{ id: number; status: string }> {
+    return this.call('POST', `/server/v1/gm/commands/${id}/result`, undefined, { ok, result });
+  }
+}
+
+/** One input of a GM action. */
+export interface GMActionParam {
+  name: string;
+  type: 'string' | 'number' | 'boolean' | 'player';
+  required?: boolean;
+  label?: string;
+}
+
+/** A GM action the plugin offers to the admin panel. */
+export interface GMAction {
+  key: string;
+  title: string;
+  description?: string;
+  params?: GMActionParam[];
+  labels?: Record<string, string>;
+}
+
+/** A queued GM command the admin panel wants the plugin to run. */
+export interface GMCommand {
+  id: number;
+  action: string;
+  params: Record<string, unknown>;
+  status: string;
 }
 
 export interface TokenResponse {
