@@ -72,6 +72,32 @@ Server API 与 SPA API 使用同一信封：
 
 后台每台服务器每分钟最多保留一条心跳采样，保留 30 天，用于 24 小时 / 7 天 / 30 天的在线曲线与在线率统计。
 
+### 2.4 功能模块与 GM 面板（2026-09-22）
+
+后台可按服务器启用「功能模块」（`docs/MODULES.md`）。插件先查询自己启用了什么：
+
+**GET `BASE/server/v1/modules`** → `{ "server": "s1", "modules": { "server-gm": { "requireLevel": 0, "auditAll": true } } }`
+
+键为模块名，值为该服务器的模块配置。未启用的模块不出现。
+
+`server-gm` 模块的三个接口（模块未启用时上报返回业务错误、拉取返回空数组）：
+
+- **PUT `BASE/server/v1/gm/actions`** 上报插件支持的操作清单（启动时与变更时调用）：
+
+```json
+[
+  { "key": "kick", "title": "踢出玩家", "description": "立即断开连接",
+    "params": [ { "name": "player", "type": "player", "required": true, "label": "玩家" },
+                { "name": "reason", "type": "string", "required": false, "label": "原因" } ] },
+  { "key": "broadcast", "title": "全服广播", "params": [ { "name": "message", "type": "string", "required": true, "label": "内容" } ] }
+]
+```
+
+- **GET `BASE/server/v1/gm/commands`** 拉取待执行命令（建议与心跳同频）。返回 `[{ "id": 12, "action": "kick", "params": { "player": "Steve" }, "status": "sent" }]`；拉取即标记为 `sent`，5 分钟内未拉取的命令过期。
+- **POST `BASE/server/v1/gm/commands/{id}/result`** 回执：`{ "ok": true, "result": "Steve kicked" }`（`result` ≤ 4000 字符）。
+
+后台侧：管理员在「游戏服务 → GM 面板」选择服务器、填参数、点执行（权限 `gm:execute`，模块配置 `requireLevel` 限制操作者的信任等级），每次执行写入操作日志。Go SDK：`Modules` / `PublishGMActions` / `PollGMCommands` / `ReportGMResult`；其他语言 SDK 待补。
+
 ## 3. OIDC（第三方应用登录）
 
 发现文档：`BASE/.well-known/openid-configuration`。端点：

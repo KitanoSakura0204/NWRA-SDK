@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -193,3 +194,63 @@ func IsNotAllowed(res *CheckResult, err error) bool {
 
 // ErrNotConfigured is returned when the server key is missing.
 var ErrNotConfigured = errors.New("lounge: server key not configured")
+
+// ---- GM module (server-scoped feature module "server-gm") ----
+
+// GMActionParam describes one input of a GM action.
+type GMActionParam struct {
+	Name     string `json:"name"`
+	Type     string `json:"type"` // string | number | boolean | player
+	Required bool   `json:"required"`
+	Label    string `json:"label"`
+}
+
+// GMAction is one operator action the plugin offers to the admin panel.
+type GMAction struct {
+	Key         string            `json:"key"`
+	Title       string            `json:"title"`
+	Description string            `json:"description,omitempty"`
+	Params      []GMActionParam   `json:"params,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+}
+
+// GMCommand is a queued action the admin panel wants the plugin to run.
+type GMCommand struct {
+	ID     int64           `json:"id"`
+	Action string          `json:"action"`
+	Params json.RawMessage `json:"params"`
+	Status string          `json:"status"`
+}
+
+// Modules returns the feature modules enabled for this server with their configs.
+func (c *Client) Modules(ctx context.Context) (map[string]json.RawMessage, error) {
+	var out struct {
+		Modules map[string]json.RawMessage `json:"modules"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/server/v1/modules", nil, nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Modules, nil
+}
+
+// PublishGMActions replaces the action catalogue the admin panel shows for this server.
+// Call it on start-up and whenever the set of actions changes.
+func (c *Client) PublishGMActions(ctx context.Context, actions []GMAction) error {
+	return c.do(ctx, http.MethodPut, "/server/v1/gm/actions", nil, actions, nil)
+}
+
+// PollGMCommands fetches queued commands (each is marked sent). Poll alongside the
+// heartbeat; commands not fetched within 5 minutes expire.
+func (c *Client) PollGMCommands(ctx context.Context) ([]GMCommand, error) {
+	var out []GMCommand
+	if err := c.do(ctx, http.MethodGet, "/server/v1/gm/commands", nil, nil, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ReportGMResult tells the panel how a command went; result is free text (<= 4000 chars).
+func (c *Client) ReportGMResult(ctx context.Context, id int64, ok bool, result string) error {
+	body := map[string]any{"ok": ok, "result": result}
+	return c.do(ctx, http.MethodPost, "/server/v1/gm/commands/"+strconv.FormatInt(id, 10)+"/result", nil, body, nil)
+}
