@@ -50,13 +50,56 @@ final class LoungeClient
         $this->call('POST', '/server/v1/heartbeat', [], ['online' => $online, 'max' => $max, 'version' => $version]);
     }
 
+    // ---- Feature modules / GM channel (PROTOCOL 2.4) ----
+
+    /**
+     * Modules enabled for this server, keyed by module name, with their per-server config.
+     *
+     * @return array<string, mixed>
+     */
+    public function modules(): array
+    {
+        $m = $this->call('GET', '/server/v1/modules')['modules'] ?? [];
+
+        return is_array($m) ? $m : [];
+    }
+
+    /**
+     * Replace the GM action catalogue shown in the admin panel; returns the stored count.
+     *
+     * @param list<array<string, mixed>> $actions each with key / title / description / params
+     */
+    public function publishGmActions(array $actions): int
+    {
+        return Json::int($this->call('PUT', '/server/v1/gm/actions', [], array_values($actions), true)['count'] ?? 0);
+    }
+
+    /**
+     * Queued GM commands (each becomes "sent"); poll alongside the heartbeat.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function pollGmCommands(): array
+    {
+        $data = $this->call('GET', '/server/v1/gm/commands', [], null, false, true);
+
+        return array_values(array_filter($data, 'is_array'));
+    }
+
+    /** Report how a command went; result is free text (at most 4000 characters). */
+    public function reportGmResult(int $commandId, bool $ok, string $result = ''): void
+    {
+        $this->call('POST', sprintf('/server/v1/gm/commands/%d/result', $commandId), [], ['ok' => $ok, 'result' => $result]);
+    }
+
     /**
      * @param array<string, string|null> $query
-     * @param array<string, mixed>|null  $body
+     * @param array<string, mixed>|null  $body      object body, or a list when $bodyIsList is true
+     * @param bool                       $allowList accept a JSON array as `data` (returned as a list)
      *
-     * @return array<string, mixed> the `data` object of a successful envelope
+     * @return array<string, mixed> the `data` object (or list) of a successful envelope
      */
-    private function call(string $method, string $path, array $query = [], ?array $body = null): array
+    private function call(string $method, string $path, array $query = [], ?array $body = null, bool $bodyIsList = false, bool $allowList = false): array
     {
         $url = $this->base . $path;
         $query = array_filter($query, static fn ($v): bool => $v !== null && $v !== '');
@@ -66,7 +109,7 @@ final class LoungeClient
         $headers = ['Accept' => 'application/json', 'X-Server-Key' => $this->serverKey];
         $raw = null;
         if ($body !== null) {
-            $raw = json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+            $raw = json_encode($bodyIsList ? array_values($body) : $body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
             if ($raw === false) {
                 throw new TransportError('cannot encode request body: ' . json_last_error_msg());
             }
@@ -74,7 +117,7 @@ final class LoungeClient
         }
         [$status, $text] = Json::send($this->transport, $method, $url, $headers, $raw, $this->timeout);
 
-        return self::unwrap($status, $text);
+        return self::unwrap($status, $text, $allowList);
     }
 
     /**
@@ -83,7 +126,7 @@ final class LoungeClient
      *
      * @return array<string, mixed>
      */
-    private static function unwrap(int $status, string $raw): array
+    private static function unwrap(int $status, string $raw, bool $allowList = false): array
     {
         $env = Json::decodeObject($raw, $status);
         $code = $env['code'] ?? null;
@@ -97,6 +140,9 @@ final class LoungeClient
             throw new TransportError(sprintf('http %d', $status));
         }
         $data = $env['data'] ?? null;
+        if ($allowList && is_array($data) && array_is_list($data)) {
+            return $data;
+        }
         if (!Json::isObject($data)) {
             throw new TransportError(sprintf('invalid response (http %d): missing data', $status));
         }

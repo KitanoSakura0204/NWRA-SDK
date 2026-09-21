@@ -80,8 +80,77 @@ public class LoungeClient {
         call("POST", "/server/v1/heartbeat", body);
     }
 
+    // ---- Feature modules / GM channel (PROTOCOL 2.4) ----
+
+    /** Modules enabled for this server, keyed by module name, with their per-server config. */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> modules() throws LoungeException {
+        Object m = call("GET", "/server/v1/modules", null).get("modules");
+        return m instanceof Map<?, ?> ? (Map<String, Object>) m : Map.of();
+    }
+
+    /**
+     * Replace the GM action catalogue shown in the admin panel. Each action is a map with
+     * {@code key}, {@code title}, optional {@code description} and {@code params} (list of maps
+     * with {@code name}, {@code type}, {@code required}, {@code label}). Returns the stored count.
+     */
+    public int publishGMActions(List<Map<String, Object>> actions) throws LoungeException {
+        return Json.num(call("PUT", "/server/v1/gm/actions", encode(actions)).get("count")).intValue();
+    }
+
+    /** Queued GM commands (each becomes "sent"); poll alongside the heartbeat. */
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> pollGMCommands() throws LoungeException {
+        Object data = callRaw("GET", "/server/v1/gm/commands", null);
+        List<Map<String, Object>> out = new ArrayList<>();
+        if (data instanceof List<?>) {
+            for (Object o : (List<?>) data) if (o instanceof Map<?, ?>) out.add((Map<String, Object>) o);
+        }
+        return out;
+    }
+
+    /** Report how a command went; result is free text (at most 4000 characters). */
+    public void reportGMResult(long commandId, boolean ok, String result) throws LoungeException {
+        String body = "{\"ok\":" + ok + ",\"result\":" + Json.quote(result == null ? "" : result) + "}";
+        call("POST", "/server/v1/gm/commands/" + commandId + "/result", body);
+    }
+
+    /** Minimal JSON encoder for maps / lists / strings / numbers / booleans (enough for action catalogues). */
+    static String encode(Object v) {
+        if (v == null) return "null";
+        if (v instanceof String) return Json.quote((String) v);
+        if (v instanceof Number || v instanceof Boolean) return String.valueOf(v);
+        if (v instanceof Map<?, ?>) {
+            StringBuilder b = new StringBuilder("{");
+            boolean first = true;
+            for (Map.Entry<?, ?> e : ((Map<?, ?>) v).entrySet()) {
+                if (!first) b.append(',');
+                first = false;
+                b.append(Json.quote(String.valueOf(e.getKey()))).append(':').append(encode(e.getValue()));
+            }
+            return b.append('}').toString();
+        }
+        if (v instanceof Iterable<?>) {
+            StringBuilder b = new StringBuilder("[");
+            boolean first = true;
+            for (Object o : (Iterable<?>) v) {
+                if (!first) b.append(',');
+                first = false;
+                b.append(encode(o));
+            }
+            return b.append(']').toString();
+        }
+        return Json.quote(String.valueOf(v));
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> call(String method, String path, String body) throws LoungeException {
+        Object data = callRaw(method, path, body);
+        return data instanceof Map<?, ?> ? (Map<String, Object>) data : Map.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object callRaw(String method, String path, String body) throws LoungeException {
         HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(base + path))
             .timeout(timeout)
             .header("Accept", "application/json")
@@ -103,8 +172,7 @@ public class LoungeClient {
         Map<String, Object> env = (Map<String, Object>) parsed;
         int code = Json.num(env.get("code")).intValue();
         if (code != 0) throw new LoungeException.Api(code, Json.str(env.get("message")));
-        Object data = env.get("data");
-        return data instanceof Map<?, ?> ? (Map<String, Object>) data : Map.of();
+        return env.get("data");
     }
 
     private static String enc(String s) {

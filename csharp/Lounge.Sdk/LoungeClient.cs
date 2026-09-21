@@ -92,4 +92,53 @@ public sealed class LoungeClient
     /// <summary>Report live status (about every 60s).</summary>
     public Task HeartbeatAsync(int online, int max = 0, string version = "", CancellationToken ct = default) =>
         CallAsync<object>(HttpMethod.Post, "/server/v1/heartbeat", new { online, max, version }, ct);
+
+    // ---- Feature modules / GM channel (PROTOCOL 2.4) ----
+
+    /// <summary>Modules enabled for this server, keyed by module name, with their per-server config.</summary>
+    public async Task<Dictionary<string, JsonElement>> ModulesAsync(CancellationToken ct = default)
+    {
+        var d = await CallAsync<ModulesEnvelope>(HttpMethod.Get, "/server/v1/modules", null, ct).ConfigureAwait(false);
+        return d.Modules ?? new Dictionary<string, JsonElement>();
+    }
+
+    /// <summary>Replace the GM action catalogue shown in the admin panel (call on start-up and on change).</summary>
+    public async Task<int> PublishGMActionsAsync(IEnumerable<GMAction> actions, CancellationToken ct = default)
+    {
+        var d = await CallAsync<CountEnvelope>(HttpMethod.Put, "/server/v1/gm/actions", actions.ToList(), ct).ConfigureAwait(false);
+        return d.Count;
+    }
+
+    /// <summary>Queued GM commands (each becomes "sent"); poll alongside the heartbeat.</summary>
+    public async Task<List<GMCommand>> PollGMCommandsAsync(CancellationToken ct = default) =>
+        await CallAsync<List<GMCommand>>(HttpMethod.Get, "/server/v1/gm/commands", null, ct).ConfigureAwait(false) ?? new List<GMCommand>();
+
+    /// <summary>Report how a command went; result is free text (at most 4000 characters).</summary>
+    public Task ReportGMResultAsync(long commandId, bool ok, string result = "", CancellationToken ct = default) =>
+        CallAsync<object>(HttpMethod.Post, $"/server/v1/gm/commands/{commandId}/result", new { ok, result }, ct);
 }
+
+internal sealed record ModulesEnvelope([property: JsonPropertyName("modules")] Dictionary<string, JsonElement>? Modules);
+internal sealed record CountEnvelope([property: JsonPropertyName("count")] int Count);
+
+/// <summary>One input of a GM action (type: string | number | boolean | player).</summary>
+public sealed record GMActionParam(
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("required")] bool Required = false,
+    [property: JsonPropertyName("label")] string? Label = null);
+
+/// <summary>A GM action the plugin offers to the admin panel.</summary>
+public sealed record GMAction(
+    [property: JsonPropertyName("key")] string Key,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("description")] string? Description = null,
+    [property: JsonPropertyName("params")] List<GMActionParam>? Params = null,
+    [property: JsonPropertyName("labels")] Dictionary<string, string>? Labels = null);
+
+/// <summary>A queued GM command the admin panel wants the plugin to run.</summary>
+public sealed record GMCommand(
+    [property: JsonPropertyName("id")] long Id,
+    [property: JsonPropertyName("action")] string Action,
+    [property: JsonPropertyName("params")] JsonElement Params,
+    [property: JsonPropertyName("status")] string Status);

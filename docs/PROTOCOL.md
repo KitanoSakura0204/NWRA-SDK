@@ -96,7 +96,7 @@ Server API 与 SPA API 使用同一信封：
 - **GET `BASE/server/v1/gm/commands`** 拉取待执行命令（建议与心跳同频）。返回 `[{ "id": 12, "action": "kick", "params": { "player": "Steve" }, "status": "sent" }]`；拉取即标记为 `sent`，5 分钟内未拉取的命令过期。
 - **POST `BASE/server/v1/gm/commands/{id}/result`** 回执：`{ "ok": true, "result": "Steve kicked" }`（`result` ≤ 4000 字符）。
 
-后台侧：管理员在「游戏服务 → GM 面板」选择服务器、填参数、点执行（权限 `gm:execute`，模块配置 `requireLevel` 限制操作者的信任等级），每次执行写入操作日志。SDK：Go `Modules` / `PublishGMActions` / `PollGMCommands` / `ReportGMResult`，TypeScript `modules` / `publishGMActions` / `pollGMCommands` / `reportGMResult`，Python `modules` / `publish_gm_actions` / `poll_gm_commands` / `report_gm_result`；Java / C# / PHP 待补。
+后台侧：管理员在「游戏服务 → GM 面板」选择服务器、填参数、点执行（权限 `gm:execute`，模块配置 `requireLevel` 限制操作者的信任等级），每次执行写入操作日志。SDK：Go `Modules` / `PublishGMActions` / `PollGMCommands` / `ReportGMResult`，TypeScript `modules` / `publishGMActions` / `pollGMCommands` / `reportGMResult`，Python `modules` / `publish_gm_actions` / `poll_gm_commands` / `report_gm_result`，Java `modules` / `publishGMActions` / `pollGMCommands` / `reportGMResult`，C# `ModulesAsync` / `PublishGMActionsAsync` / `PollGMCommandsAsync` / `ReportGMResultAsync`，PHP `modules` / `publishGmActions` / `pollGmCommands` / `reportGmResult`（PHP 本机无解释器，仅静态核对）。
 
 ## 3. OIDC（第三方应用登录）
 
