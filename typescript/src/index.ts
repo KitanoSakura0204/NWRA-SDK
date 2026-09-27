@@ -433,3 +433,6 @@ export async function verifyWebhook<T = Record<string, unknown>>(
   if (!payload || typeof payload !== 'object') throw new WebhookError('invalid webhook body');
   return { id: String(payload.id ?? ''), event: String(payload.event ?? ''), timestamp: Number(payload.timestamp ?? 0), data: (payload.data ?? {}) as T };
 }
+
+// SDK login page helpers (PROTOCOL.md §6).
+export * from './sdklogin.js';

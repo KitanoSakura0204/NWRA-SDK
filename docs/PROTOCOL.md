@@ -157,3 +157,52 @@ UserInfo 关键字段：
 事件：`user.registered` `user.login` `user.login_failed` `user.locked` `user.frozen` `user.level_changed` `user.deleted` `realname.reviewed` `game_role.reviewed` `connection.bound` `connection.unbound` `oauth.consent_granted` `oauth.consent_revoked` `server.offline`。
 
 各语言 SDK 提供校验助手：Go `lounge.VerifyWebhook` / `ReadWebhook`，Java `LoungeWebhook.verify`，Python `lounge_sdk.verify_webhook`，TypeScript `verifyWebhook`，C# `LoungeWebhook.Verify`，PHP `Webhook::verify` / `Webhook::verifyRequest`。
+
+## 6. SDK 登录页（游戏客户端登录，2026-09-28）
+
+游戏客户端（桌面 / 移动 / 内嵌 WebView）打开用户中心的品牌化登录页让玩家登录，拿到授权码后按 §3 换取令牌。后台「游戏服务 → SDK 登录页」按服务器配置接入应用（OAuth 客户端）、回调地址、回传方式、登录方式与外观；服务器需启用 `sdk-login` 模块且已通过审核。
+
+### 6.1 打开登录页
+
+`FRONTEND/sdk/login/{serverCode}?redirect_uri=&state=&code_challenge=&code_challenge_method=S256`（`FRONTEND` 为用户中心网页地址；后端托管前端时即 `BASE`）
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `redirect_uri` | 是（code-display 可省） | 与该服务器配置的回调地址**逐字符一致**，且同时登记在接入应用上；省略时（仅 code-display）取配置的第一个 |
+| `state` | 是（code-display 可省） | ≤ 512 个可见 ASCII 字符，原样带回；客户端必须校验 |
+| `code_challenge` | 是 | `BASE64URL(SHA256(code_verifier))`，43 字符 |
+| `code_challenge_method` | 是 | 只接受 `S256`（不接受 `plain`，缺省也不接受） |
+| `scope` | 否 | 不填用服务器配置的范围；只能是其子集 |
+| `nonce` | 否 | 写入 ID Token |
+| `ui_locales` | 否 | `zh-CN` / `zh-TW` / `en` / `ja`，只影响本次页面语言 |
+| `prompt` | 否 | `consent`：非可信应用强制再次确认 |
+
+参数有误但 `redirect_uri` 可信时，页面显示错误，玩家点「返回游戏」后按回传方式交回 `error=invalid_request`（或 `invalid_scope`）与 `state`。`redirect_uri` 不可信、服务器未启用模块 / 未通过审核、应用停用时只显示错误页，**不做任何跳转**。玩家取消或拒绝授权时交回 `error=access_denied`。
+
+### 6.2 回传方式
+
+- **redirect**：页面跳转到 `redirect_uri?code=…&state=…&iss=…`（失败时为 `error` / `error_description` / `state` / `iss`）。适用于自定义协议（`mygame://auth`、`com.example.game:/cb`）、本机回环（`http://127.0.0.1:47823/cb`，端口须与登记一致）或 https。浏览器可能拦下自定义协议，页面 2.5 秒后给出手动返回的链接。
+- **postMessage**：页面向 `window.opener`（弹窗）或 `window.parent`（内嵌）发送 `{ type: "lounge:sdk-login", code, state, iss, server }`（失败时带 `error`、`error_description`），`targetOrigin` 恒为回调地址的源，从不使用 `*`。接收方必须校验 `event.origin`（登录页的源）、`type` 与 `state`。该模式的回调地址只能是 https 或本机 http。后端托管前端时，该服务器登录页的响应头为 `Content-Security-Policy: frame-ancestors <回调地址的源…>`（其他模式与站内其他页面仍为 `'none'` + `X-Frame-Options: DENY`）；前端由独立 Web 服务器托管时，需为 `/sdk/login/{serverCode}` 自行下发同样的头。内嵌时页面不提供第三方登录（需要整页跳转）；通行密钥需要宿主 iframe 带 `allow="publickey-credentials-get"`。弹窗失去 opener 时页面提供「返回 {host}」按钮，跳转到 redirect 形式的地址。
+- **code-display**：页面显示 8 位登录码（字母表 `ABCDEFGHJKMNPQRSTVWXYZ23456789`，分两组显示），玩家在客户端输入。登录码就是授权码：单次有效、与普通授权码同一有效期（默认 300 秒）、绑定 PKCE，没有 `code_verifier` 猜中也无用。客户端去掉空格与横线并转大写后作为 `code` 使用（SDK `NormalizeLoginCode` / `normalizeLoginCode`）。适用于主机、电视等无法接收回调的客户端。
+
+### 6.3 换取令牌
+
+与 §3 相同：`POST BASE/oauth2/token`，`grant_type=authorization_code`、`code`、`code_verifier`、`client_id`（机密客户端另带 `client_secret` 或 Basic 认证）；授权时带了 `redirect_uri` 则必须一致，code-display 省略时换取也可省略。授权码重放会吊销该次登录签发的全部令牌。
+
+### 6.4 授权确认
+
+只有在「接入应用」里勾选「跳过授权页（可信应用）」的应用直接签发授权码；其他应用首次登录显示授权确认，之后在权限范围不扩大、未带 `prompt=consent` 时不再询问。玩家没有任何操作时页面不会签发授权码：已登录的玩家看到的是「以 X 继续」。
+
+### 6.5 安全要点
+
+- 每次登录生成新的 `code_verifier` 与 `state`；收到结果时校验 `state`，有 `iss` 时校验 `iss`（RFC 9207）。
+- 回调地址只允许 https、本机 http 与私有协议；`javascript:` `data:` `file:` `blob:` `vbscript:` `intent:` 等协议、`#` 片段、内嵌账号密码一律拒绝。保存与每次读取配置时都会校验，不合格即停止服务（fail closed）。
+- 不要让玩家把登录码告诉他人（页面有提示）；登录码有效期短且单次有效。
+
+### 6.6 页面自用接口
+
+- `GET BASE/api/sdk-login/{serverCode}?…`（查询参数同 6.1）：品牌、`client.clientId` 与名称、回传方式、可用登录方式与身份源代码、权限说明、`requestError` / `cancel` 交回结果、当前登录用户摘要；不含任何密钥。
+- `POST BASE/api/sdk-login/{serverCode}/authorize`（需登录）：请求体为 6.1 的参数加 `decision`（空 / `approve` / `deny`），返回 `{ status: "consent_required", scopes }` 或 `{ status: "done", handoff }`。
+- 后台：`GET /api/admin/sdk-login/servers`、`GET` / `PUT /api/admin/sdk-login/servers/{id}`（权限 `sdklogin:view` / `sdklogin:edit`）。
+
+SDK：Go `NewPKCE` / `S256Challenge` / `NewState` / `BuildLoginURL` / `ParseLoginCallback` / `NormalizeLoginCode`；TypeScript `createPkcePair` / `s256Challenge` / `createState` / `buildLoginUrl` / `parseLoginCallback` / `readLoginMessage` / `normalizeLoginCode`（另有 `SDK_LOGIN_MESSAGE`、`SdkLoginError`）。
