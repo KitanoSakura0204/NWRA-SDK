@@ -436,3 +436,4 @@ export async function verifyWebhook<T = Record<string, unknown>>(
 
 // SDK login page helpers (PROTOCOL.md §6).
 export * from './sdklogin.js';
+export * from './delivery.js';
