@@ -1,0 +1,35 @@
+{
+  "id": "com.example.hello",
+  "name": "Hello",
+  "version": "1.0.0",
+  "author": "Lounge examples",
+  "description": "Counts sign-ins, adds the count to tokens, greets players from the GM panel, runs an hourly job and shows a user-centre page.",
+  "kind": "wasm",
+  "locales": {
+    "zh_CN": { "name": "你好插件", "description": "统计登录次数、写入令牌字段、GM 问候玩家、每小时任务和一个用户中心页面" }
+  },
+  "permissions": ["user.profile"],
+  "capabilities": ["log", "kv", "token.claims", "gm.actions", "jobs", "ui"],
+  "settings": {
+    "type": "object",
+    "properties": {
+      "greeting": { "type": "string", "title": "Greeting", "x-title": { "zh_CN": "问候语" }, "default": "Hello", "maxLength": 32 }
+    }
+  },
+  "points": [
+    { "point": "user.login", "handler": "on_login" },
+    { "point": "token.claims", "handler": "claims" }
+  ],
+  "claims": [{ "key": "logins", "type": "number", "description": { "en": "How many times the user signed in", "zh_CN": "登录次数" } }],
+  "gmActions": [
+    {
+      "key": "greet",
+      "title": { "en": "Greet a player", "zh_CN": "问候玩家" },
+      "handler": "greet",
+      "params": [{ "name": "player", "type": "player", "required": true, "label": { "en": "Player", "zh_CN": "玩家" } }]
+    }
+  ],
+  "jobs": [{ "name": "tick", "every": "1h", "handler": "tick" }],
+  "ui": [{ "slot": "home.page", "title": { "en": "Sign-in counter", "zh_CN": "登录次数" }, "entry": "ui/index.html", "height": 220, "handler": "page" }],
+  "wasm": { "module": "plugin.wasm", "memoryMb": 64, "timeoutMs": 2000 }
+}

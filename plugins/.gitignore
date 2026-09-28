@@ -1,0 +1,8 @@
+# build outputs of the examples and the packaging tool
+examples/**/plugin.wasm
+examples/**/dist/
+tools/loungeplugin/loungeplugin
+tools/loungeplugin/loungeplugin.exe
+# signing keys: never commit a private key
+*.key
+examples/**/dev.pub
