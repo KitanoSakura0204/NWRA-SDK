@@ -89,3 +89,61 @@ test('Webhook signature verification', async () => {
   await assert.rejects(verifyWebhook('whsec_test', new Headers({ 'X-Lounge-Timestamp': String(old), 'X-Lounge-Signature': oldSig }), body), WebhookError);
   assert.equal((await verifyWebhook('whsec_test', { 'X-Lounge-Timestamp': String(old), 'X-Lounge-Signature': oldSig }, body, 0)).id, 'e1');
 });
+
+test('Server API fails closed on an encrypted reply', async () => {
+  const { EncryptionError, HEADER_ENCRYPTION } = await import('../dist/index.js');
+  const sealed = { code: 0, message: 'ok', data: { jwe: 'aGVhZA.a2V5.aXY.Y2lwaGVy.dGFn' } };
+  for (const header of ['JWE', '']) { // a proxy may drop the header: the body shape still counts
+    const client = new LoungeClient('https://account.example', {
+      serverKey: 'k',
+      fetch: async () => new Response(JSON.stringify(sealed), { headers: header ? { [HEADER_ENCRYPTION]: header } : {} })
+    });
+    await assert.rejects(client.whitelist(), e => e instanceof EncryptionError && e.route === 'whitelist');
+    await assert.rejects(client.checkWhitelist('Steve'), e => e instanceof EncryptionError && e.route === 'whitelist/check');
+    await assert.rejects(client.pollGMCommands(), EncryptionError);
+    const raw = await client.raw('GET', '/server/v1/whitelist');
+    assert.equal(raw.encrypted, true);
+    assert.deepEqual(raw.envelope, sealed);
+  }
+  const plain = new LoungeClient('https://account.example', { serverKey: 'k', fetch: async () => json({ code: 0, data: { jwe: 'x', mode: 1, count: 0, entries: [] } }) });
+  assert.equal((await plain.whitelist()).mode, 1);
+});
+
+test('Heartbeat sends tps and players only when valid', async () => {
+  const bodies = [];
+  const client = new LoungeClient('https://account.example', {
+    serverKey: 'k',
+    fetch: async (_url, init) => { bodies.push(JSON.parse(init.body)); return json({ code: 0, data: { status: 'ok' } }); }
+  });
+  await client.heartbeat(2, 20, '1.21.1');
+  await client.heartbeat({ online: 2, max: 20, version: '1.21.1', tps: 19.8, players: [{ name: 'Steve', uuid: '069a79f4-44e9-4726-a5be-fca90e38aaf5' }, { name: 'Alex' }] });
+  await client.heartbeat({ online: 0, tps: NaN, players: [] });
+  assert.deepEqual(bodies, [
+    { online: 2, max: 20, version: '1.21.1' },
+    { online: 2, max: 20, version: '1.21.1', tps: 19.8, players: [{ name: 'Steve', uuid: '069a79f4-44e9-4726-a5be-fca90e38aaf5' }, { name: 'Alex' }] },
+    { online: 0, max: 0, version: '' }
+  ]);
+});
+
+test('GM catalogue publish sends the object form and lists skipped entries', async () => {
+  const calls = [];
+  const client = new LoungeClient('https://account.example', {
+    serverKey: 'k',
+    fetch: async (url, init) => {
+      calls.push([init.method, url.pathname, JSON.parse(init.body)]);
+      return json({ code: 0, data: url.pathname.endsWith('/options') ? { count: 1 } : { count: 1, skipped: [{ key: 'bad key', reason: 'invalid key' }] } });
+    }
+  });
+  const kick = { key: 'kick', title: 'Kick', category: 'players', danger: 'confirm',
+    params: [{ name: 'player', type: 'player', required: true }, { name: 'world', type: 'select', source: 'worlds', default: 'overworld' }] };
+  const worlds = { worlds: [{ value: 'overworld', label: 'Overworld' }] };
+  const res = await client.publishGMCatalog([kick], worlds);
+  assert.deepEqual(res, { count: 1, skipped: [{ key: 'bad key', reason: 'invalid key' }] });
+  assert.deepEqual((await client.publishGMOptions(worlds)).skipped, []);
+  await client.publishGMCatalog([kick]);
+  assert.deepEqual(calls, [
+    ['PUT', '/server/v1/gm/actions', { actions: [kick], options: worlds }],
+    ['PUT', '/server/v1/gm/options', worlds],
+    ['PUT', '/server/v1/gm/actions', { actions: [kick] }]
+  ]);
+});

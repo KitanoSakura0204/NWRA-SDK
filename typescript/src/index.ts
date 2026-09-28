@@ -31,6 +31,42 @@ export class OAuthError extends Error {
   }
 }
 
+/** Header marking a Server API reply whose data is the {"jwe": "..."} envelope (DELIVERY.md §5). */
+export const HEADER_ENCRYPTION = 'X-Lounge-Encryption';
+
+/**
+ * A Server API reply was encrypted and could not be used (no decryption key configured). The data
+ * was never read: treat it as a configuration error, never fail open on it (an unreadable
+ * whitelist is not a disabled whitelist).
+ */
+export class EncryptionError extends Error {
+  constructor(
+    public route: string,
+    public reason: string
+  ) {
+    super(`lounge: encrypted response on ${route}: ${reason}`);
+    this.name = 'EncryptionError';
+  }
+}
+
+/** A Server API reply as received, data left undecoded (pass `envelope` to openServerData). */
+export interface RawResponse {
+  status: number;
+  headers: Headers | undefined;
+  message: string;
+  data: unknown;
+  /** The whole parsed body {code, message, data}. */
+  envelope: Record<string, unknown>;
+  /** X-Lounge-Encryption is set or data is exactly {"jwe": "<string>"}. */
+  encrypted: boolean;
+}
+
+function isJweData(data: unknown): boolean {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+  const keys = Object.keys(data);
+  return keys.length === 1 && typeof (data as Record<string, unknown>).jwe === 'string';
+}
+
 export interface WhitelistEntry {
   name: string;
   uuid: string;
@@ -80,12 +116,35 @@ export class LoungeClient {
     this.f = opts.fetch ?? fetch;
   }
 
+  /**
+   * Call a Server API route (e.g. '/server/v1/whitelist') and return the reply without decoding
+   * data. Transport failures and business errors (code != 0) still throw.
+   */
+  raw(method: string, path: string, query?: Record<string, string | undefined>, body?: unknown): Promise<RawResponse> {
+    return this.send(method, path, query, body);
+  }
+
+  /** Decodes data; an encrypted reply throws EncryptionError instead (fail closed). */
   private async call<T>(
     method: string,
     path: string,
     query?: Record<string, string | undefined>,
     body?: unknown
   ): Promise<T> {
+    const res = await this.send(method, path, query, body);
+    if (res.encrypted) throw new EncryptionError(path.replace(/^\/server\/v1\//, ''), 'no decryption key configured');
+    if (res.data === undefined || res.data === null) {
+      throw new TransportError(`invalid response (${res.status}): missing data`);
+    }
+    return res.data as T;
+  }
+
+  private async send(
+    method: string,
+    path: string,
+    query?: Record<string, string | undefined>,
+    body?: unknown
+  ): Promise<RawResponse> {
     const url = new URL(this.base + path);
     for (const [k, v] of Object.entries(query ?? {})) {
       if (v) url.searchParams.set(k, v);
@@ -108,10 +167,10 @@ export class LoungeClient {
       clearTimeout(timer);
       throw new TransportError(String(e), e);
     }
-    let env: Envelope<T>;
+    let env: Envelope<unknown>;
     try {
       // The timeout covers reading the body as well, so the timer is only cleared afterwards.
-      env = (await res.json()) as Envelope<T>;
+      env = (await res.json()) as Envelope<unknown>;
     } catch (e) {
       throw new TransportError(`invalid json (${res.status})`, e);
     } finally {
@@ -122,10 +181,15 @@ export class LoungeClient {
     }
     if (env.code !== 0) throw new ApiError(env.code, env.message ?? '');
     if (res.status >= 400) throw new TransportError(`http ${res.status}`);
-    if (env.data === undefined || env.data === null) {
-      throw new TransportError(`invalid response (${res.status}): missing data`);
-    }
-    return env.data as T;
+    const headers: Headers | undefined = res.headers;
+    return {
+      status: res.status,
+      headers,
+      message: env.message ?? '',
+      data: env.data,
+      envelope: env as unknown as Record<string, unknown>,
+      encrypted: !!headers?.get?.(HEADER_ENCRYPTION) || isJweData(env.data)
+    };
   }
 
   /** Full whitelist for this server. */
@@ -138,9 +202,18 @@ export class LoungeClient {
     return this.call('GET', '/server/v1/whitelist/check', { name, uuid });
   }
 
-  /** Report live status (about every 60s). */
-  heartbeat(online: number, max = 0, version = ''): Promise<void> {
-    return this.call('POST', '/server/v1/heartbeat', undefined, { online, max, version });
+  /**
+   * Report live status (about every 60s). Pass a Heartbeat object to add the optional tps and
+   * players (PROTOCOL §2.3); a tps that is not a finite number > 0 is left out.
+   */
+  heartbeat(status: Heartbeat): Promise<void>;
+  heartbeat(online: number, max?: number, version?: string): Promise<void>;
+  heartbeat(online: number | Heartbeat, max = 0, version = ''): Promise<void> {
+    const hb: Heartbeat = typeof online === 'number' ? { online, max, version } : online;
+    const body: Record<string, unknown> = { online: hb.online, max: hb.max ?? 0, version: hb.version ?? '' };
+    if (typeof hb.tps === 'number' && Number.isFinite(hb.tps) && hb.tps > 0) body.tps = hb.tps;
+    if (hb.players?.length) body.players = hb.players.map(p => (p.uuid ? { name: p.name, uuid: p.uuid } : { name: p.name }));
+    return this.call('POST', '/server/v1/heartbeat', undefined, body);
   }
 
   // ---- Feature modules / GM channel (PROTOCOL §2.4) ----
@@ -152,8 +225,27 @@ export class LoungeClient {
   }
 
   /** Replace the GM action catalogue shown in the admin panel (call on start-up and on change). */
-  publishGMActions(actions: GMAction[]): Promise<{ count: number }> {
-    return this.call('PUT', '/server/v1/gm/actions', undefined, actions);
+  publishGMActions(actions: GMAction[]): Promise<GMPublishResult> {
+    return this.publish('/server/v1/gm/actions', actions);
+  }
+
+  /**
+   * Replace the actions and the named option lists (select / suggestion sources such as worlds or
+   * kits) in one call. Omitting options keeps the stored lists. Entries the server cannot accept
+   * are skipped and listed, never a failure for the whole call.
+   */
+  publishGMCatalog(actions: GMAction[], options?: Record<string, GMOption[]>): Promise<GMPublishResult> {
+    return this.publish('/server/v1/gm/actions', options ? { actions, options } : { actions });
+  }
+
+  /** Replace only the named option lists (the published actions stay), e.g. when a world loads. */
+  publishGMOptions(options: Record<string, GMOption[]>): Promise<GMPublishResult> {
+    return this.publish('/server/v1/gm/options', options);
+  }
+
+  private async publish(path: string, body: unknown): Promise<GMPublishResult> {
+    const d = await this.call<Partial<GMPublishResult>>('PUT', path, undefined, body);
+    return { count: d.count ?? 0, skipped: d.skipped ?? [] };
   }
 
   /** Fetch queued GM commands (each becomes "sent"); poll alongside the heartbeat. */
@@ -167,21 +259,73 @@ export class LoungeClient {
   }
 }
 
-/** One input of a GM action. */
+/** Live status for heartbeat(); tps and players are optional (PROTOCOL §2.3). */
+export interface Heartbeat {
+  online: number;
+  max?: number;
+  version?: string;
+  /** Current ticks per second; left out unless a finite number > 0. */
+  tps?: number;
+  /** Players online now (name required, uuid optional); should match online. */
+  players?: OnlinePlayer[];
+}
+
+/** One entry of the heartbeat player list. */
+export interface OnlinePlayer {
+  name: string;
+  uuid?: string;
+}
+
+/** One choice of a select parameter or of a named option list. */
+export interface GMOption {
+  value: string;
+  label?: string;
+}
+
+/**
+ * One input of a GM action. Only name / type / required / label existed before 2026-09-28; every
+ * other field is optional (PROTOCOL §2.4). Aliases int / integer / bool / textarea are accepted too.
+ */
 export interface GMActionParam {
   name: string;
-  type: 'string' | 'number' | 'boolean' | 'player';
+  type: 'string' | 'text' | 'number' | 'boolean' | 'select' | 'player' | 'int' | 'integer' | 'bool' | 'textarea';
   required?: boolean;
   label?: string;
+  description?: string;
+  placeholder?: string;
+  /** Ignored by the server when it does not fit the definition. */
+  default?: string | number | boolean;
+  /** number only */
+  min?: number;
+  max?: number;
+  step?: number;
+  integer?: boolean;
+  /** Text length limit (server default 1000, text 4000, player 64). */
+  maxLength?: number;
+  /** Inline choices of a select (1-200, unique values). */
+  options?: GMOption[];
+  /** Names an option list published with publishGMCatalog / publishGMOptions. */
+  source?: string;
 }
 
 /** A GM action the plugin offers to the admin panel. */
 export interface GMAction {
+  /** No colon, no whitespace, at most 64 bytes. */
   key: string;
   title: string;
   description?: string;
   params?: GMActionParam[];
   labels?: Record<string, string>;
+  /** Catalogue group. */
+  category?: string;
+  /** confirm / critical need a confirmation (critical: typing the key) before the command is sent. */
+  danger?: 'normal' | 'confirm' | 'critical';
+}
+
+/** What a publish stored; entries the server could not accept are skipped and listed. */
+export interface GMPublishResult {
+  count: number;
+  skipped: { key: string; reason: string }[];
 }
 
 /** A queued GM command the admin panel wants the plugin to run. */
@@ -190,6 +334,10 @@ export interface GMCommand {
   action: string;
   params: Record<string, unknown>;
   status: string;
+  /** admin | owner | grant */
+  source?: string;
+  /** "staff" for admin commands on owner-run servers, the login name otherwise. */
+  operator?: string;
 }
 
 export interface TokenResponse {
