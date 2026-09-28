@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -29,6 +30,29 @@ type TransportError struct{ Err error }
 
 func (e *TransportError) Error() string { return "lounge: transport error: " + e.Err.Error() }
 func (e *TransportError) Unwrap() error { return e.Err }
+
+// HeaderEncryption marks a Server API response whose data is the {"jwe": "..."} envelope
+// (SDK/docs/DELIVERY.md section 5).
+const HeaderEncryption = "X-Lounge-Encryption"
+
+// EncryptionError means a Server API response was encrypted and could not be used: no
+// decryption key is configured, the JWE did not open, or its ctx names another route. The
+// data was never read, so treat it as a configuration error, never as a transient failure
+// to fail open on (a whitelist that cannot be read is not a disabled whitelist).
+type EncryptionError struct {
+	Route  string // e.g. "whitelist"
+	Reason string
+	Err    error
+}
+
+func (e *EncryptionError) Error() string {
+	msg := "lounge: encrypted response on " + e.Route + ": " + e.Reason
+	if e.Err != nil {
+		msg += ": " + e.Err.Error()
+	}
+	return msg
+}
+func (e *EncryptionError) Unwrap() error { return e.Err }
 
 // Client talks to the Server API with a server key.
 type Client struct {
@@ -81,11 +105,20 @@ type CheckResult struct {
 	Player  *WhitelistEntry `json:"player"`
 }
 
-// Heartbeat is the live status payload.
+// OnlinePlayer is one entry of the heartbeat player list (name required, uuid optional).
+type OnlinePlayer struct {
+	Name string `json:"name"`
+	UUID string `json:"uuid,omitempty"`
+}
+
+// Heartbeat is the live status payload. TPS and Players are optional (PROTOCOL.md section 2.3):
+// a zero TPS is left out (a server that ticks at 0 TPS sends no heartbeat), and so are NaN / Inf.
 type Heartbeat struct {
-	Online  int    `json:"online"`
-	Max     int    `json:"max,omitempty"`
-	Version string `json:"version,omitempty"`
+	Online  int            `json:"online"`
+	Max     int            `json:"max,omitempty"`
+	Version string         `json:"version,omitempty"`
+	TPS     float64        `json:"tps,omitempty"`
+	Players []OnlinePlayer `json:"players,omitempty"`
 }
 
 type envelope struct {
@@ -94,9 +127,59 @@ type envelope struct {
 	Data    json.RawMessage `json:"data"`
 }
 
+// Response is a Server API reply as received: status, headers and the envelope with data left
+// undecoded. Raw returns it, e.g. to hand an encrypted reply to OpenServerData yourself.
+type Response struct {
+	Status  int
+	Header  http.Header
+	Message string
+	Data    json.RawMessage // the envelope's data byte for byte ({"jwe": "..."} when encrypted)
+	Body    []byte          // the whole response body
+}
+
+// Encrypted reports whether the reply is the {"jwe": "..."} envelope (DELIVERY.md section 5):
+// the X-Lounge-Encryption header is set or data is exactly {"jwe": "<string>"}.
+func (r *Response) Encrypted() bool {
+	return r.Header.Get(HeaderEncryption) != "" || isJWEData(r.Data)
+}
+
+func isJWEData(data json.RawMessage) bool {
+	var m map[string]json.RawMessage
+	if json.Unmarshal(data, &m) != nil || len(m) != 1 {
+		return false
+	}
+	var s string
+	return m["jwe"] != nil && json.Unmarshal(m["jwe"], &s) == nil
+}
+
+// Raw calls a Server API route (path such as "/server/v1/whitelist") and returns the reply
+// without decoding data. Transport failures and business errors (code != 0) are still errors.
+func (c *Client) Raw(ctx context.Context, method, path string, query url.Values, body any) (*Response, error) {
+	return c.send(ctx, method, path, query, body)
+}
+
+// do decodes data into out. An encrypted reply is never decoded as plain data: it fails with
+// an *EncryptionError (fail closed), so an unreadable whitelist never reads as "mode 0".
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, body any, out any) error {
+	res, err := c.send(ctx, method, path, query, body)
+	if err != nil || out == nil {
+		return err
+	}
+	if res.Encrypted() {
+		return &EncryptionError{Route: strings.TrimPrefix(path, "/server/v1/"), Reason: "no decryption key configured"}
+	}
+	if len(res.Data) == 0 || string(res.Data) == "null" {
+		return &TransportError{fmt.Errorf("invalid response (%d): missing data", res.Status)}
+	}
+	if err := json.Unmarshal(res.Data, out); err != nil {
+		return &TransportError{err}
+	}
+	return nil
+}
+
+func (c *Client) send(ctx context.Context, method, path string, query url.Values, body any) (*Response, error) {
 	if c.serverKey == "" {
-		return ErrNotConfigured
+		return nil, ErrNotConfigured
 	}
 	u := c.base + path
 	if len(query) > 0 {
@@ -106,13 +189,13 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
-			return &TransportError{err}
+			return nil, &TransportError{err}
 		}
 		rd = bytes.NewReader(b)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, u, rd)
 	if err != nil {
-		return &TransportError{err}
+		return nil, &TransportError{err}
 	}
 	req.Header.Set("Accept", "application/json")
 	if body != nil {
@@ -123,35 +206,27 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	}
 	res, err := c.http.Do(req)
 	if err != nil {
-		return &TransportError{err}
+		return nil, &TransportError{err}
 	}
 	defer res.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(res.Body, 4<<20))
 	if err != nil {
-		return &TransportError{err}
+		return nil, &TransportError{err}
 	}
 	var env envelope
 	if err := json.Unmarshal(raw, &env); err != nil {
-		return &TransportError{fmt.Errorf("decode (%d): %w", res.StatusCode, err)}
+		return nil, &TransportError{fmt.Errorf("decode (%d): %w", res.StatusCode, err)}
 	}
 	if env.Code == nil {
-		return &TransportError{fmt.Errorf("invalid response (%d): missing code", res.StatusCode)}
+		return nil, &TransportError{fmt.Errorf("invalid response (%d): missing code", res.StatusCode)}
 	}
 	if *env.Code != 0 {
-		return &ApiError{Code: *env.Code, Message: env.Message}
+		return nil, &ApiError{Code: *env.Code, Message: env.Message}
 	}
 	if res.StatusCode >= 400 {
-		return &TransportError{fmt.Errorf("http %d", res.StatusCode)}
+		return nil, &TransportError{fmt.Errorf("http %d", res.StatusCode)}
 	}
-	if out != nil {
-		if len(env.Data) == 0 || string(env.Data) == "null" {
-			return &TransportError{fmt.Errorf("invalid response (%d): missing data", res.StatusCode)}
-		}
-		if err := json.Unmarshal(env.Data, out); err != nil {
-			return &TransportError{err}
-		}
-	}
-	return nil
+	return &Response{Status: res.StatusCode, Header: res.Header, Message: env.Message, Data: env.Data, Body: raw}, nil
 }
 
 // Whitelist fetches every approved binding of this server.
@@ -184,12 +259,27 @@ func (c *Client) Heartbeat(ctx context.Context, hb Heartbeat) error {
 	return c.do(ctx, http.MethodPost, "/server/v1/heartbeat", nil, hb, nil)
 }
 
-// IsNotAllowed reports whether err/result means the player must be rejected.
+// IsNotAllowed reports whether err/result means the player must be rejected. An encrypted
+// reply the client could not open always rejects (fail closed).
 func IsNotAllowed(res *CheckResult, err error) bool {
+	var enc *EncryptionError
+	if errors.As(err, &enc) {
+		return true
+	}
 	if err != nil {
 		return false // transport failure: let the caller decide (fail-open vs fail-closed)
 	}
 	return res != nil && !res.Allowed
+}
+
+// MarshalJSON leaves out a TPS JSON cannot carry (NaN, ±Inf) or that means nothing (<= 0),
+// so a bad reading never fails the whole heartbeat.
+func (h Heartbeat) MarshalJSON() ([]byte, error) {
+	type plain Heartbeat
+	if math.IsNaN(h.TPS) || math.IsInf(h.TPS, 0) || h.TPS < 0 {
+		h.TPS = 0
+	}
+	return json.Marshal(plain(h))
 }
 
 // ErrNotConfigured is returned when the server key is missing.
