@@ -234,3 +234,7 @@ UserInfo 关键字段：
 - 后台：`GET /api/admin/sdk-login/servers`、`GET` / `PUT /api/admin/sdk-login/servers/{id}`（权限 `sdklogin:view` / `sdklogin:edit`）。
 
 SDK：Go `NewPKCE` / `S256Challenge` / `NewState` / `BuildLoginURL` / `ParseLoginCallback` / `NormalizeLoginCode`；TypeScript `createPkcePair` / `s256Challenge` / `createState` / `buildLoginUrl` / `parseLoginCallback` / `readLoginMessage` / `normalizeLoginCode`（另有 `SDK_LOGIN_MESSAGE`、`SdkLoginError`）。
+
+## 7. 数据投递与加密（2026-09-28）
+
+按应用 / 服务器 / Webhook 定制下发的属性、成对匿名标识（pairwise sub）与 JWE 加密（ID Token、userinfo、Server API 信封、Webhook 信封、密钥轮换、自定义属性接口），以及退出登录后的跳转规则，见 [DELIVERY.md](DELIVERY.md)。
