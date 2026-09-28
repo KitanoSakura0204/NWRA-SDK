@@ -5,15 +5,17 @@ import urllib.error
 import urllib.parse
 from unittest.mock import MagicMock, patch
 
-from lounge_sdk import LoungeClient, LoungeOIDC
-from lounge_sdk.errors import ApiError, OAuthError, TransportError
+from lounge_sdk import GMAction, GMActionParam, GMOption, LoungeClient, LoungeOIDC, OnlinePlayer
+from lounge_sdk.errors import ApiError, EncryptionError, OAuthError, TransportError
 
 
-def response(body, status=200):
+def response(body, status=200, headers=None):
     result = MagicMock()
     result.__enter__.return_value = result
     result.status = status
     result.read.return_value = json.dumps(body).encode("utf-8")
+    if headers is not None:
+        result.headers = headers
     return result
 
 
@@ -78,6 +80,72 @@ class ProtocolTests(unittest.TestCase):
         send.side_effect = urllib.error.HTTPError("https://account.example", 400, "Bad Request", {}, io.BytesIO(b'{"error":"invalid_grant","error_description":"expired"}'))
         with self.assertRaises(OAuthError):
             LoungeOIDC("https://account.example", "client").exchange("code")
+
+    @patch("urllib.request.urlopen")
+    def test_encrypted_reply_fails_closed(self, send):
+        sealed = {"code": 0, "message": "ok", "data": {"jwe": "aGVhZA.a2V5.aXY.Y2lwaGVy.dGFn"}}
+        client = LoungeClient("https://account.example", "test-key")
+        for headers in ({"X-Lounge-Encryption": "JWE"}, {}):  # a proxy may drop the header: the body shape still counts
+            with self.subTest(headers=headers):
+                send.return_value = response(sealed, headers=headers)
+                with self.assertRaises(EncryptionError) as caught:
+                    client.whitelist()
+                self.assertEqual(caught.exception.route, "whitelist")
+                with self.assertRaises(EncryptionError) as caught:
+                    client.check_whitelist("Steve")
+                self.assertEqual(caught.exception.route, "whitelist/check")
+                with self.assertRaises(EncryptionError):
+                    client.poll_gm_commands()
+                raw = client.raw("GET", "/server/v1/whitelist")
+                self.assertTrue(raw.encrypted)
+                self.assertEqual(raw.envelope, sealed)
+        send.return_value = response({"code": 0, "data": {"jwe": "x", "mode": 1, "count": 0, "entries": []}})
+        self.assertEqual(client.whitelist().mode, 1)
+
+    @patch("urllib.request.urlopen")
+    def test_heartbeat_optional_fields(self, send):
+        send.return_value = response({"code": 0, "data": {"status": "ok"}})
+        client = LoungeClient("https://account.example", "test-key")
+        client.heartbeat(online=2, max_players=20, version="1.21.1")
+        client.heartbeat(2, 20, "1.21.1", tps=19.8, players=[OnlinePlayer("Steve", "069a79f4-44e9-4726-a5be-fca90e38aaf5"), {"name": "Alex"}, "Herobrine"])
+        client.heartbeat(0, tps=float("nan"), players=[])
+        client.heartbeat(0, tps=True)
+        bodies = [json.loads(c.args[0].data) for c in send.call_args_list]
+        self.assertEqual(bodies, [
+            {"online": 2, "max": 20, "version": "1.21.1"},
+            {"online": 2, "max": 20, "version": "1.21.1", "tps": 19.8, "players": [
+                {"name": "Steve", "uuid": "069a79f4-44e9-4726-a5be-fca90e38aaf5"}, {"name": "Alex"}, {"name": "Herobrine"}]},
+            {"online": 0, "max": 0, "version": ""},
+            {"online": 0, "max": 0, "version": ""},
+        ])
+
+    @patch("urllib.request.urlopen")
+    def test_gm_catalog_publish(self, send):
+        send.return_value = response({"code": 0, "data": {"count": 1, "skipped": [{"key": "bad key", "reason": "invalid key"}]}})
+        client = LoungeClient("https://account.example", "test-key")
+        kick = GMAction("kick", "Kick", category="players", danger="confirm", params=[
+            GMActionParam("player", "player", required=True),
+            GMActionParam("world", "select", source="worlds", default="overworld"),
+            GMActionParam("amount", "number", min=0, max=64, integer=True),
+        ])
+        result = client.publish_gm_catalog([kick], {"worlds": [GMOption("overworld", "Overworld"), {"value": "nether"}]})
+        self.assertEqual((result.count, result.skipped), (1, [{"key": "bad key", "reason": "invalid key"}]))
+        request = send.call_args.args[0]
+        self.assertEqual((request.get_method(), urllib.parse.urlsplit(request.full_url).path), ("PUT", "/server/v1/gm/actions"))
+        self.assertEqual(json.loads(request.data), {
+            "actions": [{"key": "kick", "title": "Kick", "category": "players", "danger": "confirm", "params": [
+                {"name": "player", "type": "player", "required": True, "label": ""},
+                {"name": "world", "type": "select", "required": False, "label": "", "source": "worlds", "default": "overworld"},
+                {"name": "amount", "type": "number", "required": False, "label": "", "integer": True, "min": 0, "max": 64},
+            ]}],
+            "options": {"worlds": [{"value": "overworld", "label": "Overworld"}, {"value": "nether"}]},
+        })
+        send.return_value = response({"code": 0, "data": {"count": 1}})
+        self.assertEqual(client.publish_gm_options({"worlds": [GMOption("overworld")]}).skipped, [])
+        request = send.call_args.args[0]
+        self.assertEqual(urllib.parse.urlsplit(request.full_url).path, "/server/v1/gm/options")
+        self.assertEqual(json.loads(request.data), {"worlds": [{"value": "overworld"}]})
+        self.assertEqual(client.publish_gm_actions([{"key": "a", "title": "A"}]), 1)
 
 
 if __name__ == "__main__":

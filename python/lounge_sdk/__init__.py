@@ -1,6 +1,7 @@
 """Lounge Account SDK: game-server whitelist API and OIDC helpers (standard library only)."""
-from .client import CheckResult, LoungeClient, Whitelist, WhitelistEntry
-from .errors import ApiError, LoungeError, OAuthError, TransportError
+from .client import HEADER_ENCRYPTION, CheckResult, LoungeClient, OnlinePlayer, RawResponse, Whitelist, WhitelistEntry
+from .errors import ApiError, EncryptionError, LoungeError, OAuthError, TransportError
+from .gm import GMAction, GMActionParam, GMOption, GMPublishResult
 from .oidc import LoungeOIDC
 from .webhook import WebhookError, WebhookEvent, verify_webhook, webhook_signature
 
@@ -9,8 +10,16 @@ __all__ = [
     "Whitelist",
     "WhitelistEntry",
     "CheckResult",
+    "OnlinePlayer",
+    "RawResponse",
+    "HEADER_ENCRYPTION",
+    "GMAction",
+    "GMActionParam",
+    "GMOption",
+    "GMPublishResult",
     "LoungeError",
     "ApiError",
+    "EncryptionError",
     "TransportError",
     "OAuthError",
     "LoungeOIDC",
