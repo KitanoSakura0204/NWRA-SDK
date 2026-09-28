@@ -10,7 +10,7 @@ Server API 与 SPA API 使用同一信封：
 { "code": 0, "message": "操作成功", "data": { ... } }
 ```
 
-`code = 0` 成功；`401` 鉴权失败；其它非零值为业务错误，`message` 为可读原因。HTTP 状态码通常为 200（鉴权失败为 401）。
+`code = 0` 成功；`401` 鉴权失败；`403` 服务器未通过审核（仅 Server API，见 §2.5）；其它非零值为业务错误，`message` 为可读原因。HTTP 状态码通常为 200（鉴权失败为 401，未通过审核为 403）。
 
 ## 2. Server API（游戏服务器）
 
@@ -95,8 +95,18 @@ Server API 与 SPA API 使用同一信封：
 
 - **GET `BASE/server/v1/gm/commands`** 拉取待执行命令（建议与心跳同频）。返回 `[{ "id": 12, "action": "kick", "params": { "player": "Steve" }, "status": "sent" }]`；拉取即标记为 `sent`，5 分钟内未拉取的命令过期。
 - **POST `BASE/server/v1/gm/commands/{id}/result`** 回执：`{ "ok": true, "result": "Steve kicked" }`（`result` ≤ 4000 字符）。
+- 命令对象带 `source`：`admin`（后台管理员下发）或 `owner`（服主在用户中心控制台下发，见 §2.5）。有服主的服务器上，`source=admin` 的命令 `operator` 固定为 `"staff"`，不暴露管理员登录名；站点自有服务器照旧给出登录名。
+- 每台服务器同时未完成（待拉取 + 已拉取未回执）的命令最多 50 条，超出时后台与服主控制台的下发会被拒绝，直到插件处理掉积压。
 
 后台侧：管理员在「游戏服务 → GM 面板」选择服务器、填参数、点执行（权限 `gm:execute`，模块配置 `requireLevel` 限制操作者的信任等级），每次执行写入操作日志。SDK：Go `Modules` / `PublishGMActions` / `PollGMCommands` / `ReportGMResult`，TypeScript `modules` / `publishGMActions` / `pollGMCommands` / `reportGMResult`，Python `modules` / `publish_gm_actions` / `poll_gm_commands` / `report_gm_result`，Java `modules` / `publishGMActions` / `pollGMCommands` / `reportGMResult`，C# `ModulesAsync` / `PublishGMActionsAsync` / `PollGMCommandsAsync` / `ReportGMResultAsync`，PHP `modules` / `publishGmActions` / `pollGmCommands` / `reportGmResult`（PHP 本机无解释器，仅静态核对）。
+
+### 2.5 服务器审核与服主（2026-09-28）
+
+任何账号都可以在用户中心「我的服务器」申请接入自己的服务器，管理员审核通过后才能使用 Server API。
+
+- 密钥有效但服务器处于审核中、已驳回或已停用时，所有 `/server/v1/*` 返回 **HTTP 403** `{ "code": 403, "message": "server not approved" }`。插件应把它与 `401 invalid server key` 区分：停止上报、降低重试频率；审核通过或恢复后原密钥继续可用，无需更换。
+- 自助接入的服务器，密钥由服主在控制台「接入」页生成，明文只显示一次（后端只存哈希）。后台直接创建的服务器与本功能上线前的旧服务器视为已通过，行为不变。
+- 未通过审核的服务器不出现在玩家的服务器列表里，玩家也不能绑定它。
 
 ## 3. OIDC（第三方应用登录）
 
