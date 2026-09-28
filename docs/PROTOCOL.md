@@ -172,6 +172,8 @@ UserInfo 关键字段：
 
 游戏客户端（桌面 / 移动 / 内嵌 WebView）打开用户中心的品牌化登录页让玩家登录，拿到授权码后按 §3 换取令牌。后台「游戏服务 → SDK 登录页」按服务器配置接入应用（OAuth 客户端）、回调地址、回传方式、登录方式与外观；服务器需启用 `sdk-login` 模块且已通过审核。
 
+> 登录页分 PC 与手机两种版式，客户端可在 URL 上加 `device=pc|mobile` 指定（缺省按请求头判断）；每种版式可由管理员换成自定义模板，模板开发见 [LOGIN_TEMPLATES.md](LOGIN_TEMPLATES.md)。
+
 ### 6.1 打开登录页
 
 `FRONTEND/sdk/login/{serverCode}?redirect_uri=&state=&code_challenge=&code_challenge_method=S256`（`FRONTEND` 为用户中心网页地址；后端托管前端时即 `BASE`）

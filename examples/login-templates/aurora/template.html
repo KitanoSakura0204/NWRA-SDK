@@ -1,0 +1,64 @@
+<!-- "Aurora" example SDK login template (SDK/docs/LOGIN_TEMPLATES.md).
+     PC: brand panel on the left, sign-in on the right. Mobile: bottom sheet over the artwork.
+     Paste into the admin editor (HTML / CSS / JS tabs) or import the three files together. -->
+<div class="au">
+  <aside class="au-art">
+    <img class="au-logo" alt="" hidden>
+    <h1 class="au-title"></h1>
+    <p class="au-sub"></p>
+  </aside>
+  <main class="au-sheet" aria-live="polite">
+    <p class="au-notice" role="status" hidden></p>
+
+    <section data-step="continue" hidden>
+      <h2 data-t="cont.title"></h2>
+      <p class="au-who"></p>
+      <button type="button" class="au-cta" data-do="continue"></button>
+      <button type="button" class="au-link" data-do="switch" data-t="cont.switch"></button>
+    </section>
+
+    <section data-step="signin" hidden>
+      <nav class="au-tabs" hidden>
+        <button type="button" data-tab="password" data-t="signin.password"></button>
+        <button type="button" data-tab="code" data-t="signin.code"></button>
+      </nav>
+      <form data-form="password" novalidate hidden>
+        <label><span data-t="signin.username"></span><input name="username" autocomplete="username"></label>
+        <label><span data-t="signin.passwordPh"></span><input name="password" type="password" autocomplete="current-password"></label>
+        <button type="submit" class="au-cta" data-t="signin.submit"></button>
+      </form>
+      <form data-form="code" novalidate hidden>
+        <label><span data-t="signin.target"></span><input name="account" autocomplete="username"></label>
+        <label><span data-t="signin.codePh"></span>
+          <span class="au-row"><input name="code" inputmode="numeric" autocomplete="one-time-code"><button type="button" class="au-ghost" data-do="send" data-t="code.send"></button></span>
+        </label>
+        <button type="submit" class="au-cta" data-t="signin.submit"></button>
+      </form>
+      <button type="button" class="au-ghost" data-do="passkey" data-t="signin.passkey" hidden></button>
+      <div class="au-providers" hidden></div>
+      <p class="au-links">
+        <button type="button" class="au-link" data-do="forget" data-t="signin.forget"></button>
+        <button type="button" class="au-link" data-do="register" data-t="signin.register" hidden></button>
+      </p>
+    </section>
+
+    <section data-step="twofactor" hidden>
+      <h2 data-t="challenge.title"></h2>
+      <form data-form="twofactor" novalidate>
+        <label><span data-t="challenge.code"></span><input name="code" autocomplete="one-time-code"></label>
+        <label class="au-check" hidden><input type="checkbox" name="rememberDevice"> <span></span></label>
+        <button type="submit" class="au-cta" data-t="challenge.verify"></button>
+      </form>
+      <button type="button" class="au-ghost" data-do="tf-passkey" data-t="challenge.passkey" hidden></button>
+      <button type="button" class="au-link" data-do="back" data-t="challenge.back"></button>
+    </section>
+
+    <section data-step="wait" role="status"><span class="au-spin" aria-hidden="true"></span></section>
+
+    <p class="au-error" role="alert" hidden></p>
+    <footer class="au-foot">
+      <button type="button" class="au-link" data-do="cancel" data-t="cancel" hidden></button>
+      <span class="au-secured"></span>
+    </footer>
+  </main>
+</div>
