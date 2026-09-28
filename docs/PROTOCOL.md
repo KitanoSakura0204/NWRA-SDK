@@ -93,12 +93,28 @@ Server API 与 SPA API 使用同一信封：
 ]
 ```
 
+参数定义（2026-09-28 起，向后兼容：只写 `name` / `type` / `required` / `label` 的旧插件照旧有效）：
+
+| 字段 | 说明 |
+| --- | --- |
+| `type` | `string`（默认）、`text`（多行）、`number`、`boolean`、`select`、`player`（在线玩家选择器，也可手输）；别名 `int` / `integer`（整数）、`bool`、`textarea`；其他值按文本处理 |
+| `description` / `placeholder` | 说明与输入提示 |
+| `default` | 默认值；不符合定义时忽略 |
+| `min` / `max` / `step` / `integer` | 仅 `number` |
+| `maxLength` | 文本长度上限（默认 1000，`text` 4000，`player` 64） |
+| `options` | `select` 的内联选项 `[{ "value": "set", "label": "设为" }]`（1–200 个，值唯一） |
+| `source` | 引用插件上报的具名选项列表：`select` 的值必须在列表里（列表上报前只校验长度），`string` / `player` 用它做输入提示 |
+
+操作还可带 `category`（清单分组）与 `danger`（`normal` / `confirm` / `critical`：后两者需确认、或输入操作标识才会下发；服主只能调得更严）。`key` 不能含冒号或空白（冒号留给后端注册表来源的 `<来源>:<key>`），最长 64 字节。
+
+上报也可用对象形式同时带上具名列表：`{ "actions": [...], "options": { "worlds": [ { "value": "overworld", "label": "主世界" } ] } }`（省略 `actions` 保留已存的操作，省略 `options` 保留已存的列表）。**PUT `BASE/server/v1/gm/options`** 只替换具名列表（最多 20 个，每个 500 项）。回复 `{ "count": 2, "skipped": [ { "key": "bad key", "reason": "invalid key ..." } ] }`：不合规的条目（坏 key、重复、参数定义有误、超过 200 个操作）被跳过并列出，其余照常保存，不会让整次上报失败。下发时后端按定义校验参数（未声明的参数、必填、范围、选项），插件收到的参数一定符合自己上报的定义。
+
 - **GET `BASE/server/v1/gm/commands`** 拉取待执行命令（建议与心跳同频）。返回 `[{ "id": 12, "action": "kick", "params": { "player": "Steve" }, "status": "sent" }]`；拉取即标记为 `sent`，5 分钟内未拉取的命令过期。
 - **POST `BASE/server/v1/gm/commands/{id}/result`** 回执：`{ "ok": true, "result": "Steve kicked" }`（`result` ≤ 4000 字符）。
-- 命令对象带 `source`：`admin`（后台管理员下发）或 `owner`（服主在用户中心控制台下发，见 §2.5）。有服主的服务器上，`source=admin` 的命令 `operator` 固定为 `"staff"`，不暴露管理员登录名；站点自有服务器照旧给出登录名。
+- 命令对象带 `source`：`admin`（后台管理员下发）、`owner`（服主在用户中心控制台下发，见 §2.5）或 `grant`（服主 / 管理员授权的游戏工作人员在用户中心「GM 面板」下发，`operator` 为其登录名；授权可限定操作、最低信任等级与到期时间）。预设（宏）会按顺序下发多条命令。有服主的服务器上，`source=admin` 的命令 `operator` 固定为 `"staff"`，不暴露管理员登录名；站点自有服务器照旧给出登录名。
 - 每台服务器同时未完成（待拉取 + 已拉取未回执）的命令最多 50 条，超出时后台与服主控制台的下发会被拒绝，直到插件处理掉积压。
 
-后台侧：管理员在「游戏服务 → GM 面板」选择服务器、填参数、点执行（权限 `gm:execute`，模块配置 `requireLevel` 限制操作者的信任等级），每次执行写入操作日志。SDK：Go `Modules` / `PublishGMActions` / `PollGMCommands` / `ReportGMResult`，TypeScript `modules` / `publishGMActions` / `pollGMCommands` / `reportGMResult`，Python `modules` / `publish_gm_actions` / `poll_gm_commands` / `report_gm_result`，Java `modules` / `publishGMActions` / `pollGMCommands` / `reportGMResult`，C# `ModulesAsync` / `PublishGMActionsAsync` / `PollGMCommandsAsync` / `ReportGMResultAsync`，PHP `modules` / `publishGmActions` / `pollGmCommands` / `reportGmResult`（PHP 本机无解释器，仅静态核对）。
+后台侧：管理员在「游戏服务 → GM 面板」选择服务器、填参数、点执行（权限 `gm:execute`，模块配置 `requireLevel` 限制操作者的信任等级），每次执行写入操作日志。SDK：Go `Modules` / `PublishGMActions` / `PublishGMCatalog`（对象形式，含具名列表，返回跳过的条目）/ `PublishGMOptions` / `PollGMCommands` / `ReportGMResult`（其他语言的 publish 方法仍上报数组形式），TypeScript `modules` / `publishGMActions` / `pollGMCommands` / `reportGMResult`，Python `modules` / `publish_gm_actions` / `poll_gm_commands` / `report_gm_result`，Java `modules` / `publishGMActions` / `pollGMCommands` / `reportGMResult`，C# `ModulesAsync` / `PublishGMActionsAsync` / `PollGMCommandsAsync` / `ReportGMResultAsync`，PHP `modules` / `publishGmActions` / `pollGmCommands` / `reportGmResult`（PHP 本机无解释器，仅静态核对）。
 
 ### 2.5 服务器审核与服主（2026-09-28）
 

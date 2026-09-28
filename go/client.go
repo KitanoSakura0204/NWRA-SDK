@@ -197,29 +197,61 @@ var ErrNotConfigured = errors.New("lounge: server key not configured")
 
 // ---- GM module (server-scoped feature module "server-gm") ----
 
-// GMActionParam describes one input of a GM action.
-type GMActionParam struct {
-	Name     string `json:"name"`
-	Type     string `json:"type"` // string | number | boolean | player
-	Required bool   `json:"required"`
-	Label    string `json:"label"`
+// GMOption is one choice of a select parameter or of a named option list.
+type GMOption struct {
+	Value string `json:"value"`
+	Label string `json:"label,omitempty"`
 }
 
-// GMAction is one operator action the plugin offers to the admin panel.
+// GMActionParam describes one input of a GM action. Only Name / Type / Required / Label
+// existed before 2026-09-28; every other field is optional (see PROTOCOL.md section 2.4).
+type GMActionParam struct {
+	Name        string          `json:"name"`
+	Type        string          `json:"type"` // string | text | number | boolean | select | player
+	Required    bool            `json:"required"`
+	Label       string          `json:"label"`
+	Description string          `json:"description,omitempty"`
+	Placeholder string          `json:"placeholder,omitempty"`
+	Default     json.RawMessage `json:"default,omitempty"`
+	Min         *float64        `json:"min,omitempty"`
+	Max         *float64        `json:"max,omitempty"`
+	Step        *float64        `json:"step,omitempty"`
+	Integer     bool            `json:"integer,omitempty"`
+	MaxLength   int             `json:"maxLength,omitempty"`
+	Options     []GMOption      `json:"options,omitempty"`
+	// Source names an option list published with PublishGMCatalog / PublishGMOptions.
+	Source string `json:"source,omitempty"`
+}
+
+// GMAction is one operator action the plugin offers to the GM panel.
 type GMAction struct {
-	Key         string            `json:"key"`
+	Key         string            `json:"key"` // no colon, no whitespace, at most 64 bytes
 	Title       string            `json:"title"`
 	Description string            `json:"description,omitempty"`
 	Params      []GMActionParam   `json:"params,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
+	Category    string            `json:"category,omitempty"` // catalogue group
+	Danger      string            `json:"danger,omitempty"`   // normal | confirm | critical
 }
 
-// GMCommand is a queued action the admin panel wants the plugin to run.
+// GMCommand is a queued action the GM panel wants the plugin to run.
 type GMCommand struct {
-	ID     int64           `json:"id"`
-	Action string          `json:"action"`
-	Params json.RawMessage `json:"params"`
-	Status string          `json:"status"`
+	ID       int64           `json:"id"`
+	Action   string          `json:"action"`
+	Params   json.RawMessage `json:"params"`
+	Status   string          `json:"status"`
+	Source   string          `json:"source,omitempty"`   // admin | owner | grant
+	Operator string          `json:"operator,omitempty"` // "staff" for admin commands on owner-run servers
+}
+
+// GMPublishResult reports what a publish stored; entries it could not accept are skipped
+// (never a failure for the whole call).
+type GMPublishResult struct {
+	Count   int `json:"count"`
+	Skipped []struct {
+		Key    string `json:"key"`
+		Reason string `json:"reason"`
+	} `json:"skipped"`
 }
 
 // Modules returns the feature modules enabled for this server with their configs.
@@ -237,6 +269,31 @@ func (c *Client) Modules(ctx context.Context) (map[string]json.RawMessage, error
 // Call it on start-up and whenever the set of actions changes.
 func (c *Client) PublishGMActions(ctx context.Context, actions []GMAction) error {
 	return c.do(ctx, http.MethodPut, "/server/v1/gm/actions", nil, actions, nil)
+}
+
+// PublishGMCatalog replaces the actions and the named option lists (select / suggestion
+// sources, e.g. worlds or kits) in one call and reports the skipped entries. A nil options
+// map keeps the stored lists.
+func (c *Client) PublishGMCatalog(ctx context.Context, actions []GMAction, options map[string][]GMOption) (*GMPublishResult, error) {
+	body := map[string]any{"actions": actions}
+	if options != nil {
+		body["options"] = options
+	}
+	var out GMPublishResult
+	if err := c.do(ctx, http.MethodPut, "/server/v1/gm/actions", nil, body, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// PublishGMOptions replaces only the named option lists (the published actions stay); call
+// it when a list changes, e.g. a world was loaded.
+func (c *Client) PublishGMOptions(ctx context.Context, options map[string][]GMOption) (*GMPublishResult, error) {
+	var out GMPublishResult
+	if err := c.do(ctx, http.MethodPut, "/server/v1/gm/options", nil, options, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // PollGMCommands fetches queued commands (each is marked sent). Poll alongside the
