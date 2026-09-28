@@ -1,7 +1,8 @@
 // Command webhook-receiver-go is a minimal Lounge Account webhook endpoint:
-// it verifies X-Lounge-Signature with the Go SDK, de-duplicates deliveries by
-// event id and reacts to a few events. Configuration comes from the environment
-// (see README.md).
+// it verifies X-Lounge-Signature with the Go SDK, opens encrypted deliveries
+// (JWE, SDK/docs/DELIVERY.md section 6), de-duplicates deliveries by event id
+// and reacts to a few events. Configuration comes from the environment (see
+// README.md).
 package main
 
 import (
@@ -9,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -19,6 +21,9 @@ import (
 
 	lounge "github.com/wangework/lounge-sdk-go"
 )
+
+// maxBody is the largest body accepted, the same cap as the SDK's ReadWebhook.
+const maxBody = 1 << 20
 
 // Review results carried by game_role.reviewed -> data.status.
 const (
@@ -54,22 +59,64 @@ type serverOffline struct {
 	LastHeartbeat string `json:"lastHeartbeat"` // "2006-01-02 15:04:05" or null
 }
 
+// userLevelChanged is user.level_changed: the trust level moved from -> to.
+type userLevelChanged struct {
+	UserID   int64        `json:"userId"`
+	UID      int64        `json:"uid"`
+	Username string       `json:"username"`
+	From     int          `json:"from"`
+	To       int          `json:"to"`
+	User     pairwiseUser `json:"user"`
+}
+
+// connectionChanged is connection.bound / connection.unbound: a third-party
+// account (provider "discord", "github", ...) was linked or unlinked.
+type connectionChanged struct {
+	UserID       int64        `json:"userId"`
+	UID          int64        `json:"uid"`
+	Provider     string       `json:"provider"`
+	ExternalID   string       `json:"externalId"`
+	ExternalName string       `json:"externalName"` // bound only
+	User         pairwiseUser `json:"user"`
+}
+
+// pairwiseUser is data.user. An endpoint bound to a delivery profile with
+// subject "pairwise" gets no userId / uid / username / ip / externalId /
+// externalName / email / phone; data.user.sub identifies the account instead
+// (DELIVERY.md section 2). Other profile rules may add fields to data.user.
+type pairwiseUser struct {
+	Sub string `json:"sub"`
+}
+
+// who names the account in logs, whichever identifier the endpoint receives.
+func who(uid int64, u pairwiseUser) string {
+	if u.Sub != "" {
+		return "sub=" + u.Sub
+	}
+	return "uid=" + strconv.FormatInt(uid, 10)
+}
+
 type receiver struct {
 	secret    string
 	tolerance time.Duration
 	seen      *seenSet
+	keys      []*lounge.DecryptionKey // empty: the endpoint is not encrypted
 }
 
 func main() {
 	secret := os.Getenv("LOUNGE_WEBHOOK_SECRET")
 	if secret == "" {
-		log.Fatal("set LOUNGE_WEBHOOK_SECRET (admin console: 开发者 -> Webhook 事件推送 -> 签名密钥)")
+		log.Fatal("set LOUNGE_WEBHOOK_SECRET (admin console: 开放平台 -> Webhook -> 签名密钥)")
 	}
 	addr := envOr("LISTEN_ADDR", ":8090")
 	path := envOr("WEBHOOK_PATH", "/lounge/webhook")
 	tolerance := time.Duration(envInt("WEBHOOK_TOLERANCE", 300)) * time.Second
 
-	rc := &receiver{secret: secret, tolerance: tolerance, seen: newSeenSet(envInt("SEEN_CAPACITY", 10000))}
+	keys, err := loadKeys(os.Getenv("LOUNGE_DECRYPTION_KEYS"))
+	if err != nil {
+		log.Fatalf("LOUNGE_DECRYPTION_KEYS: %v", err)
+	}
+	rc := &receiver{secret: secret, tolerance: tolerance, seen: newSeenSet(envInt("SEEN_CAPACITY", 10000)), keys: keys}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(path, rc.handle)
@@ -86,7 +133,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("listening on %s%s (timestamp tolerance %s)", addr, path, tolerance)
+		log.Printf("listening on %s%s (timestamp tolerance %s, %d decryption key(s))", addr, path, tolerance, len(keys))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("listen: %v", err)
 		}
@@ -111,7 +158,25 @@ func (rc *receiver) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	delivery := r.Header.Get("X-Lounge-Delivery")
 
-	ev, err := lounge.ReadWebhook(rc.secret, r, rc.tolerance)
+	// Keep the raw bytes: the signature covers "<timestamp>.<body>" exactly as sent,
+	// and an encrypted body is opened only after it verified.
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBody))
+	if err != nil {
+		log.Printf("delivery=%s rejected: %v", delivery, err)
+		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]any{"error": "payload too large"})
+		return
+	}
+	ev, err := lounge.VerifyWebhook(rc.secret, r.Header, body, rc.tolerance)
+	if err == nil {
+		ev, err = rc.open(r.Header, body, ev)
+		if errors.Is(err, errNotEncrypted) || errors.Is(err, errNoKeys) || errors.Is(err, lounge.ErrDecrypt) {
+			// Signed by the user center but not readable here: a key rotation or a
+			// configuration mismatch. 500 keeps the delivery queued for a retry.
+			log.Printf("delivery=%s cannot open: %v", delivery, err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "cannot decrypt"})
+			return
+		}
+	}
 	switch {
 	case errors.Is(err, lounge.ErrWebhookStale):
 		log.Printf("delivery=%s rejected: stale timestamp", delivery)
@@ -187,6 +252,20 @@ func (rc *receiver) dispatch(ev *lounge.WebhookEvent) error {
 		}
 		log.Printf("[%s] server OFFLINE: code=%s name=%q id=%d lastHeartbeat=%q", at, d.Code, d.Name, d.ServerID, d.LastHeartbeat)
 		// e.g. page the on-call channel
+	case "user.level_changed":
+		var d userLevelChanged
+		if err := json.Unmarshal(ev.Data, &d); err != nil {
+			return fmt.Errorf("decode %s: %w", ev.Event, err)
+		}
+		log.Printf("[%s] trust level %d -> %d: %s", at, d.From, d.To, who(d.UID, d.User))
+		// e.g. re-check a rank that requires a minimum trust level
+	case "connection.bound", "connection.unbound":
+		var d connectionChanged
+		if err := json.Unmarshal(ev.Data, &d); err != nil {
+			return fmt.Errorf("decode %s: %w", ev.Event, err)
+		}
+		log.Printf("[%s] %s provider=%s external=%q: %s", at, ev.Event, d.Provider, d.ExternalID, who(d.UID, d.User))
+		// e.g. grant or revoke a Discord role (see ../discord-role-sync)
 	case "ping":
 		// sent by the "测试" button in the admin console
 		log.Printf("[%s] ping from console: %s", at, string(ev.Data))
