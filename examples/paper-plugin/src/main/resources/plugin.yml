@@ -1,0 +1,5 @@
+name: LoungeAccount
+version: "${version}"
+main: cyou.lounge.example.paper.LoungePaperPlugin
+api-version: "1.21"
+description: Lounge Account whitelist, heartbeat and GM channel

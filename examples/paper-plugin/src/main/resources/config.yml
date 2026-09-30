@@ -1,0 +1,11 @@
+# Lounge Account user center (BASE) and the server key from the admin console:
+# 游戏服务 -> 服务器管理 -> 服务器密钥. The environment variables LOUNGE_BASE and
+# LOUNGE_SERVER_KEY override these two values.
+base: "https://account.example.com"
+server-key: ""
+# When the user center cannot be reached: "cache" lets in players a successful check
+# admitted in the last 24 hours, "deny" refuses everyone, "allow" admits everyone.
+# An encrypted reply this plugin cannot open always refuses.
+outage-policy: cache
+heartbeat-seconds: 60
+gm-poll-seconds: 15

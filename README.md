@@ -47,7 +47,8 @@ SDK/
 ├── python/               PyPI: lounge-sdk
 ├── typescript/           npm: @lounge/sdk
 ├── csharp/               NuGet: Lounge.Sdk
-└── php/                  Composer: lounge/sdk
+├── php/                  Composer: lounge/sdk
+└── examples/             示例：游戏服务器、Paper 插件、Webhook 接收端、Discord 身份组同步、登录页模板（见 examples/README.md）
 ```
 
 ## 版本
