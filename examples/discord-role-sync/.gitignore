@@ -1,0 +1,5 @@
+node_modules/
+dist/
+# runtime data: Lounge account -> Discord account links
+links.json
+links.json.tmp
