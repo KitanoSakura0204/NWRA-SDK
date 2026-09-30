@@ -43,8 +43,10 @@ Server API 与 SPA API 使用同一信封：
 { "allowed": true, "bound": true, "reason": "", "player": { ...entry } }
 ```
 
-`reason` 可能为：`not bound`、`pending review`、`banned`、`account locked`、`whitelist disabled`。
-白名单关闭的服务器返回 `allowed: true, bound: false`。
+`reason` 可能为：`not bound`、`pending review`、`banned`、`account locked`、`whitelist disabled`、`maintenance`、`check unavailable`（封禁检查出错，按拒绝处理）。
+白名单关闭的服务器返回 `allowed: true, bound: false`。部分拒绝带 `message`（如服务器封禁的原因，见 [SERVER_USERS.md](SERVER_USERS.md)），应展示给玩家。
+
+玩家数据（服主自定义字段的读写）与按服务器生效的封禁（查询、踢出列表、封禁 / 解除）见 [SERVER_USERS.md](SERVER_USERS.md)。
 
 ### 2.3 POST `BASE/server/v1/heartbeat`
 
