@@ -25,7 +25,8 @@ final class Json
      * @param callable(string, string, array<string, string>, ?string, float): array{int, string} $transport
      * @param array<string, string>                                                                 $headers
      *
-     * @return array{int, string}
+     * @return array{int, string, array<string, string>} status, body and the response headers the transport
+     *                                                  reported (names lower-cased; empty when it reports none)
      */
     public static function send(callable $transport, string $method, string $url, array $headers, ?string $body, float $timeout): array
     {
@@ -40,7 +41,16 @@ final class Json
             throw new TransportError('transport returned an invalid response');
         }
 
-        return [(int) $res[0], (string) $res[1]];
+        $received = [];
+        if (isset($res[2]) && is_array($res[2])) {
+            foreach ($res[2] as $name => $value) {
+                if (is_string($name)) {
+                    $received[strtolower($name)] = is_array($value) ? implode(', ', array_map(static fn ($v): string => self::str($v), $value)) : self::str($value);
+                }
+            }
+        }
+
+        return [(int) $res[0], (string) $res[1], $received];
     }
 
     /**

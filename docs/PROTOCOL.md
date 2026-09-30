@@ -158,6 +158,8 @@ UserInfo 关键字段：
 ## 4. 错误处理约定
 
 - Server API 网络错误 → 抛出/返回 `TransportError`；`code != 0` → `ApiError{code,message}`。
+- Server API 加密响应（响应头 `X-Lounge-Encryption`，或 `data` 恰为 `{"jwe": "..."}`，见 [DELIVERY.md](DELIVERY.md) §5）无法打开时 → `EncryptionError`（未配置私钥、解密失败、`ctx` 不是 `server:<代码>:<本路由>`；配置私钥后 `whitelist` / `whitelist/check` 返回明文也按此拒绝）。它不属于 `TransportError`，插件应按拒绝处理（fail closed），不能走网络异常的放行降级。各 SDK 另提供原始响应访问（Go `Raw`、TypeScript / Python / Java / PHP `raw`、C# `RawAsync`），不解码 `data`。
+- 心跳的 `tps` / `players`（§2.3）与 GM 类型化动作与 `{actions, options}` 发布（§2.4）六种语言 SDK 均已支持；非有限或 ≤ 0 的 TPS 与空玩家列表不发送。
 - OIDC 端点遵循 RFC 6749 错误格式 `{ "error": "...", "error_description": "..." }` → `OAuthError`。
 - 所有 SDK 默认超时 10s，可配置；建议服务器插件对白名单校验做本地缓存与降级（网络异常时按 `mode` 决定放行策略）。
 

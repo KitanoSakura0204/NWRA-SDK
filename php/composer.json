@@ -10,6 +10,10 @@
         "ext-curl": "*",
         "ext-json": "*"
     },
+    "suggest": {
+        "ext-openssl": "Delivery helpers and encrypted Server API replies (ECDH-ES+A256KW over P-256, A256GCM)",
+        "ext-sodium": "X25519 delivery keys"
+    },
     "autoload": {
         "psr-4": {
             "Lounge\\Sdk\\": "src/"

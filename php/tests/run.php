@@ -14,12 +14,17 @@ declare(strict_types=1);
 
 use Lounge\Sdk\CurlTransport;
 use Lounge\Sdk\Exceptions\ApiError;
+use Lounge\Sdk\Exceptions\EncryptionError;
 use Lounge\Sdk\Exceptions\LoungeException;
 use Lounge\Sdk\Exceptions\OAuthError;
 use Lounge\Sdk\Exceptions\TransportError;
 use Lounge\Sdk\Exceptions\WebhookError;
+use Lounge\Sdk\GmAction;
+use Lounge\Sdk\GmActionParam;
+use Lounge\Sdk\GmOption;
 use Lounge\Sdk\LoungeClient;
 use Lounge\Sdk\LoungeOidc;
+use Lounge\Sdk\OnlinePlayer;
 use Lounge\Sdk\Webhook;
 use Lounge\Sdk\WebhookEvent;
 use Lounge\Sdk\Whitelist;
@@ -298,7 +303,99 @@ T::test('timeout and base URL normalisation reach the transport', function (): v
     T::same('https://account.example/server/v1/heartbeat', $t->last()['url']);
 });
 
-/* ------------------------------------------------------------------ OIDC */
+T::test('heartbeat sends tps and players; non-finite or non-positive tps and empty lists are left out', function (): void {
+    $ok = FakeTransport::json(['code' => 0, 'data' => ['status' => 'ok']]);
+    $t = new FakeTransport($ok, $ok, $ok, $ok, $ok);
+    client($t)->heartbeat(2, 20, '1.21.1', 19.8, [new OnlinePlayer('Steve', '069a79f4'), ['name' => 'Alex'], 'Notch']);
+    T::same(
+        ['online' => 2, 'max' => 20, 'version' => '1.21.1', 'tps' => 19.8, 'players' => [['name' => 'Steve', 'uuid' => '069a79f4'], ['name' => 'Alex'], ['name' => 'Notch']]],
+        json_decode((string) $t->last()['body'], true),
+        'body with tps and players',
+    );
+    foreach ([NAN, INF, 0.0, -1.0] as $tps) {
+        client($t)->heartbeat(1, 0, '', $tps, []);
+        T::same(['online' => 1, 'max' => 0, 'version' => ''], json_decode((string) $t->last()['body'], true), "tps $tps left out");
+    }
+});
+
+T::test('GM catalogue: typed schema, {actions, options} publish, options-only publish, skipped entries', function (): void {
+    $res = FakeTransport::json(['code' => 0, 'data' => ['count' => 1, 'skipped' => [['key' => 'bad key', 'reason' => 'invalid key']]]]);
+    $t = new FakeTransport($res, $res, FakeTransport::json(['code' => 0, 'data' => ['count' => 3]]));
+    $kick = new GmAction('kick', 'Kick', params: [
+        new GmActionParam('player', 'player', required: true, label: 'Player'),
+        new GmActionParam('world', 'select', source: 'worlds'),
+        new GmActionParam('minutes', 'number', min: 0, max: 60, integer: true, default: 0),
+    ], category: 'players', danger: 'confirm');
+    $r = client($t)->publishGmCatalog([$kick], ['worlds' => [new GmOption('world', 'Overworld'), 'nether']]);
+    T::same(1, $r->count);
+    T::same([['key' => 'bad key', 'reason' => 'invalid key']], $r->skipped);
+    T::same('PUT', $t->last()['method']);
+    T::same('https://account.example/server/v1/gm/actions', $t->last()['url']);
+    T::same([
+        'actions' => [[
+            'key' => 'kick', 'title' => 'Kick',
+            'params' => [
+                ['name' => 'player', 'type' => 'player', 'required' => true, 'label' => 'Player'],
+                ['name' => 'world', 'type' => 'select', 'required' => false, 'label' => '', 'source' => 'worlds'],
+                ['name' => 'minutes', 'type' => 'number', 'required' => false, 'label' => '', 'default' => 0, 'min' => 0, 'max' => 60, 'integer' => true],
+            ],
+            'category' => 'players', 'danger' => 'confirm',
+        ]],
+        'options' => ['worlds' => [['value' => 'world', 'label' => 'Overworld'], ['value' => 'nether']]],
+    ], json_decode((string) $t->last()['body'], true), 'catalog body');
+    client($t)->publishGmOptions(['kits' => ['starter']]);
+    T::same('https://account.example/server/v1/gm/options', $t->last()['url']);
+    T::same(['kits' => [['value' => 'starter']]], json_decode((string) $t->last()['body'], true), 'options body');
+    T::same(3, client($t)->publishGmActions([$kick]));
+    T::same('kick', json_decode((string) $t->last()['body'], true)[0]['key'], 'legacy list body');
+});
+
+T::test('encrypted replies fail closed without keys (header or {"jwe"} data) and raw() returns them as is', function (): void {
+    $sealed = ['code' => 0, 'data' => ['jwe' => 'a.b.c.d.e']];
+    $e = T::throws(EncryptionError::class, fn () => client(new FakeTransport(FakeTransport::json($sealed)))->checkWhitelist('Steve'), 'no decryption key');
+    T::same('whitelist/check', $e->getRoute());
+    T::true(!$e instanceof TransportError, 'EncryptionError is not a TransportError');
+    $byHeader = [200, '{"code":0,"data":{"allowed":true}}', ['X-Lounge-Encryption' => 'JWE']];
+    T::throws(EncryptionError::class, fn () => client(new FakeTransport($byHeader))->checkWhitelist('Steve'));
+    $raw = client(new FakeTransport(FakeTransport::json($sealed)))->raw('GET', '/server/v1/whitelist');
+    T::true($raw->encrypted, 'raw marks the reply encrypted');
+    T::same('a.b.c.d.e', $raw->data['jwe']);
+    $raw = client(new FakeTransport($byHeader))->raw('GET', '/server/v1/whitelist/check', ['name' => 'Steve']);
+    T::same('JWE', $raw->header('x-lounge-encryption'));
+    T::true($raw->encrypted, 'header marks the reply encrypted');
+});
+
+/** @return array<string, mixed> the shared delivery vectors (SDK/go/testdata/vectors.json, generated by the backend) */
+function vectors(): array
+{
+    return json_decode((string) file_get_contents(__DIR__ . '/../../go/testdata/vectors.json'), true, 512, JSON_THROW_ON_ERROR);
+}
+
+if (!\function_exists('openssl_decrypt')) {
+    T::skip('encrypted whitelist opens with the decryption keys (shared vector)', 'ext-openssl missing');
+} else {
+    T::test('encrypted whitelist opens with the decryption keys; wrong route, wrong key and plain replies are refused', function (): void {
+        $set = vectors();
+        $v = array_values(array_filter($set['vectors'], static fn (array $x): bool => $x['name'] === 'server-envelope'))[0];
+        $sealed = [200, $v['response'], ['X-Lounge-Encryption' => 'JWE']];
+        $keyed = static fn (FakeTransport $t, array $keys): LoungeClient => new LoungeClient('https://account.example', 'k', 10.0, $t, $keys);
+        $w = $keyed(new FakeTransport($sealed), [$set['keys']['ec']])->whitelist();
+        T::same('survival', $w->server);
+        T::same(1, $w->count);
+        T::same('Steve', $w->entries[0]->name);
+        $w = $keyed(new FakeTransport($sealed), [json_encode($set['keys']['ec'])])->whitelist();
+        T::same('survival', $w->server, 'JWK given as a JSON string');
+        // the ctx says server:survival:whitelist, so the same ciphertext on the join check is refused
+        T::throws(EncryptionError::class, fn () => $keyed(new FakeTransport($sealed), [$set['keys']['ec']])->checkWhitelist('Steve'), 'ctx names another route');
+        T::throws(EncryptionError::class, fn () => $keyed(new FakeTransport($sealed), [$set['keys']['rsa']])->whitelist(), 'did not open');
+        $plain = FakeTransport::json(['code' => 0, 'data' => ['allowed' => true, 'bound' => true]]);
+        T::throws(EncryptionError::class, fn () => $keyed(new FakeTransport($plain), [$set['keys']['ec']])->checkWhitelist('Steve'), 'plain reply');
+        $ok = FakeTransport::json(['code' => 0, 'data' => ['status' => 'ok']]);
+        $keyed(new FakeTransport($ok), [$set['keys']['ec']])->heartbeat(1); // routes the backend never seals stay plain
+        T::throws(\InvalidArgumentException::class, fn () => new LoungeClient('https://a.example', 'k', 10.0, null, ['not a jwk']));
+    });
+}
+
 
 echo "\nOIDC\n";
 
