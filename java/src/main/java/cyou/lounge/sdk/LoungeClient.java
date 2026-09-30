@@ -73,6 +73,7 @@ public class LoungeClient {
         r.allowed = Boolean.TRUE.equals(data.get("allowed"));
         r.bound = Boolean.TRUE.equals(data.get("bound"));
         r.reason = Json.str(data.get("reason"));
+        r.message = Json.str(data.get("message"));
         Object p = data.get("player");
         if (p instanceof Map<?, ?>) r.player = WhitelistEntry.from((Map<?, ?>) p);
         return r;
@@ -150,6 +151,90 @@ public class LoungeClient {
     public void reportGMResult(long commandId, boolean ok, String result) throws LoungeException {
         String body = "{\"ok\":" + ok + ",\"result\":" + Json.quote(result == null ? "" : result) + "}";
         call("POST", "/server/v1/gm/commands/" + commandId + "/result", body);
+    }
+
+    // ---- Player data and per-server bans (SERVER_USERS.md) ----
+
+    /** The data schema the server owner defined (needs the module on for this server). */
+    public ServerUsers.UserSchema userSchema() throws LoungeException {
+        return ServerUsers.UserSchema.from(call("GET", "/server/v1/users/schema", null));
+    }
+
+    /** One account's data (uid from the join check or the whitelist). */
+    public ServerUsers.UserData userData(long uid) throws LoungeException {
+        return ServerUsers.UserData.from(call("GET", userPath(uid), null));
+    }
+
+    /**
+     * Replace the account's stored values (fields left out are unset). version is the one you last
+     * read, or -1 to write unconditionally; a stale version throws Api 409
+     * ({@link ServerUsers#isVersionConflict}). Returns the data as stored.
+     */
+    public ServerUsers.UserData putUserData(long uid, Map<String, ?> data, long version) throws LoungeException {
+        return ServerUsers.UserData.from(call("PUT", userPath(uid), writeBody(data, version)));
+    }
+
+    /** Merge values into the stored ones; a null value deletes that field. version as for putUserData. */
+    public ServerUsers.UserData patchUserData(long uid, Map<String, ?> data, long version) throws LoungeException {
+        return ServerUsers.UserData.from(call("PATCH", userPath(uid), writeBody(data, version)));
+    }
+
+    /**
+     * Active bans on this server: all (only == null; at most 5000, newest first) or those of the
+     * matching accounts. Works with the module off too.
+     */
+    public List<ServerUsers.ServerBan> bans(ServerUsers.Target only) throws LoungeException {
+        StringBuilder q = new StringBuilder();
+        if (only != null) {
+            for (Map.Entry<String, Object> e : only.toMap().entrySet()) {
+                q.append(q.length() == 0 ? "?" : "&").append(e.getKey()).append('=').append(enc(String.valueOf(e.getValue())));
+            }
+        }
+        List<ServerUsers.ServerBan> out = new ArrayList<>();
+        Object list = call("GET", "/server/v1/bans" + q, null).get("bans");
+        if (list instanceof List<?>) for (Object o : (List<?>) list) if (o instanceof Map<?, ?>) out.add(ServerUsers.ServerBan.from((Map<?, ?>) o));
+        return out;
+    }
+
+    /** Online players (as of the last heartbeat) whose account is banned here: disconnect them. */
+    public List<ServerUsers.KickEntry> kickList() throws LoungeException {
+        List<ServerUsers.KickEntry> out = new ArrayList<>();
+        Object list = call("GET", "/server/v1/bans/kick", null).get("players");
+        if (list instanceof List<?>) for (Object o : (List<?>) list) if (o instanceof Map<?, ?>) out.add(ServerUsers.KickEntry.from((Map<?, ?>) o));
+        return out;
+    }
+
+    /**
+     * Ban an account on this server (module on, pluginBans allowed). Give expireTime
+     * ("2006-01-02 15:04:05" or RFC 3339) or durationMinutes &gt; 0; neither (null / 0) = permanent.
+     * A ban an administrator placed cannot be replaced (Api 403). Returns the ban now in force.
+     */
+    public ServerUsers.ServerBan ban(ServerUsers.Target target, String reason, String expireTime, long durationMinutes) throws LoungeException {
+        Map<String, Object> body = target.toMap();
+        putText(body, "reason", reason);
+        putText(body, "expireTime", expireTime);
+        if (durationMinutes > 0) body.put("durationMinutes", durationMinutes);
+        Object b = call("POST", "/server/v1/bans", encode(body)).get("ban");
+        return b instanceof Map<?, ?> ? ServerUsers.ServerBan.from((Map<?, ?>) b) : null;
+    }
+
+    /** Lift the account's active ban on this server (not one an administrator placed); returns the uid. */
+    public long unban(ServerUsers.Target target, String reason) throws LoungeException {
+        Map<String, Object> body = target.toMap();
+        putText(body, "reason", reason);
+        return Json.num(call("POST", "/server/v1/bans/lift", encode(body)).get("uid")).longValue();
+    }
+
+    private static String userPath(long uid) {
+        if (uid <= 0) throw new IllegalArgumentException("lounge: uid must be positive, got " + uid);
+        return "/server/v1/users/" + uid + "/data";
+    }
+
+    private static String writeBody(Map<String, ?> data, long version) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("data", data == null ? Map.of() : data); // the server wants a data object, even an empty one
+        if (version >= 0) body.put("version", version);
+        return encode(body);
     }
 
     /**
@@ -297,6 +382,8 @@ public class LoungeClient {
         public boolean allowed;
         public boolean bound;
         public String reason;
+        /** Extra text for some refusals, e.g. the reason of a per-server ban (reason "banned"); "" when none. */
+        public String message;
         public WhitelistEntry player;
     }
 

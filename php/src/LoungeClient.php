@@ -167,6 +167,152 @@ final class LoungeClient
         $this->call('POST', sprintf('/server/v1/gm/commands/%d/result', $commandId), [], ['ok' => $ok, 'result' => $result]);
     }
 
+    // ---- Player data and per-server bans (SERVER_USERS.md) ----
+
+    /**
+     * The data schema the server owner defined (needs the module on for this server).
+     *
+     * @return array{fields: list<array<string, mixed>>, maxUserBytes: int} each field has key / label / type
+     *         (text | number | bool | select | json) / visible and optionally description, default,
+     *         maxLength, min, max, integer, options
+     */
+    public function userSchema(): array
+    {
+        $d = $this->call('GET', '/server/v1/users/schema');
+        $fields = is_array($d['fields'] ?? null) ? array_values(array_filter($d['fields'], 'is_array')) : [];
+
+        return ['fields' => $fields, 'maxUserBytes' => Json::int($d['maxUserBytes'] ?? 0)];
+    }
+
+    /** One account's data (uid from the join check or the whitelist). */
+    public function userData(int $uid): UserData
+    {
+        return UserData::fromArray($this->call('GET', self::userPath($uid)));
+    }
+
+    /**
+     * Replace the account's stored values (fields left out are unset). Pass the version you last read to
+     * refuse a concurrent change (ApiError 409, see UserData::isVersionConflict); null writes unconditionally.
+     *
+     * @param array<string, mixed> $data
+     */
+    public function putUserData(int $uid, array $data, ?int $version = null): UserData
+    {
+        return UserData::fromArray($this->call('PUT', self::userPath($uid), [], self::writeBody($data, $version)));
+    }
+
+    /**
+     * Merge values into the stored ones; a null value deletes that field.
+     *
+     * @param array<string, mixed> $data
+     */
+    public function patchUserData(int $uid, array $data, ?int $version = null): UserData
+    {
+        return UserData::fromArray($this->call('PATCH', self::userPath($uid), [], self::writeBody($data, $version)));
+    }
+
+    /**
+     * Active bans on this server: all (no argument; at most 5000, newest first) or those of the matching
+     * accounts. Works with the module off too.
+     *
+     * @return list<ServerBan>
+     */
+    public function bans(int $uid = 0, string $name = '', string $uuid = ''): array
+    {
+        $q = self::target($uid, $name, $uuid);
+        $list = $this->call('GET', '/server/v1/bans', array_map('strval', $q))['bans'] ?? [];
+
+        return array_values(array_map(static fn (array $b): ServerBan => ServerBan::fromArray($b), array_filter(is_array($list) ? $list : [], 'is_array')));
+    }
+
+    /**
+     * Online players (as of the last heartbeat) whose account is banned here: disconnect them.
+     *
+     * @return list<array{name: string, uuid: string, uid: int, reason: string, expireTime: ?string}>
+     */
+    public function kickList(): array
+    {
+        $out = [];
+        $list = $this->call('GET', '/server/v1/bans/kick')['players'] ?? [];
+        foreach (is_array($list) ? $list : [] as $p) {
+            if (is_array($p)) {
+                $out[] = [
+                    'name' => Json::str($p['name'] ?? ''),
+                    'uuid' => Json::str($p['uuid'] ?? ''),
+                    'uid' => Json::int($p['uid'] ?? 0),
+                    'reason' => Json::str($p['reason'] ?? ''),
+                    'expireTime' => isset($p['expireTime']) ? Json::str($p['expireTime']) : null,
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Ban an account on this server (module on, pluginBans allowed), named by uid or by the name / uuid of a
+     * binding. $expireTime ("2006-01-02 15:04:05" or RFC 3339) or $durationMinutes; neither = permanent. A ban
+     * an administrator placed cannot be replaced (ApiError 403). Returns the ban now in force.
+     */
+    public function ban(int $uid = 0, string $name = '', string $uuid = '', string $reason = '', string $expireTime = '', int $durationMinutes = 0): ?ServerBan
+    {
+        $body = self::target($uid, $name, $uuid);
+        if ($reason !== '') {
+            $body['reason'] = $reason;
+        }
+        if ($expireTime !== '') {
+            $body['expireTime'] = $expireTime;
+        }
+        if ($durationMinutes > 0) {
+            $body['durationMinutes'] = $durationMinutes;
+        }
+        $ban = $this->call('POST', '/server/v1/bans', [], $body === [] ? new \stdClass() : $body)['ban'] ?? null;
+
+        return is_array($ban) ? ServerBan::fromArray($ban) : null;
+    }
+
+    /** Lift the account's active ban on this server (not one an administrator placed); returns the uid. */
+    public function unban(int $uid = 0, string $name = '', string $uuid = '', string $reason = ''): int
+    {
+        $body = self::target($uid, $name, $uuid);
+        if ($reason !== '') {
+            $body['reason'] = $reason;
+        }
+
+        return Json::int($this->call('POST', '/server/v1/bans/lift', [], $body === [] ? new \stdClass() : $body)['uid'] ?? 0);
+    }
+
+    private static function userPath(int $uid): string
+    {
+        if ($uid <= 0) {
+            throw new \InvalidArgumentException(sprintf('lounge: uid must be positive, got %d', $uid));
+        }
+
+        return sprintf('/server/v1/users/%d/data', $uid);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     *
+     * @return array<string, mixed>
+     */
+    private static function writeBody(array $data, ?int $version): array
+    {
+        // the server wants a data object, even an empty one ([] would encode as a JSON list)
+        $body = ['data' => $data === [] ? new \stdClass() : $data];
+        if ($version !== null) {
+            $body['version'] = $version;
+        }
+
+        return $body;
+    }
+
+    /** @return array<string, int|string> */
+    private static function target(int $uid, string $name, string $uuid): array
+    {
+        return array_filter(['uid' => $uid, 'name' => $name, 'uuid' => $uuid], static fn ($v): bool => $v !== 0 && $v !== '');
+    }
+
     /**
      * Call a Server API route (e.g. `/server/v1/whitelist`) and return the reply without decoding `data`.
      * Transport failures, unreadable replies (missing code, HTTP >= 400) and business errors (code != 0)

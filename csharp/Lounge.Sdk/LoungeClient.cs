@@ -75,10 +75,14 @@ public sealed record CheckResult(
     [property: JsonPropertyName("allowed")] bool Allowed,
     [property: JsonPropertyName("bound")] bool Bound,
     [property: JsonPropertyName("reason")] string Reason,
-    [property: JsonPropertyName("player")] WhitelistEntry? Player);
+    [property: JsonPropertyName("player")] WhitelistEntry? Player)
+{
+    /// <summary>Extra text for some refusals, e.g. the reason of a per-server ban (Reason "banned", SERVER_USERS.md).</summary>
+    [JsonPropertyName("message")] public string? Message { get; init; }
+}
 
-/// <summary>Server API client authenticated with X-Server-Key.</summary>
-public sealed class LoungeClient
+/// <summary>Server API client authenticated with X-Server-Key (player data and bans: ServerUsers.cs).</summary>
+public sealed partial class LoungeClient
 {
     private readonly HttpClient _http;
     private readonly string _base;

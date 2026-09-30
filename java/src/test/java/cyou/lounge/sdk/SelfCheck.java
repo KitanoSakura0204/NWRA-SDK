@@ -19,6 +19,7 @@ public final class SelfCheck {
     private static volatile String reply = "";
     private static volatile String header = null;
     private static final List<String> bodies = Collections.synchronizedList(new ArrayList<>());
+    private static final List<String> requests = Collections.synchronizedList(new ArrayList<>());
 
     interface Call {
         void run() throws Exception;
@@ -28,6 +29,7 @@ public final class SelfCheck {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", ex -> {
             bodies.add(new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            requests.add(ex.getRequestMethod() + " " + ex.getRequestURI());
             if (header != null) ex.getResponseHeaders().set(LoungeClient.HEADER_ENCRYPTION, header);
             byte[] out = reply.getBytes(StandardCharsets.UTF_8);
             ex.sendResponseHeaders(200, out.length);
@@ -102,6 +104,49 @@ public final class SelfCheck {
         check(c.publishGMOptions(Map.of("worlds", List.of(new LoungeClient.GMOption("overworld")))).skipped.isEmpty(), "options result");
         check(bodies.get(1).equals("{\"worlds\":[{\"value\":\"overworld\"}]}"), "options body: " + bodies.get(1));
         check(c.publishGMCatalog(null, null).count == 1 && bodies.get(2).equals("{}"), "null keeps both: " + bodies.get(2));
+
+        serverUsers(c);
+    }
+
+    // Player data and per-server bans (SERVER_USERS.md): paths, bodies and decoding.
+    private static void serverUsers(LoungeClient c) throws Exception {
+        bodies.clear();
+        requests.clear();
+        reply = "{\"code\":0,\"data\":{\"fields\":[{\"key\":\"coins\",\"label\":\"Coins\",\"type\":\"number\",\"visible\":true,\"integer\":true,\"min\":0}],\"maxUserBytes\":8192}}";
+        ServerUsers.UserSchema schema = c.userSchema();
+        check(schema.maxUserBytes == 8192 && schema.fields.get(0).integer && schema.fields.get(0).min == 0.0, "schema");
+        reply = "{\"code\":0,\"data\":{\"uid\":100001,\"data\":{\"coins\":12,\"rank\":null},\"version\":2,\"updatedAt\":\"2026-09-29 10:00:00\",\"size\":11}}";
+        ServerUsers.UserData d = c.userData(100001);
+        check(d.version == 2 && ((Number) d.data.get("coins")).intValue() == 12 && d.data.containsKey("rank") && "2026-09-29 10:00:00".equals(d.updatedAt), "user data");
+        c.putUserData(100001, Map.of("coins", 1), 2);
+        Map<String, Object> patch = new java.util.LinkedHashMap<>();
+        patch.put("rank", null);
+        c.patchUserData(100001, patch, -1);
+        check(requests.subList(1, 4).equals(List.of("GET /server/v1/users/100001/data", "PUT /server/v1/users/100001/data", "PATCH /server/v1/users/100001/data")), "data paths: " + requests);
+        check(bodies.get(2).equals("{\"data\":{\"coins\":1},\"version\":2}") && bodies.get(3).equals("{\"data\":{\"rank\":null}}"), "data bodies: " + bodies);
+        reply = "{\"code\":409,\"message\":\"stale\"}";
+        try {
+            c.putUserData(100001, Map.of("coins", 1), 1);
+            throw new AssertionError("expected a version conflict");
+        } catch (LoungeException.Api e) {
+            check(ServerUsers.isVersionConflict(e), "409 is a version conflict");
+        }
+
+        bodies.clear();
+        requests.clear();
+        String ban = "{\"uid\":100001,\"names\":[\"Steve\"],\"uuids\":[],\"reason\":\"x-ray\",\"expireTime\":null,\"createTime\":\"2026-09-29 10:00:00\",\"source\":\"plugin\"}";
+        reply = "{\"code\":0,\"data\":{\"count\":1,\"bans\":[" + ban + "],\"players\":[{\"name\":\"Steve\",\"uid\":100001,\"reason\":\"x-ray\",\"expireTime\":null}],\"uid\":100001,\"ban\":" + ban + "}}";
+        List<ServerUsers.ServerBan> bans = c.bans(ServerUsers.Target.name("Steve Two"));
+        check(bans.size() == 1 && bans.get(0).expireTime == null && bans.get(0).names.get(0).equals("Steve"), "bans");
+        check(c.kickList().get(0).uid == 100001, "kick list");
+        check(c.ban(ServerUsers.Target.name("Steve"), "x-ray", null, 1440).reason.equals("x-ray"), "ban");
+        check(c.unban(ServerUsers.Target.uid(100001), "appeal") == 100001, "unban");
+        check(requests.equals(List.of("GET /server/v1/bans?name=Steve+Two", "GET /server/v1/bans/kick", "POST /server/v1/bans", "POST /server/v1/bans/lift")), "ban paths: " + requests);
+        check(bodies.get(2).equals("{\"name\":\"Steve\",\"reason\":\"x-ray\",\"durationMinutes\":1440}") && bodies.get(3).equals("{\"uid\":100001,\"reason\":\"appeal\"}"), "ban bodies: " + bodies);
+
+        reply = "{\"code\":0,\"data\":{\"allowed\":false,\"bound\":true,\"reason\":\"banned\",\"message\":\"x-ray\",\"player\":null}}";
+        LoungeClient.CheckResult r = c.checkWhitelist("Steve", null);
+        check(!r.allowed && r.reason.equals("banned") && r.message.equals("x-ray"), "ban message on the join check");
     }
 
     private static void expectEncryption(String route, Call call) throws Exception {

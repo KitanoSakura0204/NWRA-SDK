@@ -25,6 +25,7 @@ use Lounge\Sdk\GmOption;
 use Lounge\Sdk\LoungeClient;
 use Lounge\Sdk\LoungeOidc;
 use Lounge\Sdk\OnlinePlayer;
+use Lounge\Sdk\UserData;
 use Lounge\Sdk\Webhook;
 use Lounge\Sdk\WebhookEvent;
 use Lounge\Sdk\Whitelist;
@@ -396,6 +397,54 @@ if (!\function_exists('openssl_decrypt')) {
     });
 }
 
+
+T::test('player data: schema, read, replace with a version, patch, stale version', function (): void {
+    $stored = FakeTransport::json(['code' => 0, 'data' => ['uid' => 100001, 'data' => ['coins' => 12, 'rank' => null], 'version' => 2, 'updatedAt' => '2026-09-29 10:00:00', 'size' => 11]]);
+    $t = new FakeTransport(
+        FakeTransport::json(['code' => 0, 'data' => ['fields' => [['key' => 'coins', 'label' => 'Coins', 'type' => 'number', 'visible' => true]], 'maxUserBytes' => 8192]]),
+        $stored, $stored, $stored, $stored,
+        FakeTransport::json(['code' => 409, 'message' => 'stale']),
+    );
+    $c = client($t);
+    T::same(8192, $c->userSchema()['maxUserBytes']);
+    $d = $c->userData(100001);
+    T::same([2, 12, '2026-09-29 10:00:00'], [$d->version, $d->data['coins'], $d->updatedAt]);
+    T::true(array_key_exists('rank', $d->data), 'null field kept');
+    $c->putUserData(100001, ['coins' => 1], 2);
+    T::same('{"data":{"coins":1},"version":2}', $t->last()['body']);
+    T::same('PUT', $t->last()['method']);
+    $c->patchUserData(100001, ['rank' => null]);
+    T::same('{"data":{"rank":null}}', $t->last()['body']);
+    T::same('https://account.example/server/v1/users/100001/data', $t->last()['url']);
+    $c->putUserData(100001, [], 0);
+    T::same('{"data":{},"version":0}', $t->last()['body'], 'empty data stays an object');
+    $e = T::throws(ApiError::class, fn () => $c->putUserData(100001, ['coins' => 1], 1));
+    T::true(UserData::isVersionConflict($e), '409 is a version conflict');
+    T::throws(\InvalidArgumentException::class, fn () => $c->userData(0));
+});
+
+T::test('bans: list with a filter, kick list, ban and unban bodies, ban message on the join check', function (): void {
+    $ban = ['uid' => 100001, 'names' => ['Steve'], 'uuids' => [], 'reason' => 'x-ray', 'expireTime' => null, 'createTime' => '2026-09-29 10:00:00', 'source' => 'plugin'];
+    $t = new FakeTransport(
+        FakeTransport::json(['code' => 0, 'data' => ['count' => 1, 'bans' => [$ban]]]),
+        FakeTransport::json(['code' => 0, 'data' => ['count' => 1, 'players' => [['name' => 'Steve', 'uid' => 100001, 'reason' => 'x-ray', 'expireTime' => null]]]]),
+        FakeTransport::json(['code' => 0, 'data' => ['uid' => 100001, 'ban' => $ban]]),
+        FakeTransport::json(['code' => 0, 'data' => ['uid' => 100001, 'lifted' => true]]),
+        FakeTransport::json(['code' => 0, 'data' => ['allowed' => false, 'bound' => true, 'reason' => 'banned', 'message' => 'x-ray', 'player' => null]]),
+    );
+    $c = client($t);
+    $bans = $c->bans(name: 'Steve Two');
+    T::same([100001, ['Steve'], null, 'plugin'], [$bans[0]->uid, $bans[0]->names, $bans[0]->expireTime, $bans[0]->source]);
+    T::same(['name' => 'Steve Two'], query($t->last()['url']));
+    T::same(100001, $c->kickList()[0]['uid']);
+    T::same('x-ray', $c->ban(name: 'Steve', reason: 'x-ray', durationMinutes: 1440)?->reason);
+    T::same(['name' => 'Steve', 'reason' => 'x-ray', 'durationMinutes' => 1440], json_decode((string) $t->last()['body'], true));
+    T::same(100001, $c->unban(uid: 100001, reason: 'appeal'));
+    T::same(['uid' => 100001, 'reason' => 'appeal'], json_decode((string) $t->last()['body'], true));
+    T::same('https://account.example/server/v1/bans/lift', $t->last()['url']);
+    $r = $c->checkWhitelist('Steve');
+    T::same(['banned', 'x-ray'], [$r->reason, $r->message]);
+});
 
 echo "\nOIDC\n";
 
