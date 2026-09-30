@@ -1,0 +1,457 @@
+[
+ {
+  "name": "minimal v1 manifest",
+  "valid": true,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative"
+  }
+ },
+ {
+  "name": "full v1.1 listing",
+  "valid": true,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "description": "A v1.1 listing",
+   "capabilities": [
+    "ui"
+   ],
+   "engines": {
+    "lounge": ">=1.1.0 <2.0.0",
+    "abi": 1
+   },
+   "icon": "assets/icon.png",
+   "screenshots": [
+    {
+     "path": "assets/shot-1.png",
+     "caption": {
+      "en": "Main page",
+      "zh_CN": "主页"
+     }
+    }
+   ],
+   "categories": [
+    "account",
+    "appearance"
+   ],
+   "keywords": [
+    "profile",
+    "theme"
+   ],
+   "changelog": {
+    "zh_CN": "首个版本",
+    "en": "First release"
+   },
+   "repository": "https://example.com/demo",
+   "support": {
+    "url": "https://example.com/help",
+    "email": "help@example.com"
+   }
+  }
+ },
+ {
+  "name": "caret range",
+  "valid": true,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "engines": {
+    "lounge": "^1.0"
+   }
+  }
+ },
+ {
+  "name": "or range",
+  "valid": true,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "engines": {
+    "lounge": ">=1.0.0 <1.5.0 || >=1.6.0 <2.0.0"
+   }
+  }
+ },
+ {
+  "name": "pre-release version",
+  "valid": true,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "2.0.0-beta.1",
+   "author": "Example",
+   "kind": "declarative"
+  }
+ },
+ {
+  "name": "bad id",
+  "valid": false,
+  "manifest": {
+   "id": "Example",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative"
+  }
+ },
+ {
+  "name": "bad version",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.0",
+   "author": "Example",
+   "kind": "declarative"
+  }
+ },
+ {
+  "name": "unknown field",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "color": "red"
+  }
+ },
+ {
+  "name": "unknown kind",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "script"
+  }
+ },
+ {
+  "name": "unknown capability",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "capabilities": [
+    "root"
+   ]
+  }
+ },
+ {
+  "name": "duplicate permission",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "permissions": [
+    "user.profile",
+    "user.profile"
+   ]
+  }
+ },
+ {
+  "name": "unknown category",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "categories": [
+    "games"
+   ]
+  }
+ },
+ {
+  "name": "four categories",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "categories": [
+    "account",
+    "game",
+    "server",
+    "other"
+   ]
+  }
+ },
+ {
+  "name": "empty categories",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "categories": []
+  }
+ },
+ {
+  "name": "duplicate category",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "categories": [
+    "game",
+    "game"
+   ]
+  }
+ },
+ {
+  "name": "bad range",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "engines": {
+    "lounge": "latest"
+   }
+  }
+ },
+ {
+  "name": "abi 2",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "engines": {
+    "abi": 2
+   }
+  }
+ },
+ {
+  "name": "unknown engines key",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "engines": {
+    "node": ">=18"
+   }
+  }
+ },
+ {
+  "name": "icon jpg",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "icon": "icon.jpg"
+  }
+ },
+ {
+  "name": "icon escapes the package",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "icon": "../icon.png"
+  }
+ },
+ {
+  "name": "nine screenshots",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "screenshots": [
+    {
+     "path": "s0.png"
+    },
+    {
+     "path": "s1.png"
+    },
+    {
+     "path": "s2.png"
+    },
+    {
+     "path": "s3.png"
+    },
+    {
+     "path": "s4.png"
+    },
+    {
+     "path": "s5.png"
+    },
+    {
+     "path": "s6.png"
+    },
+    {
+     "path": "s7.png"
+    },
+    {
+     "path": "s8.png"
+    }
+   ]
+  }
+ },
+ {
+  "name": "screenshot gif",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "screenshots": [
+    {
+     "path": "s.gif"
+    }
+   ]
+  }
+ },
+ {
+  "name": "keyword too long",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "keywords": [
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   ]
+  }
+ },
+ {
+  "name": "keyword with comma",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "keywords": [
+    "a,b"
+   ]
+  }
+ },
+ {
+  "name": "changelog unknown language",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "changelog": {
+    "fr": "Bonjour"
+   }
+  }
+ },
+ {
+  "name": "changelog too long",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "changelog": {
+    "en": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   }
+  }
+ },
+ {
+  "name": "repository http",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "repository": "http://example.com"
+  }
+ },
+ {
+  "name": "support empty",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "support": {}
+  }
+ },
+ {
+  "name": "support bad email",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative",
+   "support": {
+    "email": "nobody"
+   }
+  }
+ },
+ {
+  "name": "name too long",
+  "valid": false,
+  "manifest": {
+   "id": "com.example.market-demo",
+   "name": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+   "version": "1.1.0",
+   "author": "Example",
+   "kind": "declarative"
+  }
+ }
+]

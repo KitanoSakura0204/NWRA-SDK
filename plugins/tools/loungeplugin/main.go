@@ -5,6 +5,7 @@
 //	loungeplugin pack -dir ./hello -key dev.key -out dist
 //	loungeplugin verify -zip dist/com.example.hello-1.0.0.zip -pub dev.pub
 //	loungeplugin index -dir dist -name "My plugins" > index.json
+//	loungeplugin lint -dir ./hello            (or -zip dist/com.example.hello-1.0.0.zip, -index index.json)
 //
 // The package is a zip of plugin.json plus every other file of the directory (hidden files,
 // *.go, go.mod / go.sum, build scripts and dist/ are left out) and signature.json. The
@@ -57,6 +58,8 @@ func main() {
 		err = verify(os.Args[2:])
 	case "index":
 		err = index(os.Args[2:])
+	case "lint":
+		err = lint(os.Args[2:])
 	default:
 		usage()
 	}
@@ -67,7 +70,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: loungeplugin keygen|pack|verify|index [flags] (see -h of each)")
+	fmt.Fprintln(os.Stderr, "usage: loungeplugin keygen|pack|verify|index|lint [flags] (see -h of each)")
 	os.Exit(2)
 }
 
@@ -358,74 +361,4 @@ func verify(args []string) error {
 	}
 	fmt.Printf("OK %s %s, signed by key %s\n", head.ID, head.Version, sig.KeyID)
 	return nil
-}
-
-func index(args []string) error {
-	set := flag.NewFlagSet("index", flag.ExitOnError)
-	dir := set.String("dir", "dist", "directory with the packages")
-	name := set.String("name", "Plugins", "market name")
-	base := set.String("base", "", "URL prefix of the packages (default: relative to the index)")
-	_ = set.Parse(args)
-	type version struct {
-		Version string `json:"version"`
-		URL     string `json:"url"`
-		SHA256  string `json:"sha256"`
-		KeyID   string `json:"keyId,omitempty"`
-		Size    int    `json:"size"`
-	}
-	type plugin struct {
-		ID          string    `json:"id"`
-		Name        string    `json:"name"`
-		Author      string    `json:"author"`
-		Description string    `json:"description"`
-		Kind        string    `json:"kind"`
-		Homepage    string    `json:"homepage,omitempty"`
-		Versions    []version `json:"versions"`
-	}
-	entries, err := os.ReadDir(*dir)
-	if err != nil {
-		return err
-	}
-	byID := map[string]*plugin{}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".zip") {
-			continue
-		}
-		p := filepath.Join(*dir, e.Name())
-		files, sigRaw, size, err := readZip(p)
-		if err != nil {
-			return fmt.Errorf("%s: %w", p, err)
-		}
-		var m plugin
-		var head manifestHead
-		if json.Unmarshal(files[manifestFile], &m) != nil || json.Unmarshal(files[manifestFile], &head) != nil {
-			return fmt.Errorf("%s: bad plugin.json", p)
-		}
-		var sig signature
-		_ = json.Unmarshal(sigRaw, &sig)
-		raw, _ := os.ReadFile(p)
-		sum := sha256.Sum256(raw)
-		cur, ok := byID[m.ID]
-		if !ok {
-			m.Versions = nil
-			cur = &m
-			byID[m.ID] = cur
-		}
-		cur.Versions = append(cur.Versions, version{Version: head.Version, URL: *base + e.Name(), SHA256: hex.EncodeToString(sum[:]), KeyID: sig.KeyID, Size: size})
-	}
-	ids := make([]string, 0, len(byID))
-	for id := range byID {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	out := struct {
-		Name    string    `json:"name"`
-		Plugins []*plugin `json:"plugins"`
-	}{Name: *name, Plugins: []*plugin{}}
-	for _, id := range ids {
-		out.Plugins = append(out.Plugins, byID[id])
-	}
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(out)
 }

@@ -43,7 +43,8 @@ plugins/
 ├── guest/                  # Go 访客库: Input / Output / Log / Call (GOOS=wasip1)
 ├── examples/hello/         # Go → WebAssembly 示例 (事件、过滤、GM、任务、页面 + 桥接)
 ├── examples/external-app/  # 外部应用示例 (标准库, 校验签名、用令牌回调)
-└── tools/loungeplugin/     # keygen / pack / verify / index (只用标准库)
+├── schema/                 # 标准 1.1 的 JSON Schema (plugin.json / index.json) 与校验器
+└── tools/loungeplugin/     # keygen / pack / verify / index / lint (只用标准库)
 ```
 
 ## 打包与签名
@@ -52,9 +53,10 @@ plugins/
 go run ./tools/loungeplugin keygen -out publisher          # publisher.key 保密, publisher.pub 给管理员
 go run ./tools/loungeplugin pack -dir my-plugin -key publisher.key -out dist
 go run ./tools/loungeplugin verify -zip dist/<id>-<version>.zip -pub publisher.pub
-go run ./tools/loungeplugin index -dir dist -name "我的插件" > index.json   # 自建插件市场
+go run ./tools/loungeplugin lint -dir my-plugin                              # 按标准 1.1 检查
+go run ./tools/loungeplugin index -dir dist -name "我的插件" > index.json   # 自建插件市场 (索引 1.1)
 ```
 
-`pack` 收录插件目录下除 `*.go`、`go.mod`、`go.sum`、构建脚本、密钥、隐藏文件与 `dist/` 以外的全部文件，zip 可复现（固定时间戳、排序）。签名算法见 [ABI.md §6](ABI.md#6-插件包与签名)。私钥永远不要提交或放进插件包。
+`pack` 收录插件目录下除 `*.go`、`go.mod`、`go.sum`、构建脚本、密钥、隐藏文件与 `dist/` 以外的全部文件，zip 可复现（固定时间戳、排序）。签名算法见 [ABI.md §6](ABI.md#6-插件包与签名)。私钥永远不要提交或放进插件包。发布、版本、审核、密钥轮换与撤回见 [PUBLISHING.md](PUBLISHING.md)。
 
 其他语言：任何能编译到 `wasm32-wasi`（或纯 `wasm32`）、导出 `memory` 与 `() -> i32` 处理函数、按 ABI 导入 `lounge.*` 的语言都可以（Rust、TinyGo、AssemblyScript、C）。

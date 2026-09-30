@@ -157,3 +157,13 @@ zip 根目录：`plugin.json`、可选 `signature.json` 与其他文件。
 ```
 
 `url` 可以相对索引地址。索引 ≤ 2 MiB、最多 500 个插件，经 SSRF 防护获取，缓存 10 分钟并由定时维护刷新（用于“有新版本”提示）。索引只是指针：下载的包必须与 `sha256` 一致、通过 §6 的签名校验，且 id / version 与索引一致。用 `loungeplugin index -dir dist` 生成。
+
+### 7.1 索引 1.1
+
+`"format": "1.1"` 的索引在 1.0 的基础上增加（都可选，1.0 读取方忽略它们）：
+
+- 顶层：`url`（市场站点）、`updatedAt`、`publisher`（`keyId`、`name`、`url`、`publicKey`，仅供展示，信任仍以后台设置为准）、`revokedKeys`（`[{keyId, reason, revokedAt}]`：宿主拒绝安装这些密钥签名的版本）。
+- 每个插件：`scope`、`locales`、`icon`、`screenshots`（`[{url, caption}]`）、`categories`、`keywords`、`repository`、`support`、`featured`、`downloads`、`updatedAt`；`icon` 与截图 `url` 可相对索引地址。
+- 每个版本：`publishedAt`、`changelog`、`permissions`、`capabilities`、`engines`、`yanked` + `yankedReason`（显示但不能安装）。
+
+定义见 [schema/index.schema.json](schema/index.schema.json)。`loungeplugin index` 写 1.1 索引（`-publisher-key`、`-revoked`、`-yanked`，并把图标、截图复制到 `assets/<id>/<version>/`）；站点自带的插件市场模块在 `GET /api/market/index.json` 提供同样格式。

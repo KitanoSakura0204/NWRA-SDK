@@ -1,0 +1,41 @@
+package main
+
+import (
+	"strconv"
+	"strings"
+)
+
+// compareSemver orders two versions (1 = a newer); a pre-release sorts before its release,
+// pre-releases of the same version compare by text. Same rule as the host (market.go).
+func compareSemver(a, b string) int {
+	na, pa := splitSemver(a)
+	nb, pb := splitSemver(b)
+	for i := 0; i < 3; i++ {
+		if na[i] != nb[i] {
+			if na[i] > nb[i] {
+				return 1
+			}
+			return -1
+		}
+	}
+	switch {
+	case pa == pb:
+		return 0
+	case pa == "":
+		return 1
+	case pb == "":
+		return -1
+	case pa > pb:
+		return 1
+	}
+	return -1
+}
+
+func splitSemver(v string) ([3]int, string) {
+	var out [3]int
+	core, pre, _ := strings.Cut(strings.TrimSpace(v), "-")
+	for i, part := range strings.SplitN(core, ".", 3) {
+		out[i], _ = strconv.Atoi(part)
+	}
+	return out, pre
+}

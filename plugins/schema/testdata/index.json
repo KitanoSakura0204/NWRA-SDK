@@ -1,0 +1,72 @@
+{
+ "format": "1.1",
+ "name": "Demo market",
+ "url": "https://market.example.com",
+ "updatedAt": "2026-09-30T12:00:00Z",
+ "publisher": {
+  "keyId": "0123456789abcdef",
+  "name": "Demo market",
+  "publicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+ },
+ "revokedKeys": [
+  {
+   "keyId": "fedcba9876543210",
+   "reason": "rotated",
+   "revokedAt": "2026-09-01T00:00:00Z"
+  }
+ ],
+ "plugins": [
+  {
+   "id": "com.example.market-demo",
+   "name": "Demo",
+   "author": "Example",
+   "description": "d",
+   "kind": "declarative",
+   "scope": "global",
+   "icon": "assets/com.example.market-demo/1.1.0/assets/icon.png",
+   "categories": [
+    "account"
+   ],
+   "keywords": [
+    "profile"
+   ],
+   "downloads": 3,
+   "screenshots": [
+    {
+     "url": "assets/x.png",
+     "caption": {
+      "en": "Main"
+     }
+    }
+   ],
+   "versions": [
+    {
+     "version": "1.1.0",
+     "url": "packages/com.example.market-demo/1.1.0.zip",
+     "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "keyId": "0123456789abcdef",
+     "size": 1200,
+     "publishedAt": "2026-09-30T12:00:00Z",
+     "changelog": {
+      "en": "First"
+     },
+     "permissions": [],
+     "capabilities": [
+      "ui"
+     ],
+     "engines": {
+      "lounge": ">=1.1.0 <2.0.0",
+      "abi": 1
+     }
+    },
+    {
+     "version": "1.0.0",
+     "url": "packages/com.example.market-demo/1.0.0.zip",
+     "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "yanked": true,
+     "yankedReason": "crash on start"
+    }
+   ]
+  }
+ ]
+}

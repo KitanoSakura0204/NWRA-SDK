@@ -102,3 +102,20 @@ external 插件只写 `point`（可选 `handler` 作为标签），所有调用�
 ## 6. 令牌字段如何下发
 
 `token.claims` 通过下发模块（`delivery`）的属性注册表接入：属性 `plugin_claims` = `{"<插件 id>": {"<key>": 值}}`，敏感度 personal。管理员在下发配置里为某个应用或服务器勾选它才会出现在 ID 令牌 / userinfo / 服务器载荷中；后台预览只显示声明的字段与类型，不调用插件。
+
+## 7. 市场列表字段与宿主兼容（标准 1.1）
+
+以下字段都可选，v1 清单不写它们仍然合法。机器可读定义：[schema/plugin.schema.json](schema/plugin.schema.json)（JSON Schema 2020-12，与宿主校验器共用 `schema/testdata/manifests.json` 测试向量）。
+
+| 字段 | 说明 |
+| --- | --- |
+| `engines` | `{"lounge": ">=1.1.0 <2.0.0", "abi": 1}`。`lounge` 是宿主插件接口版本（当前 1.1.0）的范围：`>=` `>` `<=` `<` `=` `^` `~` `*`，空格为“且”，`\|\|` 为“或”，最长 128；`abi` 是 wasm 宿主 ABI（当前 1）。不写 = 任何 1.x 宿主、ABI 1。不兼容时上传与市场安装都会拒绝 |
+| `icon` | 包内 png / webp，≤ 256 KB，建议 256×256 |
+| `screenshots` | 最多 8 个 `{ "path": "shots/1.png", "caption"?: Text }`，png / webp / jpeg，每张 ≤ 1 MB |
+| `categories` | 1–3 个，取自固定列表：`account` 账号、`security` 安全、`game` 游戏、`server` 服务器、`community` 社区、`notification` 通知、`integration` 集成、`analytics` 统计、`appearance` 外观、`developer` 开发、`other` 其他 |
+| `keywords` | 最多 10 个，每个 1–32 字符，不含逗号、首尾无空白 |
+| `changelog` | 本版本的更新说明，按语言 `{"zh_CN": "…", "en": "…"}`，每种最多 2000 字符 |
+| `repository` | https 源码地址 |
+| `support` | `{ "url"?: "https://…", "email"?: "…" }`，至少一项 |
+
+图标与截图按文件内容（不是扩展名）判断类型。`loungeplugin lint -dir .` 在本地做同样的检查；发布流程见 [PUBLISHING.md](PUBLISHING.md)。
