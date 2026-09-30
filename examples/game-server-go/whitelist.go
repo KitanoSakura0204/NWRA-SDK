@@ -40,6 +40,7 @@ type gate struct {
 type verdict struct {
 	Allowed bool
 	Reason  string
+	Message string // extra text from the user center, e.g. the reason of a per-server ban
 	Player  *lounge.WhitelistEntry
 	Source  string // "live", "cache" or "policy"
 }
@@ -78,7 +79,7 @@ func (g *gate) check(ctx context.Context, name, uuid string) (verdict, error) {
 	var res lounge.CheckResult
 	err := g.get(ctx, "whitelist/check", q, &res)
 	if err == nil {
-		return verdict{Allowed: res.Allowed, Reason: res.Reason, Player: res.Player, Source: "live"}, nil
+		return verdict{Allowed: res.Allowed, Reason: res.Reason, Message: res.Message, Player: res.Player, Source: "live"}, nil
 	}
 	var enc *lounge.EncryptionError
 	var api *lounge.ApiError

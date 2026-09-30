@@ -245,3 +245,11 @@ func TestEncryptedWebhook(t *testing.T) {
 		t.Fatalf("plain while keys are set: %d", code)
 	}
 }
+
+func TestBanMessageReachesTheVerdict(t *testing.T) {
+	api := fakeCenter(t, "", map[string]string{"/server/v1/whitelist/check": `{"code":0,"data":{"allowed":false,"bound":true,"reason":"banned","message":"x-ray","player":null}}`})
+	v, err := (&gate{api: api, outage: outageCache}).check(context.Background(), "Steve", "")
+	if err != nil || v.Allowed || v.Reason != "banned" || v.Message != "x-ray" {
+		t.Fatalf("banned: %+v %v", v, err)
+	}
+}

@@ -168,6 +168,19 @@ func (s *server) heartbeat(ctx context.Context, tps float64) {
 	hb := lounge.Heartbeat{Online: s.world.count(), Max: s.world.max, Version: s.version, TPS: tps, Players: s.world.players()}
 	if err := s.api.Heartbeat(ctx, hb); err != nil {
 		log.Printf("heartbeat: %v", err)
+		return
+	}
+	// Per-server bans placed while a player is online (SERVER_USERS.md): the kick list matches the
+	// players of this heartbeat against the active bans. It works with the server-users module off too.
+	kick, err := s.api.KickList(ctx)
+	if err != nil {
+		log.Printf("kick list: %v", err)
+		return
+	}
+	for _, k := range kick {
+		if _, ok := s.world.remove(k.Name); ok {
+			log.Printf("kicked %s: banned on this server (%s)", k.Name, orDefault(k.Reason, "no reason"))
+		}
 	}
 }
 
@@ -203,7 +216,11 @@ func (s *server) join(ctx context.Context, name, uuid string) {
 		log.Printf("join check for %s: %v (decided by %s)", name, err, v.Source)
 	}
 	if !v.Allowed {
-		log.Printf("%s refused: %s", name, orDefault(v.Reason, "not allowed"))
+		if v.Message != "" { // e.g. the reason of a per-server ban
+			log.Printf("%s refused: %s (%s)", name, orDefault(v.Reason, "not allowed"), v.Message)
+		} else {
+			log.Printf("%s refused: %s", name, orDefault(v.Reason, "not allowed"))
+		}
 		return
 	}
 	p := player{Name: name, UUID: uuid}
