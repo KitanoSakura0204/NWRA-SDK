@@ -6,10 +6,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, Mapping, Optional
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from .errors import ApiError, EncryptionError, TransportError
 from .gm import GMPublishResult, _plain
+from .serverusers import KickEntry, ServerBan, UserData, UserSchema, target
 
 # Marks a Server API reply whose data is the {"jwe": "..."} envelope (DELIVERY.md section 5).
 HEADER_ENCRYPTION = "X-Lounge-Encryption"
@@ -50,6 +51,7 @@ class CheckResult:
     bound: bool = False
     reason: str = ""
     player: Optional[WhitelistEntry] = None
+    message: str = ""  # extra text for some refusals, e.g. the reason of a per-server ban (reason "banned")
 
 
 @dataclass
@@ -180,6 +182,7 @@ class LoungeClient:
             bool(d.get("bound")),
             d.get("reason", ""),
             WhitelistEntry.from_dict(p) if p else None,
+            str(d.get("message", "") or ""),
         )
 
     def heartbeat(self, online: int, max_players: int = 0, version: str = "", tps: Optional[float] = None,
@@ -224,3 +227,69 @@ class LoungeClient:
     def report_gm_result(self, command_id: int, ok: bool, result: str = "") -> None:
         """Report how a command went; result is free text (<= 4000 chars)."""
         self._call("POST", f"/server/v1/gm/commands/{int(command_id)}/result", body={"ok": bool(ok), "result": result})
+
+    # ---- Player data and per-server bans (SERVER_USERS.md) ----
+
+    def user_schema(self) -> UserSchema:
+        """The data schema the server owner defined (needs the module on for this server)."""
+        return UserSchema.from_dict(self._call("GET", "/server/v1/users/schema"))
+
+    def user_data(self, uid: int) -> UserData:
+        """One account's data (uid from the join check or the whitelist)."""
+        return UserData.from_dict(self._call("GET", _user_path(uid)))
+
+    def put_user_data(self, uid: int, data: Mapping[str, Any], version: Optional[int] = None) -> UserData:
+        """Replace the account's stored values (fields left out are unset). Pass the version you last
+        read to refuse a concurrent change (ApiError 409, see is_version_conflict)."""
+        return UserData.from_dict(self._call("PUT", _user_path(uid), body=_write_body(data, version)))
+
+    def patch_user_data(self, uid: int, data: Mapping[str, Any], version: Optional[int] = None) -> UserData:
+        """Merge values into the stored ones; a None value deletes that field."""
+        return UserData.from_dict(self._call("PATCH", _user_path(uid), body=_write_body(data, version)))
+
+    def bans(self, uid: int = 0, name: str = "", uuid: str = "") -> List[ServerBan]:
+        """Active bans on this server: all (at most 5000, newest first) or those of the matching
+        accounts. Works with the module off too."""
+        q = {k: str(v) for k, v in target(uid, name, uuid).items()}
+        d = self._call("GET", "/server/v1/bans", q or None)
+        return [ServerBan.from_dict(b) for b in (d.get("bans") or []) if isinstance(b, dict)]
+
+    def kick_list(self) -> List[KickEntry]:
+        """Online players (as of the last heartbeat) whose account is banned here: disconnect them."""
+        d = self._call("GET", "/server/v1/bans/kick")
+        return [KickEntry.from_dict(k) for k in (d.get("players") or []) if isinstance(k, dict)]
+
+    def ban(self, uid: int = 0, name: str = "", uuid: str = "", reason: str = "", expire_time: str = "",
+            duration_minutes: int = 0) -> Tuple[int, Optional[ServerBan]]:
+        """Ban an account on this server (module on, pluginBans allowed). expire_time or duration_minutes;
+        neither = permanent. A ban an administrator placed cannot be replaced (ApiError 403)."""
+        body = target(uid, name, uuid)
+        if reason:
+            body["reason"] = reason
+        if expire_time:
+            body["expireTime"] = expire_time
+        if duration_minutes:
+            body["durationMinutes"] = int(duration_minutes)
+        d = self._call("POST", "/server/v1/bans", body=body)
+        b = d.get("ban")
+        return int(d.get("uid", 0) or 0), ServerBan.from_dict(b) if isinstance(b, dict) else None
+
+    def unban(self, uid: int = 0, name: str = "", uuid: str = "", reason: str = "") -> int:
+        """Lift the account's active ban on this server (not one an administrator placed); returns the uid."""
+        body = target(uid, name, uuid)
+        if reason:
+            body["reason"] = reason
+        return int(self._call("POST", "/server/v1/bans/lift", body=body).get("uid", 0) or 0)
+
+
+def _user_path(uid: int) -> str:
+    if isinstance(uid, bool) or not isinstance(uid, int) or uid <= 0:
+        raise ValueError(f"lounge: uid must be a positive integer, got {uid!r}")
+    return f"/server/v1/users/{uid}/data"
+
+
+def _write_body(data: Mapping[str, Any], version: Optional[int]) -> Dict[str, Any]:
+    body: Dict[str, Any] = {"data": dict(data or {})}  # the server wants a data object, even an empty one
+    if version is not None:
+        body["version"] = int(version)
+    return body

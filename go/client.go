@@ -99,9 +99,12 @@ type Whitelist struct {
 
 // CheckResult answers a join check.
 type CheckResult struct {
-	Allowed bool            `json:"allowed"`
-	Bound   bool            `json:"bound"`
-	Reason  string          `json:"reason"`
+	Allowed bool   `json:"allowed"`
+	Bound   bool   `json:"bound"`
+	Reason  string `json:"reason"`
+	// Message carries extra text for some refusals, e.g. the reason of a per-server ban
+	// (reason "banned", SERVER_USERS.md); show it to the player.
+	Message string          `json:"message,omitempty"`
 	Player  *WhitelistEntry `json:"player"`
 }
 

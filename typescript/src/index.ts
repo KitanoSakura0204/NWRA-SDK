@@ -1,5 +1,7 @@
 /** Lounge Account SDK — Server API (whitelist / heartbeat) and OIDC helpers. Requires global fetch (Node 18+). */
 
+import type { BanOptions, BanTarget, KickEntry, ServerBan, UserData, UserSchema, WriteOptions } from './serverusers.js';
+
 export class TransportError extends Error {
   constructor(
     message: string,
@@ -87,6 +89,8 @@ export interface CheckResult {
   allowed: boolean;
   bound: boolean;
   reason: string;
+  /** Extra text for some refusals, e.g. the reason of a per-server ban (reason "banned"). */
+  message?: string;
   player?: WhitelistEntry | null;
 }
 
@@ -257,6 +261,71 @@ export class LoungeClient {
   reportGMResult(id: number, ok: boolean, result = ''): Promise<{ id: number; status: string }> {
     return this.call('POST', `/server/v1/gm/commands/${id}/result`, undefined, { ok, result });
   }
+
+  // ---- Player data and per-server bans (SERVER_USERS.md) ----
+
+  /** The data schema the server owner defined (needs the module on for this server). */
+  userSchema(): Promise<UserSchema> {
+    return this.call('GET', '/server/v1/users/schema');
+  }
+
+  /** One account's data (uid from the join check or the whitelist). */
+  async userData(uid: number): Promise<UserData> {
+    return this.call('GET', userPath(uid));
+  }
+
+  /**
+   * Replace the account's stored values (fields left out are unset). Pass the version you last
+   * read to refuse a concurrent change (ApiError 409, see isVersionConflict). Returns the stored data.
+   */
+  async putUserData(uid: number, data: Record<string, unknown>, opts: WriteOptions = {}): Promise<UserData> {
+    return this.call('PUT', userPath(uid), undefined, writeBody(data, opts));
+  }
+
+  /** Merge values into the stored ones; a null value deletes that field. */
+  async patchUserData(uid: number, data: Record<string, unknown>, opts: WriteOptions = {}): Promise<UserData> {
+    return this.call('PATCH', userPath(uid), undefined, writeBody(data, opts));
+  }
+
+  /**
+   * Active bans on this server: all of them (at most 5000, newest first), or those of the accounts
+   * matching the target. Works with the module off too.
+   */
+  async bans(only: BanTarget = {}): Promise<ServerBan[]> {
+    const q: Record<string, string | undefined> = { uid: only.uid ? String(only.uid) : undefined, name: only.name, uuid: only.uuid };
+    const d = await this.call<{ bans?: ServerBan[] }>('GET', '/server/v1/bans', q);
+    return d.bans ?? [];
+  }
+
+  /** Online players (as of the last heartbeat) whose account is banned here: disconnect them. */
+  async kickList(): Promise<KickEntry[]> {
+    const d = await this.call<{ players?: KickEntry[] }>('GET', '/server/v1/bans/kick');
+    return d.players ?? [];
+  }
+
+  /**
+   * Ban an account on this server (module on and its pluginBans setting allowed). A ban an
+   * administrator placed cannot be replaced (ApiError 403).
+   */
+  async ban(target: BanTarget, opts: BanOptions = {}): Promise<{ uid: number; ban: ServerBan | null }> {
+    const d = await this.call<{ uid: number; ban?: ServerBan | null }>('POST', '/server/v1/bans', undefined, { ...target, ...opts });
+    return { uid: d.uid, ban: d.ban ?? null };
+  }
+
+  /** Lift the account's active ban on this server (not one an administrator placed). */
+  unban(target: BanTarget, reason?: string): Promise<{ uid: number; lifted: boolean }> {
+    return this.call('POST', '/server/v1/bans/lift', undefined, reason ? { ...target, reason } : { ...target });
+  }
+}
+
+function userPath(uid: number): string {
+  if (!Number.isSafeInteger(uid) || uid <= 0) throw new TypeError(`lounge: uid must be a positive integer, got ${uid}`);
+  return `/server/v1/users/${uid}/data`;
+}
+
+function writeBody(data: Record<string, unknown>, opts: WriteOptions): Record<string, unknown> {
+  // the server wants a data object, even an empty one
+  return opts.version === undefined ? { data: data ?? {} } : { data: data ?? {}, version: opts.version };
 }
 
 /** Live status for heartbeat(); tps and players are optional (PROTOCOL §2.3). */
@@ -585,3 +654,4 @@ export async function verifyWebhook<T = Record<string, unknown>>(
 // SDK login page helpers (PROTOCOL.md §6).
 export * from './sdklogin.js';
 export * from './delivery.js';
+export * from './serverusers.js';
