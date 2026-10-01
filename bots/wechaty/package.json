@@ -1,0 +1,35 @@
+{
+  "name": "wechaty-plugin-lounge",
+  "version": "0.1.0",
+  "description": "Lounge Account bind/unbind/me and command bridge for Wechaty (personal WeChat, any puppet)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test --import tsx ./tests/*.test.ts"
+  },
+  "peerDependencies": {
+    "wechaty": "^1.20.0"
+  },
+  "dependencies": {
+    "@lounge/bot-client": "file:../ts-client"
+  },
+  "devDependencies": {
+    "wechaty": "1.20.2",
+    "typescript": "5.6.3",
+    "tsx": "4.19.2",
+    "@types/node": "20.17.6"
+  },
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  }
+}
