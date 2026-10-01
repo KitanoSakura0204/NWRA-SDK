@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nonebot-plugin-lounge"
+version = "0.1.0"
+description = "Lounge Account bind/unbind/me and command bridge for NoneBot2 (OneBot v11, QQ, Feishu, Telegram adapters)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "UNLICENSED" }
+dependencies = [
+    "nonebot2>=2.3.0,<3.0.0",
+    "pydantic>=1.10.0,<3.0.0",
+    "lounge-bot-client @ file:///../python-client",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0,<9.0", "pytest-asyncio>=0.23,<0.24"]
+
+[tool.setuptools.packages.find]
+include = ["nonebot_plugin_lounge*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
