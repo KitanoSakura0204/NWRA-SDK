@@ -23,8 +23,8 @@
 "engines": { "lounge": ">=1.1.0 <2.0.0", "abi": 1 }
 ```
 
-- `lounge`：宿主插件接口版本的范围（当前 `1.1.0`）。支持 `>=` `>` `<=` `<` `=`、`^1.1`（同主版本）、`~1.1.2`（同次版本）、`*`，空格表示“且”，`||` 表示“或”；不支持 `1.x` 写法。
-- `abi`：wasm 宿主 ABI 版本（当前 `1`，见 [ABI.md](ABI.md)）。
+- `lounge`：宿主插件接口版本的范围（当前 `1.1.0`）。支持 `>=` `>` `<=` `<` `=`、`^1.1`（同主版本）、`~1.1.2`（同次版本）、`*`，空格表示“且”，`||` 表示“或”；不支持 `1.x` 写法；预发布标记只能跟在完整版本后（`>=1.1.0-beta`，不能写 `>=1.1-beta`）。
+- `abi`：wasm 宿主 ABI 版本（当前 `1`，见 [ABI.md](ABI.md)）；`0` 与不写相同，即 ABI 1。
 - 不写 `engines` 等于“任何 1.x 宿主、ABI 1”。不兼容的包在上传和从市场安装时都会被拒绝，并说明需要的版本。
 
 ## 4. 审核检查什么
@@ -87,7 +87,7 @@ How to publish a plugin: to a static market you host (`loungeplugin index`) or t
 
 ## 3. Host compatibility `engines`
 
-`{"lounge": ">=1.1.0 <2.0.0", "abi": 1}`: `lounge` is a range over the host plugin API version (1.1.0 today; `>=`, `<`, `^`, `~`, `||`), `abi` the wasm host ABI (1). Without `engines`: any 1.x host, ABI 1. Incompatible packages are refused on upload and market install, with the version they need.
+`{"lounge": ">=1.1.0 <2.0.0", "abi": 1}`: `lounge` is a range over the host plugin API version (1.1.0 today; `>=`, `<`, `^`, `~`, `||`), `abi` the wasm host ABI (1; `0` is the same as leaving it out). A pre-release tag needs a full version (`>=1.1.0-beta`, not `>=1.1-beta`). Without `engines`: any 1.x host, ABI 1. Incompatible packages are refused on upload and market install, with the version they need.
 
 ## 4. What review checks
 

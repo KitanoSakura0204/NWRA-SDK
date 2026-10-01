@@ -67,7 +67,7 @@
       "description": "Host compatibility (standard 1.1). lounge: a range over the host plugin API version (1.1.0 today); abi: the wasm host ABI version (1). Absent = any 1.x host, ABI 1.",
       "properties": {
         "lounge": { "$ref": "#/$defs/semverRange" },
-        "abi": { "type": "integer", "minimum": 1, "maximum": 1 }
+        "abi": { "type": "integer", "minimum": 0, "maximum": 1, "description": "0 or absent = ABI 1" }
       }
     },
     "icon": { "$ref": "#/$defs/imagePath", "description": "png or webp in the package, at most 256 KiB; 256x256 recommended" },
@@ -92,7 +92,7 @@
     "semverRange": {
       "type": "string",
       "maxLength": 128,
-      "pattern": "^ *(\\*|(>=|<=|>|<|=|\\^|~)?(0|[1-9]\\d{0,5})(\\.(0|[1-9]\\d{0,5})){0,2}(-[0-9A-Za-z.-]{1,32})?( +(>=|<=|>|<|=|\\^|~)?(0|[1-9]\\d{0,5})(\\.(0|[1-9]\\d{0,5})){0,2}(-[0-9A-Za-z.-]{1,32})?)*)( *\\|\\| *(\\*|(>=|<=|>|<|=|\\^|~)?(0|[1-9]\\d{0,5})(\\.(0|[1-9]\\d{0,5})){0,2}(-[0-9A-Za-z.-]{1,32})?( +(>=|<=|>|<|=|\\^|~)?(0|[1-9]\\d{0,5})(\\.(0|[1-9]\\d{0,5})){0,2}(-[0-9A-Za-z.-]{1,32})?)*))* *$"
+      "pattern": "^ *(\\*|(>=|<=|>|<|=|\\^|~)?(0|[1-9]\\d{0,5})(\\.(0|[1-9]\\d{0,5})(\\.(0|[1-9]\\d{0,5})(-[0-9A-Za-z.-]{1,32})?)?)?)( +(\\*|(>=|<=|>|<|=|\\^|~)?(0|[1-9]\\d{0,5})(\\.(0|[1-9]\\d{0,5})(\\.(0|[1-9]\\d{0,5})(-[0-9A-Za-z.-]{1,32})?)?)?))*( *\\|\\| *(\\*|(>=|<=|>|<|=|\\^|~)?(0|[1-9]\\d{0,5})(\\.(0|[1-9]\\d{0,5})(\\.(0|[1-9]\\d{0,5})(-[0-9A-Za-z.-]{1,32})?)?)?)( +(\\*|(>=|<=|>|<|=|\\^|~)?(0|[1-9]\\d{0,5})(\\.(0|[1-9]\\d{0,5})(\\.(0|[1-9]\\d{0,5})(-[0-9A-Za-z.-]{1,32})?)?)?))*)* *$"
     },
     "httpsUrl": { "type": "string", "maxLength": 512, "pattern": "^https://[^/@\\s]+(/\\S*)?$" },
     "key": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
