@@ -1,0 +1,32 @@
+{
+  "name": "@lounge/bot-client",
+  "version": "0.1.0",
+  "description": "Minimal client for the Lounge Bot API (/api/bot/v1), used by framework plugins (Koishi, Wechaty)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test --import tsx ./tests/*.test.ts"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "tsx": "4.19.2",
+    "@types/node": "20.17.6",
+    "@types/ws": "8.5.12"
+  },
+  "dependencies": {
+    "ws": "8.18.0"
+  }
+}
