@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Lounge\Sdk\Exceptions;
+namespace NoWork\Sdk\Exceptions;
 
 /** Base class of every exception thrown by the SDK. */
-class LoungeException extends \RuntimeException
+class NoWorkException extends \RuntimeException
 {
 }

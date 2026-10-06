@@ -1,6 +1,6 @@
 # 自定义 SDK 登录模板（LOGIN_TEMPLATES）
 
-SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL.md)）内置一套**标准模板**：PC 端是品牌背景上的居中卡片，手机端是整屏面板。管理员可以按服务器、按设备（PC / 手机）改用**自定义模板**。自定义模板由 HTML、CSS 与可选的 JS 组成，只能通过本文的 `window.LoungeLogin` 接口与用户中心交互。
+SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL.md)）内置一套**标准模板**：PC 端是品牌背景上的居中卡片，手机端是整屏面板。管理员可以按服务器、按设备（PC / 手机）改用**自定义模板**。自定义模板由 HTML、CSS 与可选的 JS 组成，只能通过本文的 `window.NoWorkLogin` 接口与用户中心交互。
 
 后台入口：「游戏服务 → SDK 登录页」→ 选择服务器 →「登录模板」。保存、发布、回滚、切换需要按钮权限 `sdklogin:template`（默认只有超级管理员有），每次改动都写入操作日志。
 
@@ -9,7 +9,7 @@ SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL
 ```
 游戏客户端 ──打开──▶ /sdk/login/{serverCode}?…&device=pc|mobile   （用户中心页面，宿主）
                          │  会话、人机验证、通行密钥、授权确认、结果页、交回游戏都在这里
-                         │  MessageChannel（LoungeLogin 桥，协议 v1）
+                         │  MessageChannel（NoWorkLogin 桥，协议 v1）
                          ▼
                GET /api/sdk-login/{serverCode}/template?device=…   （沙箱文档：你的模板）
                          不透明源、不能联网、不能读写本站存储
@@ -18,7 +18,7 @@ SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL
 - 模板文档带 `Content-Security-Policy: … sandbox allow-scripts allow-forms`，即使被直接打开也是不透明源：拿不到用户中心的 Cookie、localStorage 与令牌。
 - 模板**只负责登录与「以 X 继续」两步**。登录成功后，授权确认、登录码 / 成功 / 取消的结果页与交回游戏都由用户中心显示，模板拿不到授权码、令牌、回调地址或两步验证的 challenge。
 - 模板不能选择回调地址、不能跳过 PKCE 或授权确认：这些参数来自游戏客户端的原始 URL，由宿主原样转交后端校验（PROTOCOL §6.1）。
-- 出错即回退：模板文档没有加载、8 秒内没有握手、握手后 10 秒内没有调用 `ready()`、`ready()` 之前抛出未捕获的错误、框架被导航到别的文档、或模板调用 `LoungeLogin.fallback()`，页面都会换回标准模板（已经登录的玩家看到「以 X 继续」）。
+- 出错即回退：模板文档没有加载、8 秒内没有握手、握手后 10 秒内没有调用 `ready()`、`ready()` 之前抛出未捕获的错误、框架被导航到别的文档、或模板调用 `NoWorkLogin.fallback()`，页面都会换回标准模板（已经登录的玩家看到「以 X 继续」）。
 
 ## 2. 模板的组成
 
@@ -26,8 +26,8 @@ SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL
 | --- | --- | --- |
 | HTML | `<body>` 里的片段，不含 `<html>` `<head>` `<body>` | 64 KB |
 | CSS | 放进 `<head>` 的 `<style>` | 64 KB |
-| JS | 片段之后以 nonce 运行的经典脚本（`LoungeLogin` 已就绪） | 128 KB |
-| 脚本来源 | 允许 `LoungeLogin.loadScript()` 加载的 https 源 | 10 个 |
+| JS | 片段之后以 nonce 运行的经典脚本（`NoWorkLogin` 已就绪） | 128 KB |
+| 脚本来源 | 允许 `NoWorkLogin.loadScript()` 加载的 https 源 | 10 个 |
 | 资源来源 | 允许加载图片 / 字体 / 样式 / 媒体的 https 源 | 10 个 |
 
 三部分合计不超过 192 KB。用户中心生成的文档大致是：
@@ -35,7 +35,7 @@ SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL
 ```html
 <!doctype html>
 <html lang="zh-CN" data-device="pc" data-theme="light">
-<head> …charset / viewport / referrer… <style>你的 CSS</style> <script nonce>LoungeLogin 运行时</script> </head>
+<head> …charset / viewport / referrer… <style>你的 CSS</style> <script nonce>NoWorkLogin 运行时</script> </head>
 <body> 你的 HTML <script nonce>你的 JS</script> </body>
 </html>
 ```
@@ -53,14 +53,14 @@ SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL
 ## 4. 生命周期
 
 1. 运行时（在你的脚本之前）向宿主发送 `hello`，宿主回复 `init` 并移交 `MessagePort`。
-2. 你的脚本调用 `await LoungeLogin.ready()`，得到配置对象（§6）与文案。**其他方法都必须在 `ready()` 之后调用**，否则返回 `not_ready`。
+2. 你的脚本调用 `await NoWorkLogin.ready()`，得到配置对象（§6）与文案。**其他方法都必须在 `ready()` 之后调用**，否则返回 `not_ready`。
 3. 按 `config.viewer` 显示「以 X 继续」或登录表单；调用登录方法（§5），按返回的 `status` 更新界面。
 4. 某次调用返回 `{ status: 'done' }`：宿主接管（授权确认、结果页、交回游戏），模板保持「处理中」即可。之后桥只接受 `openLink`，直到宿主发出 `reset` 事件。
 5. 宿主发出 `reset`（会话过期、授权被拒、换账号后）：回到登录或「以 X 继续」，`data.viewer` 是当前登录的玩家（或 `null`），`data.message` 是要显示的原因（可能为空）。
 
-## 5. LoungeLogin 接口（协议 v1）
+## 5. NoWorkLogin 接口（协议 v1）
 
-`window.LoungeLogin` 是冻结的只读对象，`LoungeLogin.version === 1`。除 `t` / `on` / `fallback` / `loadScript` 外，方法都返回 Promise。
+`window.NoWorkLogin` 是冻结的只读对象，`NoWorkLogin.version === 1`。除 `t` / `on` / `fallback` / `loadScript` 外，方法都返回 Promise。
 
 | 方法 | 参数 | 说明 |
 | --- | --- | --- |
@@ -120,7 +120,7 @@ SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL
 
 ## 7. 文案
 
-`LoungeLogin.t(key, params)` 返回用户中心在玩家语言下的文案，`{name}` 形式的占位由 `params` 填入。可用的键：
+`NoWorkLogin.t(key, params)` 返回用户中心在玩家语言下的文案，`{name}` 形式的占位由 `params` 填入。可用的键：
 
 `loading` `secured`（`{site}`）`returnsTo`（`{host}`）`cancel` `maintenance` `working`、
 `signin.title` `signin.password` `signin.code` `signin.username` `signin.passwordPh` `signin.target` `signin.codePh` `signin.remember` `signin.forget` `signin.register` `signin.submit` `signin.passkey` `signin.others` `signin.noMethods` `signin.required`（`{name}`）、
@@ -147,7 +147,7 @@ sandbox allow-scripts allow-forms
 
 由此可知：
 
-- 模板**不能联网**（fetch / XHR / WebSocket / EventSource / sendBeacon 都被拦下），也不能提交表单：表单要监听 `submit` 并 `preventDefault()`，再调用 `LoungeLogin`。
+- 模板**不能联网**（fetch / XHR / WebSocket / EventSource / sendBeacon 都被拦下），也不能提交表单：表单要监听 `submit` 并 `preventDefault()`，再调用 `NoWorkLogin`。
 - **内联事件不会执行**（`onclick="…"`、`javascript:` 链接），请用 `addEventListener`。
 - 图片、字体、样式只能来自本站、服务器的品牌图片与「资源来源」；外部脚本只能来自「脚本来源」且要用 `loadScript()` 加载。
 - 沙箱里没有 `localStorage` / `sessionStorage` / Cookie（访问会抛异常），也不能弹窗、不能导航顶层页面；框架一旦导航到别的文档，页面立即回退到标准模板。
@@ -165,7 +165,7 @@ sandbox allow-scripts allow-forms
 - **发布**让某个版本上线并把该设备切到「自定义」；**回滚**就是发布一个旧版本。已发布的版本不能删除。
 - 「标准 / 自定义」开关随时可切：切回标准不会丢掉已发布的版本，再切回自定义就恢复它。
 - **预览**用与线上相同的规则渲染草稿（CSP 以 `<meta>` 形式放进沙箱 iframe），桥由后台模拟：用户名 `wrong` 返回密码错误，`2fa` 进入两步验证，其他直接成功；可切换「模拟已登录的玩家」。
-- **载入标准模板**得到内置标准模板的 HTML / CSS / JS（接口 `GET /api/admin/sdk-login/template-starter`），可作为起点；**下载**得到一个 JSON 包（`{"format":"lounge-login-template","v":1,"device","html","css","js","scriptOrigins","assetOrigins"}`），**导入**接受这个包，或任意组合的 `.html` / `.css` / `.js` 文件。
+- **载入标准模板**得到内置标准模板的 HTML / CSS / JS（接口 `GET /api/admin/sdk-login/template-starter`），可作为起点；**下载**得到一个 JSON 包（`{"format":"nowork-login-template","v":1,"device","html","css","js","scriptOrigins","assetOrigins"}`），**导入**接受这个包，或任意组合的 `.html` / `.css` / `.js` 文件。
 
 后台接口（都在 `/api/admin/sdk-login` 下；读取需 `sdklogin:view`，改动需 `sdklogin:template` 并写操作日志）：
 
@@ -199,7 +199,7 @@ JS：
 
 ```js
 (async () => {
-  const L = window.LoungeLogin;
+  const L = window.NoWorkLogin;
   const cfg = await L.ready();
   const $ = (id) => document.getElementById(id);
   $('title').textContent = cfg.branding.title || cfg.server.name;

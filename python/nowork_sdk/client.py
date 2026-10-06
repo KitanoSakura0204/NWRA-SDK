@@ -13,7 +13,7 @@ from .gm import GMPublishResult, _plain
 from .serverusers import KickEntry, ServerBan, UserData, UserSchema, target
 
 # Marks a Server API reply whose data is the {"jwe": "..."} envelope (DELIVERY.md section 5).
-HEADER_ENCRYPTION = "X-Lounge-Encryption"
+HEADER_ENCRYPTION = "X-NoWork-Encryption"
 
 
 @dataclass
@@ -72,7 +72,7 @@ class RawResponse:
     data: Any
     envelope: Dict[str, Any]  # the whole parsed body {code, message, data}
     body: bytes
-    encrypted: bool  # X-Lounge-Encryption is set or data is exactly {"jwe": "<string>"}
+    encrypted: bool  # X-NoWork-Encryption is set or data is exactly {"jwe": "<string>"}
 
 
 def _is_jwe_data(data: Any) -> bool:
@@ -101,7 +101,7 @@ def _option_lists(options: Mapping[str, list]) -> Dict[str, list]:
     return {str(k): [_plain(o) for o in v] for k, v in options.items()}
 
 
-class LoungeClient:
+class NoworkClient:
     """Server API client authenticated with an X-Server-Key."""
 
     def __init__(self, base: str, server_key: str, timeout: float = 10.0):
@@ -284,7 +284,7 @@ class LoungeClient:
 
 def _user_path(uid: int) -> str:
     if isinstance(uid, bool) or not isinstance(uid, int) or uid <= 0:
-        raise ValueError(f"lounge: uid must be a positive integer, got {uid!r}")
+        raise ValueError(f"nowork: uid must be a positive integer, got {uid!r}")
     return f"/server/v1/users/{uid}/data"
 
 

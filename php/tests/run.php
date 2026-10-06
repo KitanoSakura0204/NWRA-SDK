@@ -12,31 +12,31 @@ declare(strict_types=1);
  * and exercises the real CurlTransport (skipped when the built-in server cannot start). Exit code 1 on failure.
  */
 
-use Lounge\Sdk\CurlTransport;
-use Lounge\Sdk\Exceptions\ApiError;
-use Lounge\Sdk\Exceptions\EncryptionError;
-use Lounge\Sdk\Exceptions\LoungeException;
-use Lounge\Sdk\Exceptions\OAuthError;
-use Lounge\Sdk\Exceptions\TransportError;
-use Lounge\Sdk\Exceptions\WebhookError;
-use Lounge\Sdk\GmAction;
-use Lounge\Sdk\GmActionParam;
-use Lounge\Sdk\GmOption;
-use Lounge\Sdk\LoungeClient;
-use Lounge\Sdk\LoungeOidc;
-use Lounge\Sdk\OnlinePlayer;
-use Lounge\Sdk\UserData;
-use Lounge\Sdk\Webhook;
-use Lounge\Sdk\WebhookEvent;
-use Lounge\Sdk\Whitelist;
-use Lounge\Sdk\WhitelistEntry;
+use NoWork\Sdk\CurlTransport;
+use NoWork\Sdk\Exceptions\ApiError;
+use NoWork\Sdk\Exceptions\EncryptionError;
+use NoWork\Sdk\Exceptions\NoWorkException;
+use NoWork\Sdk\Exceptions\OAuthError;
+use NoWork\Sdk\Exceptions\TransportError;
+use NoWork\Sdk\Exceptions\WebhookError;
+use NoWork\Sdk\GmAction;
+use NoWork\Sdk\GmActionParam;
+use NoWork\Sdk\GmOption;
+use NoWork\Sdk\NoworkClient;
+use NoWork\Sdk\NoworkOidc;
+use NoWork\Sdk\OnlinePlayer;
+use NoWork\Sdk\UserData;
+use NoWork\Sdk\Webhook;
+use NoWork\Sdk\WebhookEvent;
+use NoWork\Sdk\Whitelist;
+use NoWork\Sdk\WhitelistEntry;
 
 $vendor = __DIR__ . '/../vendor/autoload.php';
 if (is_file($vendor)) {
     require $vendor;
 } else {
     spl_autoload_register(static function (string $class): void {
-        $prefix = 'Lounge\\Sdk\\';
+        $prefix = 'NoWork\\Sdk\\';
         if (str_starts_with($class, $prefix)) {
             $file = __DIR__ . '/../src/' . str_replace('\\', '/', substr($class, strlen($prefix))) . '.php';
             if (is_file($file)) {
@@ -165,14 +165,14 @@ function form(?string $body): array
     return $q;
 }
 
-function client(callable $t, string $base = 'https://account.example/', string $key = 'test-key', float $timeout = 10.0): LoungeClient
+function client(callable $t, string $base = 'https://account.example/', string $key = 'test-key', float $timeout = 10.0): NoworkClient
 {
-    return new LoungeClient($base, $key, $timeout, $t);
+    return new NoworkClient($base, $key, $timeout, $t);
 }
 
-function oidc(callable $t, string $secret = 'secret', string $redirect = 'https://app.example/callback'): LoungeOidc
+function oidc(callable $t, string $secret = 'secret', string $redirect = 'https://app.example/callback'): NoworkOidc
 {
-    return new LoungeOidc('https://account.example/', 'client', $secret, $redirect, 10.0, $t);
+    return new NoworkOidc('https://account.example/', 'client', $secret, $redirect, 10.0, $t);
 }
 
 /* ------------------------------------------------------------------ Server API */
@@ -270,17 +270,17 @@ T::test('malformed success envelopes are TransportError', function (): void {
     ];
     foreach ($cases as $name => $response) {
         $e = T::throws(TransportError::class, fn () => client(new FakeTransport($response))->whitelist());
-        T::true(str_starts_with($e->getMessage(), 'lounge: transport error: '), "$name: message prefix");
+        T::true(str_starts_with($e->getMessage(), 'nowork: transport error: '), "$name: message prefix");
     }
     $e = T::throws(TransportError::class, fn () => client(new FakeTransport([503, '{"code":0,"data":{}}']))->checkWhitelist('Steve'), 'http 503');
-    T::true($e instanceof LoungeException, 'TransportError extends LoungeException');
+    T::true($e instanceof NoWorkException, 'TransportError extends NoWorkException');
 });
 
 T::test('business errors are ApiError with code and message', function (): void {
     $e = T::throws(ApiError::class, fn () => client(new FakeTransport([401, '{"code":401,"message":"invalid server key"}']))->whitelist());
     T::same(401, $e->getCode());
     T::same('invalid server key', $e->getApiMessage());
-    T::same('lounge: api error 401: invalid server key', $e->getMessage());
+    T::same('nowork: api error 401: invalid server key', $e->getMessage());
     $e = T::throws(ApiError::class, fn () => client(new FakeTransport([200, '{"code":1001,"message":"server disabled","data":null}']))->heartbeat(1));
     T::same(1001, $e->getCode(), 'code != 0 wins over missing data');
     $e = T::throws(ApiError::class, fn () => client(new FakeTransport([200, '{"code":7}']))->heartbeat(1));
@@ -356,13 +356,13 @@ T::test('encrypted replies fail closed without keys (header or {"jwe"} data) and
     $e = T::throws(EncryptionError::class, fn () => client(new FakeTransport(FakeTransport::json($sealed)))->checkWhitelist('Steve'), 'no decryption key');
     T::same('whitelist/check', $e->getRoute());
     T::true(!$e instanceof TransportError, 'EncryptionError is not a TransportError');
-    $byHeader = [200, '{"code":0,"data":{"allowed":true}}', ['X-Lounge-Encryption' => 'JWE']];
+    $byHeader = [200, '{"code":0,"data":{"allowed":true}}', ['X-NoWork-Encryption' => 'JWE']];
     T::throws(EncryptionError::class, fn () => client(new FakeTransport($byHeader))->checkWhitelist('Steve'));
     $raw = client(new FakeTransport(FakeTransport::json($sealed)))->raw('GET', '/server/v1/whitelist');
     T::true($raw->encrypted, 'raw marks the reply encrypted');
     T::same('a.b.c.d.e', $raw->data['jwe']);
     $raw = client(new FakeTransport($byHeader))->raw('GET', '/server/v1/whitelist/check', ['name' => 'Steve']);
-    T::same('JWE', $raw->header('x-lounge-encryption'));
+    T::same('JWE', $raw->header('x-nowork-encryption'));
     T::true($raw->encrypted, 'header marks the reply encrypted');
 });
 
@@ -378,8 +378,8 @@ if (!\function_exists('openssl_decrypt')) {
     T::test('encrypted whitelist opens with the decryption keys; wrong route, wrong key and plain replies are refused', function (): void {
         $set = vectors();
         $v = array_values(array_filter($set['vectors'], static fn (array $x): bool => $x['name'] === 'server-envelope'))[0];
-        $sealed = [200, $v['response'], ['X-Lounge-Encryption' => 'JWE']];
-        $keyed = static fn (FakeTransport $t, array $keys): LoungeClient => new LoungeClient('https://account.example', 'k', 10.0, $t, $keys);
+        $sealed = [200, $v['response'], ['X-NoWork-Encryption' => 'JWE']];
+        $keyed = static fn (FakeTransport $t, array $keys): NoworkClient => new NoworkClient('https://account.example', 'k', 10.0, $t, $keys);
         $w = $keyed(new FakeTransport($sealed), [$set['keys']['ec']])->whitelist();
         T::same('survival', $w->server);
         T::same(1, $w->count);
@@ -393,7 +393,7 @@ if (!\function_exists('openssl_decrypt')) {
         T::throws(EncryptionError::class, fn () => $keyed(new FakeTransport($plain), [$set['keys']['ec']])->checkWhitelist('Steve'), 'plain reply');
         $ok = FakeTransport::json(['code' => 0, 'data' => ['status' => 'ok']]);
         $keyed(new FakeTransport($ok), [$set['keys']['ec']])->heartbeat(1); // routes the backend never seals stay plain
-        T::throws(\InvalidArgumentException::class, fn () => new LoungeClient('https://a.example', 'k', 10.0, null, ['not a jwk']));
+        T::throws(\InvalidArgumentException::class, fn () => new NoworkClient('https://a.example', 'k', 10.0, null, ['not a jwk']));
     });
 }
 
@@ -463,13 +463,13 @@ T::test('authorizeUrl encodes state, nonce and PKCE S256', function (): void {
 });
 
 T::test('PKCE helpers follow RFC 7636', function (): void {
-    ['verifier' => $v, 'challenge' => $c] = LoungeOidc::pkce();
+    ['verifier' => $v, 'challenge' => $c] = NoworkOidc::pkce();
     T::same(1, preg_match('/^[A-Za-z0-9_-]{43}$/', $v), 'verifier is 43 base64url chars');
-    T::same(LoungeOidc::pkceChallenge($v), $c);
-    T::same('E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM', LoungeOidc::pkceChallenge('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk'), 'RFC 7636 appendix B vector');
-    T::same(128, strlen(LoungeOidc::pkceVerifier(96)), 'longest verifier');
-    T::same(43, strlen(LoungeOidc::pkceVerifier(1)), 'never shorter than 43');
-    T::true(LoungeOidc::pkce()['verifier'] !== $v, 'random');
+    T::same(NoworkOidc::pkceChallenge($v), $c);
+    T::same('E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM', NoworkOidc::pkceChallenge('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk'), 'RFC 7636 appendix B vector');
+    T::same(128, strlen(NoworkOidc::pkceVerifier(96)), 'longest verifier');
+    T::same(43, strlen(NoworkOidc::pkceVerifier(1)), 'never shorter than 43');
+    T::true(NoworkOidc::pkce()['verifier'] !== $v, 'random');
 });
 
 T::test('exchange posts client_secret_post authentication and the PKCE verifier', function (): void {
@@ -532,7 +532,7 @@ T::test('RFC 6749 error objects are OAuthError, other failures TransportError', 
     T::same('expired', $e->getDescription());
     T::same(400, $e->getStatus());
     T::same(400, $e->getCode());
-    T::same('lounge: oauth error invalid_grant: expired', $e->getMessage());
+    T::same('nowork: oauth error invalid_grant: expired', $e->getMessage());
     $e = T::throws(OAuthError::class, fn () => oidc(new FakeTransport([401, '{"error":"invalid_token"}']))->userInfo('bad'));
     T::same('invalid_token', $e->getError());
     T::same('', $e->getDescription());
@@ -543,7 +543,7 @@ T::test('RFC 6749 error objects are OAuthError, other failures TransportError', 
     T::throws(TransportError::class, fn () => oidc(new FakeTransport([400, '{"error":""}']))->exchange('code'), 'http 400');
     $e = T::throws(OAuthError::class, fn () => oidc(new FakeTransport([503, '{"error":"temporarily_unavailable"}']))->userInfo('x'));
     T::same(503, $e->getStatus(), 'any status >= 400 with an error object is OAuthError');
-    T::true($e instanceof LoungeException, 'OAuthError extends LoungeException');
+    T::true($e instanceof NoWorkException, 'OAuthError extends NoWorkException');
 });
 
 T::test('userInfo sends the bearer token', function (): void {
@@ -565,7 +565,7 @@ T::test('logoutUrl builds the end-session request', function (): void {
 });
 
 T::test('OIDC transport exceptions are wrapped as TransportError', function (): void {
-    $o = new LoungeOidc('https://account.example', 'client', '', '', 10.0, fn () => throw new \RuntimeException('dns failure'));
+    $o = new NoworkOidc('https://account.example', 'client', '', '', 10.0, fn () => throw new \RuntimeException('dns failure'));
     $e = T::throws(TransportError::class, fn () => $o->userInfo('a'), 'dns failure');
     T::true($e->getPrevious() instanceof \RuntimeException, 'previous kept');
 });
@@ -577,7 +577,7 @@ echo "\nWebhook\n";
 $secret = 'whsec_test';
 $body = '{"id":"e1","event":"user.login","timestamp":1,"data":{"userId":7}}';
 $now = time();
-$headers = ['X-Lounge-Timestamp' => (string) $now, 'X-Lounge-Signature' => Webhook::signature($secret, $now, $body), 'X-Lounge-Event' => 'user.login'];
+$headers = ['X-NoWork-Timestamp' => (string) $now, 'X-NoWork-Signature' => Webhook::signature($secret, $now, $body), 'X-NoWork-Event' => 'user.login'];
 
 T::test('signature matches the reference vector (shared with the other SDKs)', function (): void {
     T::same('sha256=f409921f3a33654b38b4798557621d1c8274b3d0c4e4a39fb1bd3ee27aa1d5c0', Webhook::signature('whsec_test', 1757800000, '{"id":"e1"}'));
@@ -593,52 +593,52 @@ T::test('verify accepts a fresh, correctly signed delivery', function () use ($s
     T::same(['userId' => 7], $ev->data);
     $lower = array_change_key_case($headers, CASE_LOWER);
     T::same('e1', Webhook::verify($secret, $lower, $body)->id, 'header names are case-insensitive');
-    $multi = ['x-lounge-timestamp' => [$headers['X-Lounge-Timestamp']], 'x-lounge-signature' => [$headers['X-Lounge-Signature']]];
+    $multi = ['x-nowork-timestamp' => [$headers['X-NoWork-Timestamp']], 'x-nowork-signature' => [$headers['X-NoWork-Signature']]];
     T::same('e1', Webhook::verify($secret, $multi, $body)->id, 'multi-value headers (framework style)');
 });
 
 T::test('verifyRequest reads $_SERVER-style headers', function () use ($secret, $body, $headers): void {
-    $server = ['REQUEST_METHOD' => 'POST', 'HTTP_X_LOUNGE_TIMESTAMP' => $headers['X-Lounge-Timestamp'], 'HTTP_X_LOUNGE_SIGNATURE' => $headers['X-Lounge-Signature'], 'HTTP_X_LOUNGE_DELIVERY' => 'd1', 'argv' => []];
+    $server = ['REQUEST_METHOD' => 'POST', 'HTTP_X_NOWORK_TIMESTAMP' => $headers['X-NoWork-Timestamp'], 'HTTP_X_NOWORK_SIGNATURE' => $headers['X-NoWork-Signature'], 'HTTP_X_NOWORK_DELIVERY' => 'd1', 'argv' => []];
     T::same('user.login', Webhook::verifyRequest($secret, 300, $server, $body)->event);
 });
 
 T::test('wrong secret, tampered body or bad signature header are WebhookError', function () use ($secret, $body, $headers): void {
     $e = T::throws(WebhookError::class, fn () => Webhook::verify('wrong', $headers, $body), 'invalid webhook signature');
-    T::true($e instanceof LoungeException, 'WebhookError extends LoungeException');
+    T::true($e instanceof NoWorkException, 'WebhookError extends NoWorkException');
     T::throws(WebhookError::class, fn () => Webhook::verify($secret, $headers, '{"id":"e1","event":"user.deleted","timestamp":1,"data":{}}'), 'invalid webhook signature');
-    T::throws(WebhookError::class, fn () => Webhook::verify($secret, ['X-Lounge-Timestamp' => $headers['X-Lounge-Timestamp'], 'X-Lounge-Signature' => 'sha256=deadbeef'], $body), 'invalid webhook signature');
-    T::throws(WebhookError::class, fn () => Webhook::verify($secret, ['X-Lounge-Timestamp' => $headers['X-Lounge-Timestamp']], $body), 'invalid webhook signature');
+    T::throws(WebhookError::class, fn () => Webhook::verify($secret, ['X-NoWork-Timestamp' => $headers['X-NoWork-Timestamp'], 'X-NoWork-Signature' => 'sha256=deadbeef'], $body), 'invalid webhook signature');
+    T::throws(WebhookError::class, fn () => Webhook::verify($secret, ['X-NoWork-Timestamp' => $headers['X-NoWork-Timestamp']], $body), 'invalid webhook signature');
 });
 
 T::test('stale or future deliveries are rejected unless tolerance is disabled', function () use ($secret, $body, $now): void {
     $old = $now - 3600;
-    $stale = ['X-Lounge-Timestamp' => (string) $old, 'X-Lounge-Signature' => Webhook::signature($secret, $old, $body)];
+    $stale = ['X-NoWork-Timestamp' => (string) $old, 'X-NoWork-Signature' => Webhook::signature($secret, $old, $body)];
     T::throws(WebhookError::class, fn () => Webhook::verify($secret, $stale, $body), 'outside tolerance');
     T::throws(WebhookError::class, fn () => Webhook::verify($secret, $stale, $body, 300), 'outside tolerance');
     T::same('e1', Webhook::verify($secret, $stale, $body, null)->id, 'null disables');
     T::same('e1', Webhook::verify($secret, $stale, $body, 0)->id, '0 disables');
     T::same('e1', Webhook::verify($secret, $stale, $body, 7200)->id, 'inside a wider window');
     $future = $now + 3600;
-    $ahead = ['X-Lounge-Timestamp' => (string) $future, 'X-Lounge-Signature' => Webhook::signature($secret, $future, $body)];
+    $ahead = ['X-NoWork-Timestamp' => (string) $future, 'X-NoWork-Signature' => Webhook::signature($secret, $future, $body)];
     T::throws(WebhookError::class, fn () => Webhook::verify($secret, $ahead, $body), 'outside tolerance');
 });
 
 T::test('missing or malformed timestamps are rejected before any HMAC work', function () use ($secret, $body): void {
     foreach (['', 'abc', '12.5', '1e9', '   ', '99999999999999999999'] as $ts) {
-        T::throws(WebhookError::class, fn () => Webhook::verify($secret, ['X-Lounge-Timestamp' => $ts, 'X-Lounge-Signature' => Webhook::signature($secret, $ts, $body)], $body), 'invalid X-Lounge-Timestamp');
+        T::throws(WebhookError::class, fn () => Webhook::verify($secret, ['X-NoWork-Timestamp' => $ts, 'X-NoWork-Signature' => Webhook::signature($secret, $ts, $body)], $body), 'invalid X-NoWork-Timestamp');
     }
-    T::throws(WebhookError::class, fn () => Webhook::verify($secret, [], $body), 'invalid X-Lounge-Timestamp');
-    $padded = ['X-Lounge-Timestamp' => ' ' . time() . ' ', 'X-Lounge-Signature' => ' ' . Webhook::signature($secret, time(), $body) . ' '];
+    T::throws(WebhookError::class, fn () => Webhook::verify($secret, [], $body), 'invalid X-NoWork-Timestamp');
+    $padded = ['X-NoWork-Timestamp' => ' ' . time() . ' ', 'X-NoWork-Signature' => ' ' . Webhook::signature($secret, time(), $body) . ' '];
     T::same('e1', Webhook::verify($secret, $padded, $body)->id, 'surrounding whitespace is trimmed');
 });
 
 T::test('a signed but non-object body is WebhookError; loose payload fields are normalised', function () use ($secret, $now): void {
     foreach (['not json', '[1,2]', '"str"', 'null', ''] as $bad) {
-        $h = ['X-Lounge-Timestamp' => (string) $now, 'X-Lounge-Signature' => Webhook::signature($secret, $now, $bad)];
+        $h = ['X-NoWork-Timestamp' => (string) $now, 'X-NoWork-Signature' => Webhook::signature($secret, $now, $bad)];
         T::throws(WebhookError::class, fn () => Webhook::verify($secret, $h, $bad), 'invalid webhook body');
     }
     $loose = '{"id":42,"event":null,"timestamp":"1757800000","data":[1,2]}';
-    $ev = Webhook::verify($secret, ['X-Lounge-Timestamp' => (string) $now, 'X-Lounge-Signature' => Webhook::signature($secret, $now, $loose)], $loose);
+    $ev = Webhook::verify($secret, ['X-NoWork-Timestamp' => (string) $now, 'X-NoWork-Signature' => Webhook::signature($secret, $now, $loose)], $loose);
     T::same('42', $ev->id);
     T::same('', $ev->event);
     T::same(1757800000, $ev->timestamp);
@@ -680,7 +680,7 @@ final class BuiltinServer
         if ($port === 0) {
             throw new \RuntimeException('no free port found');
         }
-        $log = (string) tempnam(sys_get_temp_dir(), 'lounge-php-s-');
+        $log = (string) tempnam(sys_get_temp_dir(), 'nowork-php-s-');
         $proc = proc_open(
             [PHP_BINARY, '-n', '-d', 'display_errors=stderr', '-S', "127.0.0.1:$port", '-t', dirname($router), $router],
             [0 => ['pipe', 'r'], 1 => ['file', $log, 'a'], 2 => ['file', $log, 'a']],
@@ -728,7 +728,7 @@ if ($server !== null) {
     $base = $server->base;
 
     T::test('e2e: whitelist, escaped join check and JSON heartbeat over real cURL', function () use ($base): void {
-        $c = new LoungeClient($base, 'test-key', 5.0);
+        $c = new NoworkClient($base, 'test-key', 5.0);
         $list = $c->whitelist();
         T::same(1, $list->count);
         T::same('Steve', $list->entries[0]->name);
@@ -742,22 +742,22 @@ if ($server !== null) {
     });
 
     T::test('e2e: 401 envelope is ApiError, 503 / HTML answers are TransportError', function () use ($base): void {
-        $e = T::throws(ApiError::class, fn () => (new LoungeClient($base, 'wrong-key', 5.0))->whitelist());
+        $e = T::throws(ApiError::class, fn () => (new NoworkClient($base, 'wrong-key', 5.0))->whitelist());
         T::same(401, $e->getCode());
         T::same('invalid server key', $e->getApiMessage());
-        T::throws(TransportError::class, fn () => (new LoungeClient($base, 'fail-503', 5.0))->checkWhitelist('Steve'), 'http 503');
-        T::throws(TransportError::class, fn () => (new LoungeClient($base, 'html', 5.0))->checkWhitelist('Steve'), 'invalid json');
+        T::throws(TransportError::class, fn () => (new NoworkClient($base, 'fail-503', 5.0))->checkWhitelist('Steve'), 'http 503');
+        T::throws(TransportError::class, fn () => (new NoworkClient($base, 'html', 5.0))->checkWhitelist('Steve'), 'invalid json');
     });
 
     T::test('e2e: timeout and connection refusal map to TransportError with the cURL errno', function () use ($base): void {
-        $e = T::throws(TransportError::class, fn () => (new LoungeClient($base, 'slow', 0.5))->whitelist(), 'curl error');
+        $e = T::throws(TransportError::class, fn () => (new NoworkClient($base, 'slow', 0.5))->whitelist(), 'curl error');
         T::same(CURLE_OPERATION_TIMEDOUT, $e->getCode(), 'errno 28');
-        $e = T::throws(TransportError::class, fn () => (new LoungeClient('http://127.0.0.1:1', 'k', 2.0))->whitelist(), 'curl error');
+        $e = T::throws(TransportError::class, fn () => (new NoworkClient('http://127.0.0.1:1', 'k', 2.0))->whitelist(), 'curl error');
         T::true(in_array($e->getCode(), [CURLE_COULDNT_CONNECT, CURLE_OPERATION_TIMEDOUT], true), 'errno 7 (or 28 behind a firewall)');
     });
 
     T::test('e2e: OIDC exchange / userinfo / introspect / revoke and OAuthError', function () use ($base): void {
-        $o = new LoungeOidc($base, 'client', 'secret', 'https://app.example/callback', 5.0);
+        $o = new NoworkOidc($base, 'client', 'secret', 'https://app.example/callback', 5.0);
         $token = $o->exchange('code', 'verifier');
         T::same('access', $token['access_token']);
         T::same(3600, $token['expires_in']);
@@ -772,13 +772,13 @@ if ($server !== null) {
         $e = T::throws(OAuthError::class, fn () => $o->userInfo('bad'));
         T::same('invalid_token', $e->getError());
         T::same(401, $e->getStatus());
-        $e = T::throws(OAuthError::class, fn () => (new LoungeOidc($base, 'client', 'nope', '', 5.0))->clientCredentials('openid'));
+        $e = T::throws(OAuthError::class, fn () => (new NoworkOidc($base, 'client', 'nope', '', 5.0))->clientCredentials('openid'));
         T::same('invalid_client', $e->getError());
     });
 
     T::test('e2e: CurlTransport caller options are applied under the required ones', function () use ($base): void {
-        $transport = new CurlTransport([CURLOPT_USERAGENT => 'lounge-sdk-test', CURLOPT_URL => 'http://127.0.0.1:1/ignored']);
-        $c = new LoungeClient($base, 'test-key', 5.0, $transport);
+        $transport = new CurlTransport([CURLOPT_USERAGENT => 'nowork-sdk-test', CURLOPT_URL => 'http://127.0.0.1:1/ignored']);
+        $c = new NoworkClient($base, 'test-key', 5.0, $transport);
         T::same('survival', $c->whitelist()->server, 'required CURLOPT_URL wins over the caller option');
     });
 

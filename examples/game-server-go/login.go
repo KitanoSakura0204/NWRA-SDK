@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	lounge "github.com/wangework/lounge-sdk-go"
+	nowork "github.com/wangework/nowork-sdk-go"
 )
 
 // loginConfig is the game-client side of the SDK login page (PROTOCOL.md section 6). The OAuth
@@ -29,15 +29,15 @@ type loginConfig struct {
 // login opens (prints) the login page URL and waits for the code: on the loopback redirect, or
 // typed by the player in code-display mode. Then it exchanges the code and reads userinfo.
 func login(ctx context.Context, c loginConfig) error {
-	pkce, err := lounge.NewPKCE()
+	pkce, err := nowork.NewPKCE()
 	if err != nil {
 		return err
 	}
-	state, err := lounge.NewState()
+	state, err := nowork.NewState()
 	if err != nil {
 		return err
 	}
-	page, err := lounge.BuildLoginURL(c.frontend, lounge.LoginURLParams{
+	page, err := nowork.BuildLoginURL(c.frontend, nowork.LoginURLParams{
 		ServerCode: c.server, RedirectURI: c.redirect, State: state, CodeChallenge: pkce.Challenge,
 		Scope: "openid profile", UILocales: c.locale,
 	})
@@ -56,7 +56,7 @@ func login(ctx context.Context, c loginConfig) error {
 	if err != nil {
 		return err
 	}
-	oidc := lounge.NewOIDC(c.issuer, c.clientID, "", c.redirect)
+	oidc := nowork.NewOIDC(c.issuer, c.clientID, "", c.redirect)
 	tok, err := oidc.Exchange(ctx, code, pkce.Verifier)
 	if err != nil {
 		return fmt.Errorf("token exchange: %w", err)
@@ -76,7 +76,7 @@ func typedCode() (string, error) {
 	if err != nil && line == "" {
 		return "", err
 	}
-	code := lounge.NormalizeLoginCode(line)
+	code := nowork.NormalizeLoginCode(line)
 	if code == "" {
 		return "", errors.New("no code entered")
 	}
@@ -87,10 +87,10 @@ func typedCode() (string, error) {
 func awaitRedirect(ctx context.Context, redirect, state, issuer string) (string, error) {
 	u, err := url.Parse(redirect)
 	if err != nil || u.Scheme != "http" {
-		return "", fmt.Errorf("LOUNGE_REDIRECT_URI %q: only a loopback http address can be served here", redirect)
+		return "", fmt.Errorf("NOWORK_REDIRECT_URI %q: only a loopback http address can be served here", redirect)
 	}
 	if h := u.Hostname(); h != "127.0.0.1" && h != "localhost" && h != "::1" {
-		return "", fmt.Errorf("LOUNGE_REDIRECT_URI %q: host must be loopback", redirect)
+		return "", fmt.Errorf("NOWORK_REDIRECT_URI %q: host must be loopback", redirect)
 	}
 	ln, err := net.Listen("tcp", u.Host)
 	if err != nil {
@@ -110,7 +110,7 @@ func awaitRedirect(ctx context.Context, redirect, state, issuer string) (string,
 			http.NotFound(w, r)
 			return
 		}
-		code, err := lounge.ParseLoginCallback(r.URL.String(), state, issuer)
+		code, err := nowork.ParseLoginCallback(r.URL.String(), state, issuer)
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		if err != nil {
 			fmt.Fprintln(w, "Login failed, return to the game.")
@@ -138,11 +138,11 @@ func awaitRedirect(ctx context.Context, redirect, state, issuer string) (string,
 // loginFromEnv reads the login settings; "" redirect selects code-display mode.
 func loginFromEnv(base string) loginConfig {
 	return loginConfig{
-		frontend: strings.TrimRight(envOr("LOUNGE_FRONTEND", base), "/"),
+		frontend: strings.TrimRight(envOr("NOWORK_FRONTEND", base), "/"),
 		issuer:   base,
-		server:   os.Getenv("LOUNGE_SERVER_CODE"),
-		clientID: os.Getenv("LOUNGE_CLIENT_ID"),
-		redirect: os.Getenv("LOUNGE_REDIRECT_URI"),
-		locale:   os.Getenv("LOUNGE_UI_LOCALES"),
+		server:   os.Getenv("NOWORK_SERVER_CODE"),
+		clientID: os.Getenv("NOWORK_CLIENT_ID"),
+		redirect: os.Getenv("NOWORK_REDIRECT_URI"),
+		locale:   os.Getenv("NOWORK_UI_LOCALES"),
 	}
 }

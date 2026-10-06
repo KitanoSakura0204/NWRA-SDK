@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Lounge\Sdk;
+namespace NoWork\Sdk;
 
-use Lounge\Sdk\Exceptions\WebhookError;
-use Lounge\Sdk\Internal\Json;
+use NoWork\Sdk\Exceptions\WebhookError;
+use NoWork\Sdk\Internal\Json;
 
 /**
  * Verification of webhook deliveries from the user center (docs/PROTOCOL.md section 5).
  *
- * `X-Lounge-Signature` = `sha256=` + hex(HMAC-SHA256(secret, "<X-Lounge-Timestamp>.<raw body>")).
+ * `X-NoWork-Signature` = `sha256=` + hex(HMAC-SHA256(secret, "<X-NoWork-Timestamp>.<raw body>")).
  * The comparison is constant-time and deliveries outside the replay window are rejected.
  */
 final class Webhook
@@ -31,8 +31,8 @@ final class Webhook
     /**
      * Verify the signature and timestamp of a delivery and parse the event.
      *
-     * @param array<string, string|string[]|mixed> $headers   request headers, case-insensitive; both `X-Lounge-Timestamp`
-     *                                                        and `$_SERVER`-style `HTTP_X_LOUNGE_TIMESTAMP` keys are accepted
+     * @param array<string, string|string[]|mixed> $headers   request headers, case-insensitive; both `X-NoWork-Timestamp`
+     *                                                        and `$_SERVER`-style `HTTP_X_NOWORK_TIMESTAMP` keys are accepted
      * @param string                               $body      the raw request body, exactly as received
      * @param int|null                             $tolerance replay window in seconds; null or 0 disables the check
      *
@@ -41,16 +41,16 @@ final class Webhook
     public static function verify(string $secret, array $headers, string $body, ?int $tolerance = self::DEFAULT_TOLERANCE): WebhookEvent
     {
         $lookup = self::normalize($headers);
-        $tsRaw = trim($lookup['x-lounge-timestamp'] ?? '');
+        $tsRaw = trim($lookup['x-nowork-timestamp'] ?? '');
         if (preg_match('/^[+-]?\d{1,18}$/', $tsRaw) !== 1) {
-            throw new WebhookError('missing or invalid X-Lounge-Timestamp');
+            throw new WebhookError('missing or invalid X-NoWork-Timestamp');
         }
         $ts = (int) $tsRaw;
         if ($tolerance !== null && $tolerance > 0 && abs(time() - $ts) > $tolerance) {
             throw new WebhookError('webhook timestamp outside tolerance');
         }
         $expected = self::signature($secret, $ts, $body);
-        $given = trim($lookup['x-lounge-signature'] ?? '');
+        $given = trim($lookup['x-nowork-signature'] ?? '');
         if (!hash_equals($expected, $given)) {
             throw new WebhookError('invalid webhook signature');
         }
@@ -78,7 +78,7 @@ final class Webhook
     }
 
     /**
-     * Lower-case header names, map `HTTP_X_LOUNGE_*` (CGI style) to `x-lounge-*`, take the first value of multi-value headers.
+     * Lower-case header names, map `HTTP_X_NOWORK_*` (CGI style) to `x-nowork-*`, take the first value of multi-value headers.
      *
      * @param array<mixed, mixed> $headers
      *

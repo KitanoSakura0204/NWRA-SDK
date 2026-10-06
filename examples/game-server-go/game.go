@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	lounge "github.com/wangework/lounge-sdk-go"
+	nowork "github.com/wangework/nowork-sdk-go"
 )
 
 // world stands in for the game: who is online and the little state the GM actions change.
@@ -22,7 +22,7 @@ type world struct {
 type player struct {
 	Name string
 	UUID string
-	UID  int64 // Lounge uid from the join check, 0 when not known
+	UID  int64 // NoWork uid from the join check, 0 when not known
 }
 
 func newWorld(max int, logf func(string, ...any)) *world {
@@ -58,18 +58,18 @@ func (w *world) count() int {
 }
 
 // players is the heartbeat player list (PROTOCOL 2.3), sorted so every beat reads the same.
-func (w *world) players() []lounge.OnlinePlayer {
+func (w *world) players() []nowork.OnlinePlayer {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	out := make([]lounge.OnlinePlayer, 0, len(w.online))
+	out := make([]nowork.OnlinePlayer, 0, len(w.online))
 	for _, p := range w.online {
-		out = append(out, lounge.OnlinePlayer{Name: p.Name, UUID: p.UUID})
+		out = append(out, nowork.OnlinePlayer{Name: p.Name, UUID: p.UUID})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
 
-// kickUID removes every online player of one Lounge account (frozen, locked or deleted).
+// kickUID removes every online player of one NoWork account (frozen, locked or deleted).
 func (w *world) kickUID(uid int64, reason string) []string {
 	if uid == 0 {
 		return nil

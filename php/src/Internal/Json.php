@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Lounge\Sdk\Internal;
+namespace NoWork\Sdk\Internal;
 
-use Lounge\Sdk\Exceptions\LoungeException;
-use Lounge\Sdk\Exceptions\TransportError;
+use NoWork\Sdk\Exceptions\NoWorkException;
+use NoWork\Sdk\Exceptions\TransportError;
 
 /**
- * JSON / transport plumbing shared by LoungeClient and LoungeOidc.
+ * JSON / transport plumbing shared by NoworkClient and NoworkOidc.
  *
  * @internal not part of the public API
  */
@@ -20,7 +20,7 @@ final class Json
 
     /**
      * Invoke a transport callable and normalise its `[status, body]` answer. Any exception that is not
-     * already a LoungeException is reported as a TransportError so callers only ever see the SDK's types.
+     * already a NoWorkException is reported as a TransportError so callers only ever see the SDK's types.
      *
      * @param callable(string, string, array<string, string>, ?string, float): array{int, string} $transport
      * @param array<string, string>                                                                 $headers
@@ -32,7 +32,7 @@ final class Json
     {
         try {
             $res = $transport($method, $url, $headers, $body, $timeout);
-        } catch (LoungeException $e) {
+        } catch (NoWorkException $e) {
             throw $e;
         } catch (\Exception $e) {
             throw new TransportError($e->getMessage(), 0, $e);

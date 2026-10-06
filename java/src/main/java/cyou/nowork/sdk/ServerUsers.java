@@ -1,4 +1,4 @@
-package cyou.lounge.sdk;
+package cyou.nowork.sdk;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -7,13 +7,13 @@ import java.util.Map;
 
 /**
  * Models of the player-data and per-server ban routes (module "server-users",
- * SDK/docs/SERVER_USERS.md); the calls are on {@link LoungeClient}.
+ * SDK/docs/SERVER_USERS.md); the calls are on {@link NoworkClient}.
  */
 public final class ServerUsers {
     private ServerUsers() {
     }
 
-    /** Business codes of these routes ({@link LoungeException.Api#code}); other refusals use code 1. */
+    /** Business codes of these routes ({@link NoWorkException.Api#code}); other refusals use code 1. */
     public static final int CODE_NOT_ON_ROSTER = 404;
     /** The data changed since the version you read: read again, then write. */
     public static final int CODE_VERSION_CONFLICT = 409;
@@ -22,7 +22,7 @@ public final class ServerUsers {
 
     /** Whether a data write was refused because of a stale version. */
     public static boolean isVersionConflict(Throwable e) {
-        return e instanceof LoungeException.Api && ((LoungeException.Api) e).code == CODE_VERSION_CONFLICT;
+        return e instanceof NoWorkException.Api && ((NoWorkException.Api) e).code == CODE_VERSION_CONFLICT;
     }
 
     /** One entry of the data schema the server owner defined. type: text | number | bool | select | json. */

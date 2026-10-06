@@ -12,8 +12,8 @@ try {
 }
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 if (-not (Test-Path dev.key)) {
-  go run ../../tools/loungeplugin keygen -out dev
+  go run ../../tools/noworkplugin keygen -out dev
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
-go run ../../tools/loungeplugin pack -dir . -key dev.key -out dist
+go run ../../tools/noworkplugin pack -dir . -key dev.key -out dist
 exit $LASTEXITCODE

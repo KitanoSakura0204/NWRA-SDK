@@ -1,8 +1,8 @@
 /**
- * Lounge Account webhook receiver on plain `node:http` (no framework).
+ * NoWork Account webhook receiver on plain `node:http` (no framework).
  *
- * - verifies X-Lounge-Signature / X-Lounge-Timestamp with the TypeScript SDK
- * - opens encrypted deliveries (JWE) when LOUNGE_DECRYPTION_KEYS is set
+ * - verifies X-NoWork-Signature / X-NoWork-Timestamp with the TypeScript SDK
+ * - opens encrypted deliveries (JWE) when NOWORK_DECRYPTION_KEYS is set
  * - de-duplicates deliveries by event id (in-memory LRU)
  * - handles game_role.reviewed, user.deleted, server.offline, user.level_changed,
  *   connection.bound / connection.unbound and the console's ping
@@ -22,16 +22,16 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-const secret = process.env.LOUNGE_WEBHOOK_SECRET || fail('set LOUNGE_WEBHOOK_SECRET (admin console: 开放平台 -> Webhook -> 签名密钥)');
+const secret = process.env.NOWORK_WEBHOOK_SECRET || fail('set NOWORK_WEBHOOK_SECRET (admin console: 开放平台 -> Webhook -> 签名密钥)');
 const host = process.env.HOST ?? '0.0.0.0';
 const port = Number(process.env.PORT ?? 8091);
-const webhookPath = process.env.WEBHOOK_PATH ?? '/lounge/webhook';
+const webhookPath = process.env.WEBHOOK_PATH ?? '/nowork/webhook';
 const tolerance = Number(process.env.WEBHOOK_TOLERANCE ?? 300);
 let keys: ReturnType<typeof loadKeys> = [];
 try {
-  keys = loadKeys(process.env.LOUNGE_DECRYPTION_KEYS ?? '');
+  keys = loadKeys(process.env.NOWORK_DECRYPTION_KEYS ?? '');
 } catch (e) {
-  fail(`LOUNGE_DECRYPTION_KEYS: ${(e as Error).message}`);
+  fail(`NOWORK_DECRYPTION_KEYS: ${(e as Error).message}`);
 }
 const receive = createReceiver({ secret, tolerance, keys, capacity: Number(process.env.SEEN_CAPACITY ?? 10000), dispatch });
 

@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Lounge\Sdk;
+namespace NoWork\Sdk;
 
-use Lounge\Sdk\Exceptions\OAuthError;
-use Lounge\Sdk\Exceptions\TransportError;
-use Lounge\Sdk\Internal\Json;
+use NoWork\Sdk\Exceptions\OAuthError;
+use NoWork\Sdk\Exceptions\TransportError;
+use NoWork\Sdk\Internal\Json;
 
 /**
  * Minimal OpenID Connect relying-party helper: authorization code (+ PKCE S256), refresh, client credentials,
@@ -16,7 +16,7 @@ use Lounge\Sdk\Internal\Json;
  * (`access_token`, `expires_in`, `sub`, `uid`, `security_level`, `game_roles`, ...).
  * Errors: RFC 6749 error object -> OAuthError, anything else that fails -> TransportError.
  */
-final class LoungeOidc
+final class NoworkOidc
 {
     private string $issuer;
 

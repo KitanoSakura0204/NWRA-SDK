@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Lounge\Sdk;
+namespace NoWork\Sdk;
 
-use Lounge\Sdk\Exceptions\ApiError;
-use Lounge\Sdk\Exceptions\EncryptionError;
-use Lounge\Sdk\Exceptions\TransportError;
-use Lounge\Sdk\Internal\Json;
+use NoWork\Sdk\Exceptions\ApiError;
+use NoWork\Sdk\Exceptions\EncryptionError;
+use NoWork\Sdk\Exceptions\TransportError;
+use NoWork\Sdk\Internal\Json;
 
 /**
  * Server API client authenticated with an `X-Server-Key` (whitelist sync, join check, heartbeat, GM channel).
@@ -15,10 +15,10 @@ use Lounge\Sdk\Internal\Json;
  * Errors: network / timeout / malformed envelope -> TransportError, `code != 0` -> ApiError, an encrypted
  * reply that cannot be opened (or a plain whitelist reply while decryption keys are set) -> EncryptionError.
  */
-final class LoungeClient
+final class NoworkClient
 {
     /** Response header the backend sets on an encrypted Server API reply (DELIVERY.md section 5). */
-    public const HEADER_ENCRYPTION = 'X-Lounge-Encryption';
+    public const HEADER_ENCRYPTION = 'X-NoWork-Encryption';
 
     /** The routes the backend seals when server encryption is on. */
     private const SEALED_ROUTES = ['whitelist', 'whitelist/check'];
@@ -47,7 +47,7 @@ final class LoungeClient
         foreach ($decryptionKeys as $i => $k) {
             $jwk = is_string($k) ? json_decode($k, true) : $k;
             if (!is_array($jwk) || !is_string($jwk['kty'] ?? null)) {
-                throw new \InvalidArgumentException(sprintf('lounge: decryption key %s is not a JWK', (string) $i));
+                throw new \InvalidArgumentException(sprintf('nowork: decryption key %s is not a JWK', (string) $i));
             }
             $this->keys[] = $jwk;
         }
@@ -285,7 +285,7 @@ final class LoungeClient
     private static function userPath(int $uid): string
     {
         if ($uid <= 0) {
-            throw new \InvalidArgumentException(sprintf('lounge: uid must be positive, got %d', $uid));
+            throw new \InvalidArgumentException(sprintf('nowork: uid must be positive, got %d', $uid));
         }
 
         return sprintf('/server/v1/users/%d/data', $uid);

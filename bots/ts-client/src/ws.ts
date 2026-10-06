@@ -2,7 +2,7 @@ import WebSocket from "ws";
 import type { Message, PluginEvent, Target } from "./types.js";
 
 export interface EventStreamOptions {
-  /** Site base URL, e.g. "https://lounge.example.com". */
+  /** Site base URL, e.g. "https://nowork.example.com". */
   baseUrl: string;
   token: string;
   /** Called for each queued notification; return (or resolve) to ack it. */

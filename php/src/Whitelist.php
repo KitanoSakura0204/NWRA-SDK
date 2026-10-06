@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Lounge\Sdk;
+namespace NoWork\Sdk;
 
-use Lounge\Sdk\Internal\Json;
+use NoWork\Sdk\Internal\Json;
 
 /** The full whitelist of a server (`GET /server/v1/whitelist`). */
 final class Whitelist

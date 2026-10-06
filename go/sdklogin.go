@@ -1,4 +1,4 @@
-package lounge
+package nowork
 
 import (
 	"crypto/rand"
@@ -56,10 +56,10 @@ type LoginURLParams struct {
 // user-centre web address (the SPA origin, which is BASE when the backend serves the SPA).
 func BuildLoginURL(frontend string, p LoginURLParams) (string, error) {
 	if p.ServerCode == "" {
-		return "", errors.New("lounge: ServerCode is required")
+		return "", errors.New("nowork: ServerCode is required")
 	}
 	if p.CodeChallenge == "" {
-		return "", errors.New("lounge: CodeChallenge is required (PKCE S256)")
+		return "", errors.New("nowork: CodeChallenge is required (PKCE S256)")
 	}
 	q := url.Values{}
 	for k, v := range map[string]string{"redirect_uri": p.RedirectURI, "state": p.State, "scope": p.Scope, "nonce": p.Nonce, "ui_locales": p.UILocales} {
@@ -82,17 +82,17 @@ func ParseLoginCallback(callbackURL, wantState, wantIssuer string) (string, erro
 	}
 	q := u.Query()
 	if q.Get("state") != wantState {
-		return "", errors.New("lounge: state mismatch")
+		return "", errors.New("nowork: state mismatch")
 	}
 	if wantIssuer != "" && q.Get("iss") != "" && q.Get("iss") != wantIssuer {
-		return "", errors.New("lounge: issuer mismatch")
+		return "", errors.New("nowork: issuer mismatch")
 	}
 	if e := q.Get("error"); e != "" {
 		return "", &OAuthError{Code: e, Description: q.Get("error_description")}
 	}
 	code := q.Get("code")
 	if code == "" {
-		return "", errors.New("lounge: callback has no code")
+		return "", errors.New("nowork: callback has no code")
 	}
 	return code, nil
 }

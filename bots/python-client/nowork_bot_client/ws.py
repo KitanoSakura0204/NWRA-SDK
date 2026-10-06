@@ -15,7 +15,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from .types import PluginEvent
 
-log = logging.getLogger("lounge_bot_client.ws")
+log = logging.getLogger("nowork_bot_client.ws")
 
 DEFAULT_BACKOFF = [1.0, 2.0, 5.0, 10.0, 30.0]
 

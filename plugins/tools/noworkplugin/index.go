@@ -34,7 +34,7 @@ type indexVersion struct {
 }
 
 type engines struct {
-	Lounge string `json:"lounge,omitempty"`
+	NoWork string `json:"nowork,omitempty"`
 	ABI    int    `json:"abi,omitempty"`
 }
 

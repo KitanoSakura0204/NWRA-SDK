@@ -15,9 +15,9 @@
 ## 运行
 
 ```bash
-export LOUNGE_BASE=https://account.example.com
-export LOUNGE_SERVER_KEY=lsk_xxx                 # 后台「游戏服务 → 服务器管理」生成，只显示一次
-export LOUNGE_SERVER_CODE=survival               # 用于核对加密信封的 ctx 与登录页地址
+export NOWORK_BASE=https://account.example.com
+export NOWORK_SERVER_KEY=lsk_xxx                 # 后台「游戏服务 → 服务器管理」生成，只显示一次
+export NOWORK_SERVER_CODE=survival               # 用于核对加密信封的 ctx 与登录页地址
 go run .
 ```
 
@@ -25,22 +25,22 @@ go run .
 
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
-| `LOUNGE_BASE` | `http://localhost:8081` | 用户中心地址（即 OIDC issuer） |
-| `LOUNGE_SERVER_KEY` | 必填 | 服务器密钥 |
-| `LOUNGE_SERVER_CODE` | 空 | 服务器代码；为空时只核对 `ctx` 的类型与路由 |
-| `LOUNGE_DECRYPTION_KEYS` | 空 | 私钥 JWK 文件，逗号分隔；轮换期间同时列出新旧两把 |
+| `NOWORK_BASE` | `http://localhost:8081` | 用户中心地址（即 OIDC issuer） |
+| `NOWORK_SERVER_KEY` | 必填 | 服务器密钥 |
+| `NOWORK_SERVER_CODE` | 空 | 服务器代码；为空时只核对 `ctx` 的类型与路由 |
+| `NOWORK_DECRYPTION_KEYS` | 空 | 私钥 JWK 文件，逗号分隔；轮换期间同时列出新旧两把 |
 | `OUTAGE_POLICY` | `cache` | `cache` / `deny` / `allow` |
 | `MAX_PLAYERS` | `20` | 最大人数 |
 | `HEARTBEAT_SECONDS` / `GM_POLL_SECONDS` / `WHITELIST_SYNC_MINUTES` | `60` / `15` / `5` | 定时任务间隔 |
-| `LOUNGE_WEBHOOK_SECRET` | 空 | 设置后在 `WEBHOOK_ADDR`（默认 `127.0.0.1:8095`）的 `WEBHOOK_PATH`（默认 `/lounge/webhook`）接收 Webhook |
+| `NOWORK_WEBHOOK_SECRET` | 空 | 设置后在 `WEBHOOK_ADDR`（默认 `127.0.0.1:8095`）的 `WEBHOOK_PATH`（默认 `/nowork/webhook`）接收 Webhook |
 
 Webhook 端点应订阅 `user.frozen`、`user.locked`、`user.deleted`、`game_role.reviewed`、`user.level_changed`，并绑定 public 投递规则（pairwise 端点不带 `uid`，无法对应在线玩家）。对外暴露时请放在 HTTPS 反向代理之后。
 
 ### 游戏客户端登录
 
 ```bash
-export LOUNGE_CLIENT_ID=game-client              # 后台「游戏服务 → SDK 登录页」为该服务器接入的公开客户端
-export LOUNGE_REDIRECT_URI=http://127.0.0.1:47823/cb   # 与登记的回调地址逐字符一致；留空则使用登录码模式
+export NOWORK_CLIENT_ID=game-client              # 后台「游戏服务 → SDK 登录页」为该服务器接入的公开客户端
+export NOWORK_REDIRECT_URI=http://127.0.0.1:47823/cb   # 与登记的回调地址逐字符一致；留空则使用登录码模式
 go run . login
 ```
 
@@ -56,6 +56,6 @@ go vet ./... && go test ./...
 
 # Game server example (Go)
 
-A minimal game server using the Go SDK for every server-side feature of Lounge Account: whitelist sync and join checks with an outage policy (`cache`, `deny`, `allow`); encrypted replies opened with `LOUNGE_DECRYPTION_KEYS` and checked against `server:<code>:<route>` (plain replies are refused once keys are set, and an encrypted reply that cannot be opened always rejects); heartbeat with measured TPS and the player list, then the per-server ban kick list (SERVER_USERS.md; the join check shows the ban reason); the GM channel (typed catalogue, the `worlds` option list, polling and results); webhooks that kick frozen, locked or deleted accounts at once and resync the whitelist after reviews; and `game-server-go login`, the game-client side of the SDK login page (PKCE S256, loopback redirect or code-display, token exchange, userinfo).
+A minimal game server using the Go SDK for every server-side feature of NoWork Account: whitelist sync and join checks with an outage policy (`cache`, `deny`, `allow`); encrypted replies opened with `NOWORK_DECRYPTION_KEYS` and checked against `server:<code>:<route>` (plain replies are refused once keys are set, and an encrypted reply that cannot be opened always rejects); heartbeat with measured TPS and the player list, then the per-server ban kick list (SERVER_USERS.md; the join check shows the ban reason); the GM channel (typed catalogue, the `worlds` option list, polling and results); webhooks that kick frozen, locked or deleted accounts at once and resync the whitelist after reviews; and `game-server-go login`, the game-client side of the SDK login page (PKCE S256, loopback redirect or code-display, token exchange, userinfo).
 
-Run with `LOUNGE_BASE`, `LOUNGE_SERVER_KEY` and `LOUNGE_SERVER_CODE` set, then `go run .`; type `join <name> [uuid]`, `leave <name>`, `list`, `quit`. The table above lists every variable. Subscribe the webhook endpoint to `user.frozen`, `user.locked`, `user.deleted`, `game_role.reviewed` and `user.level_changed` with a public delivery profile, and put it behind an HTTPS reverse proxy. Tests: `go vet ./... && go test ./...` (no network; shared vectors).
+Run with `NOWORK_BASE`, `NOWORK_SERVER_KEY` and `NOWORK_SERVER_CODE` set, then `go run .`; type `join <name> [uuid]`, `leave <name>`, `list`, `quit`. The table above lists every variable. Subscribe the webhook endpoint to `user.frozen`, `user.locked`, `user.deleted`, `game_role.reviewed` and `user.level_changed` with a public delivery profile, and put it behind an HTTPS reverse proxy. Tests: `go vet ./... && go test ./...` (no network; shared vectors).

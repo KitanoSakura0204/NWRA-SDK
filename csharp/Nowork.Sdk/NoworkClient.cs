@@ -3,19 +3,19 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Lounge.Sdk;
+namespace NoWork.Sdk;
 
 /// <summary>Business error (code != 0) from the user center.</summary>
 public sealed class ApiException : Exception
 {
     public int Code { get; }
-    public ApiException(int code, string message) : base($"lounge: api error {code}: {message}") => Code = code;
+    public ApiException(int code, string message) : base($"nowork: api error {code}: {message}") => Code = code;
 }
 
 /// <summary>Network / decoding failure. Decide fail-open vs fail-closed in the caller.</summary>
 public sealed class TransportException : Exception
 {
-    public TransportException(string message, Exception? inner = null) : base($"lounge: transport error: {message}", inner) { }
+    public TransportException(string message, Exception? inner = null) : base($"nowork: transport error: {message}", inner) { }
 }
 
 /// <summary>
@@ -28,20 +28,20 @@ public sealed class EncryptionException : Exception
 {
     public string Route { get; }
     public string Reason { get; }
-    public EncryptionException(string route, string reason, Exception? inner = null) : base($"lounge: encrypted response on {route}: {reason}", inner)
+    public EncryptionException(string route, string reason, Exception? inner = null) : base($"nowork: encrypted response on {route}: {reason}", inner)
     {
         Route = route;
         Reason = reason;
     }
 }
 
-/// <summary>A Server API reply as received, data left undecoded (see <see cref="LoungeClient.RawAsync"/>).</summary>
+/// <summary>A Server API reply as received, data left undecoded (see <see cref="NoworkClient.RawAsync"/>).</summary>
 /// <param name="Status">HTTP status code.</param>
 /// <param name="Headers">Response and content headers, case-insensitive.</param>
 /// <param name="Message">The envelope's message.</param>
 /// <param name="Data">The envelope's data ({"jwe": "..."} when encrypted); Undefined when absent.</param>
-/// <param name="Body">The whole response body (hand it to LoungeDelivery.OpenServerData).</param>
-/// <param name="Encrypted">X-Lounge-Encryption is set or data is exactly {"jwe": "&lt;string&gt;"}.</param>
+/// <param name="Body">The whole response body (hand it to NoWorkDelivery.OpenServerData).</param>
+/// <param name="Encrypted">X-NoWork-Encryption is set or data is exactly {"jwe": "&lt;string&gt;"}.</param>
 public sealed record RawResponse(int Status, IReadOnlyDictionary<string, string> Headers, string Message, JsonElement Data, string Body, bool Encrypted);
 
 /// <summary>One entry of the heartbeat player list (name required, uuid optional).</summary>
@@ -82,13 +82,13 @@ public sealed record CheckResult(
 }
 
 /// <summary>Server API client authenticated with X-Server-Key (player data and bans: ServerUsers.cs).</summary>
-public sealed partial class LoungeClient
+public sealed partial class NoworkClient
 {
     private readonly HttpClient _http;
     private readonly string _base;
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 
-    public LoungeClient(string baseUrl, string serverKey, HttpClient? http = null)
+    public NoworkClient(string baseUrl, string serverKey, HttpClient? http = null)
     {
         _base = baseUrl.TrimEnd('/');
         _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
@@ -98,7 +98,7 @@ public sealed partial class LoungeClient
     }
 
     /// <summary>Header marking a Server API reply whose data is the {"jwe": "..."} envelope (DELIVERY.md section 5).</summary>
-    public const string HeaderEncryption = "X-Lounge-Encryption";
+    public const string HeaderEncryption = "X-NoWork-Encryption";
 
     /// <summary>
     /// Private JWKs (JSON) that open encrypted replies (DELIVERY.md section 5); several during a key rotation.
@@ -136,9 +136,9 @@ public sealed partial class LoungeClient
     {
         var jwe = data.ValueKind == JsonValueKind.Object && data.TryGetProperty("jwe", out var j) && j.ValueKind == JsonValueKind.String ? j.GetString() : null;
         if (string.IsNullOrEmpty(jwe)) throw new EncryptionException(route, "encrypted reply without a JWE");
-        LoungeDelivery.Decrypted d;
-        try { d = LoungeDelivery.Decrypt(jwe, keys); }
-        catch (Exception e) when (e is LoungeDelivery.DecryptException or FormatException or JsonException or System.Security.Cryptography.CryptographicException or ArgumentException)
+        NoWorkDelivery.Decrypted d;
+        try { d = NoWorkDelivery.Decrypt(jwe, keys); }
+        catch (Exception e) when (e is NoWorkDelivery.DecryptException or FormatException or JsonException or System.Security.Cryptography.CryptographicException or ArgumentException)
         { throw new EncryptionException(route, "the JWE did not open", e); }
         var ctx = d.Header.ValueKind == JsonValueKind.Object && d.Header.TryGetProperty("ctx", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() ?? "" : "";
         if (!CtxMatches(ctx, route)) throw new EncryptionException(route, "envelope ctx names another route: " + ctx);

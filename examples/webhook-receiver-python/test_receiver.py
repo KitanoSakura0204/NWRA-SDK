@@ -9,17 +9,17 @@ import unittest
 
 from receiver import Receiver, SeenSet, load_keys  # first: it puts the repo's SDK on sys.path
 from events import who
-from lounge_sdk import webhook_signature
+from nowork_sdk import webhook_signature
 
-logging.getLogger("lounge").addHandler(logging.NullHandler())  # keep the expected rejections quiet
+logging.getLogger("nowork").addHandler(logging.NullHandler())  # keep the expected rejections quiet
 
 SECRET = "whsec_test"
 VECTORS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "go", "testdata", "vectors.json")
 
 
 def signed(secret, ts, body):
-    return {"Content-Type": "application/json", "X-Lounge-Timestamp": str(ts),
-            "X-Lounge-Signature": webhook_signature(secret, ts, body)}
+    return {"Content-Type": "application/json", "X-NoWork-Timestamp": str(ts),
+            "X-NoWork-Signature": webhook_signature(secret, ts, body)}
 
 
 def event(event_id, name, ts, data=None):
@@ -68,7 +68,7 @@ class ReceiverTest(unittest.TestCase):
         rc = Receiver(SECRET, flaky)
         ts = int(time.time())
         body = event("evt-3", "ping", ts)
-        with self.assertLogs("lounge.webhook", "ERROR"):
+        with self.assertLogs("nowork.webhook", "ERROR"):
             self.assertEqual(rc.handle("POST", signed(SECRET, ts, body), body)[0], 500)
         self.assertEqual(rc.handle("POST", signed(SECRET, ts, body), body), (200, {"status": "ok"}))
         self.assertEqual(calls, ["evt-3", "evt-3"])
@@ -106,7 +106,7 @@ class EncryptedTest(unittest.TestCase):
         self.assertEqual(got[0].data["user"]["nickname"], "旅行者")
 
     def test_fails_closed(self):
-        with self.assertLogs("lounge.webhook", "WARNING"):
+        with self.assertLogs("nowork.webhook", "WARNING"):
             # signed but not readable here: 500 keeps the delivery queued
             no_key = Receiver(self.v["secret"], lambda ev: None, tolerance=0)
             self.assertEqual(no_key.handle("POST", self.v["headers"], self.v["body"].encode())[0], 500)

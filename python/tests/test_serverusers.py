@@ -3,8 +3,8 @@ import unittest
 import urllib.parse
 from unittest.mock import MagicMock, patch
 
-from lounge_sdk import LoungeClient, is_version_conflict
-from lounge_sdk.errors import ApiError
+from nowork_sdk import NoworkClient, is_version_conflict
+from nowork_sdk.errors import ApiError
 
 
 def response(body, status=200):
@@ -36,7 +36,7 @@ class ServerUsersTests(unittest.TestCase):
             response({"code": 0, "data": STORED}),
             response({"code": 409, "message": "stale"}),
         ]
-        c = LoungeClient("https://account.example", "k")
+        c = NoworkClient("https://account.example", "k")
         schema = c.user_schema()
         self.assertEqual(schema.max_user_bytes, 8192)
         self.assertTrue(schema.fields[0].integer)
@@ -63,7 +63,7 @@ class ServerUsersTests(unittest.TestCase):
             response({"code": 0, "data": {"uid": 100001, "ban": BAN}}),
             response({"code": 0, "data": {"uid": 100001, "lifted": True}}),
         ]
-        c = LoungeClient("https://account.example", "k")
+        c = NoworkClient("https://account.example", "k")
         bans = c.bans(name="Steve")
         self.assertEqual((bans[0].uid, bans[0].names, bans[0].expire_time, bans[0].source), (100001, ["Steve"], None, "plugin"))
         self.assertEqual(sent(send, 0)[2], {"name": ["Steve"]})
@@ -78,7 +78,7 @@ class ServerUsersTests(unittest.TestCase):
     @patch("urllib.request.urlopen")
     def test_join_check_carries_the_ban_message(self, send):
         send.return_value = response({"code": 0, "data": {"allowed": False, "bound": True, "reason": "banned", "message": "x-ray", "player": None}})
-        r = LoungeClient("https://account.example", "k").check_whitelist("Steve")
+        r = NoworkClient("https://account.example", "k").check_whitelist("Steve")
         self.assertEqual((r.allowed, r.reason, r.message), (False, "banned", "x-ray"))
 
 

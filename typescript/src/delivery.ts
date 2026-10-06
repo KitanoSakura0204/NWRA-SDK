@@ -165,7 +165,7 @@ export async function decryptIdToken(token: string, keys: PrivateJwk | PrivateJw
 }
 
 /**
- * Open the plugin-API envelope: data {"jwe"} of a response with X-Lounge-Encryption: JWE (the whole
+ * Open the plugin-API envelope: data {"jwe"} of a response with X-NoWork-Encryption: JWE (the whole
  * body is accepted too). ctx, when set, must equal the header ctx ("server:<code>:<route>"). A plain
  * body is refused: a server that turned encryption on must not silently accept plaintext.
  */

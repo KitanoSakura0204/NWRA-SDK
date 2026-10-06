@@ -20,7 +20,7 @@ function receiver(opts = {}) {
 async function post(handler, body, headers, method = 'POST') {
   const req = Readable.from(body ? [Buffer.from(body)] : []);
   req.method = method;
-  req.url = '/lounge/webhook';
+  req.url = '/nowork/webhook';
   req.headers = Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
   const out = { status: 0, body: {} };
   const res = {
@@ -39,7 +39,7 @@ async function post(handler, body, headers, method = 'POST') {
 }
 
 async function signed(secret, ts, body) {
-  return { 'Content-Type': 'application/json', 'X-Lounge-Timestamp': String(ts), 'X-Lounge-Signature': await webhookSignature(secret, ts, body) };
+  return { 'Content-Type': 'application/json', 'X-NoWork-Timestamp': String(ts), 'X-NoWork-Signature': await webhookSignature(secret, ts, body) };
 }
 
 const now = () => Math.floor(Date.now() / 1000);
@@ -86,7 +86,7 @@ test('encrypted delivery (shared SDK vector)', { skip: !existsSync(vectorsUrl) &
   const set = JSON.parse(readFileSync(vectorsUrl, 'utf8'));
   const v = set.vectors.find((x) => x.kind === 'webhook' && !x.fail);
   assert.ok(v, 'webhook vector missing');
-  const dir = mkdtempSync(join(tmpdir(), 'lounge-recv-'));
+  const dir = mkdtempSync(join(tmpdir(), 'nowork-recv-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const file = join(dir, 'key.jwk');
   writeFileSync(file, JSON.stringify(set.keys[v.key]));

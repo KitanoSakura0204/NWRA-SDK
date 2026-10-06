@@ -1,4 +1,4 @@
-package lounge
+package nowork
 
 import (
 	"crypto/hmac"
@@ -22,10 +22,10 @@ type WebhookEvent struct {
 }
 
 // ErrWebhookSignature is returned when the signature does not match.
-var ErrWebhookSignature = errors.New("lounge: invalid webhook signature")
+var ErrWebhookSignature = errors.New("nowork: invalid webhook signature")
 
 // ErrWebhookStale is returned when the timestamp is outside the tolerance window.
-var ErrWebhookStale = errors.New("lounge: webhook timestamp outside tolerance")
+var ErrWebhookStale = errors.New("nowork: webhook timestamp outside tolerance")
 
 // WebhookSignature computes sha256=HMAC_SHA256(secret, "<ts>.<body>").
 func WebhookSignature(secret string, ts int64, body []byte) string {
@@ -36,10 +36,10 @@ func WebhookSignature(secret string, ts int64, body []byte) string {
 	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 }
 
-// VerifyWebhook checks the X-Lounge-Signature / X-Lounge-Timestamp headers against body.
+// VerifyWebhook checks the X-NoWork-Signature / X-NoWork-Timestamp headers against body.
 // tolerance limits replay (0 disables the check).
 func VerifyWebhook(secret string, headers http.Header, body []byte, tolerance time.Duration) (*WebhookEvent, error) {
-	tsRaw := strings.TrimSpace(headers.Get("X-Lounge-Timestamp"))
+	tsRaw := strings.TrimSpace(headers.Get("X-NoWork-Timestamp"))
 	ts, err := strconv.ParseInt(tsRaw, 10, 64)
 	if err != nil {
 		return nil, ErrWebhookSignature
@@ -50,7 +50,7 @@ func VerifyWebhook(secret string, headers http.Header, body []byte, tolerance ti
 		}
 	}
 	expect := WebhookSignature(secret, ts, body)
-	if !hmac.Equal([]byte(expect), []byte(strings.TrimSpace(headers.Get("X-Lounge-Signature")))) {
+	if !hmac.Equal([]byte(expect), []byte(strings.TrimSpace(headers.Get("X-NoWork-Signature")))) {
 		return nil, ErrWebhookSignature
 	}
 	var ev WebhookEvent

@@ -1,4 +1,4 @@
-# @lounge/bot-client
+# @nowork/bot-client
 
 休息室账号「机器人 API」(`/api/bot/v1`) 的最小 TypeScript 客户端，供 Koishi、Wechaty 插件共用，避免重复实现鉴权、信封解析和事件重连逻辑。不直接给用户使用；如果你在写自己的机器人框架插件，可以参照本包或直接实现协议（见 `SDK/docs/BOTS_SDK.md`）。
 
@@ -9,9 +9,9 @@
 ## 用法
 
 ```ts
-import { BotClient, connectEvents, textMessage } from "@lounge/bot-client";
+import { BotClient, connectEvents, textMessage } from "@nowork/bot-client";
 
-const client = new BotClient({ baseUrl: "https://lounge.example.com", token: "<bot token>" });
+const client = new BotClient({ baseUrl: "https://nowork.example.com", token: "<bot token>" });
 
 // 绑定
 const bound = await client.bind("qq", "10001", "ABC123", "昵称");
@@ -30,7 +30,7 @@ const { handled, reply } = await client.command({
 
 // 接收站点推送的通知（WebSocket，自动重连 + 应答 ack）
 const stop = connectEvents({
-  baseUrl: "https://lounge.example.com",
+  baseUrl: "https://nowork.example.com",
   token: "<bot token>",
   onEvent: (ev) => {
     console.log("notify", ev.target, ev.message);
@@ -56,9 +56,9 @@ npm test
 
 ---
 
-# @lounge/bot-client (English)
+# @nowork/bot-client (English)
 
-Minimal TypeScript client for the Lounge Bot API (`/api/bot/v1`), shared by the Koishi and
+Minimal TypeScript client for the NoWork Bot API (`/api/bot/v1`), shared by the Koishi and
 Wechaty plugins in this directory so they don't duplicate auth, envelope parsing and the
 WebSocket reconnect logic. Not meant for end users directly; if you're writing a plugin for
 another framework, use this package or implement the protocol yourself (see

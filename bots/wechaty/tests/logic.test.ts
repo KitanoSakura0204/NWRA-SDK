@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BotApiError } from "@lounge/bot-client";
+import { BotApiError } from "@nowork/bot-client";
 import { chatAllowed, doBind, doMe, doPassthrough, doUnbind, parseCommand } from "../src/logic.js";
 
-/** A fake BotClient: same method shapes as @lounge/bot-client's BotClient, no network. */
+/** A fake BotClient: same method shapes as @nowork/bot-client's BotClient, no network. */
 class FakeClient {
   calls: Record<string, unknown>[] = [];
   bindResult: unknown = { userId: 1, uid: 100001, nickname: "Ada", level: 2 };

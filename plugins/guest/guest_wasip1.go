@@ -7,24 +7,24 @@ import (
 	"unsafe"
 )
 
-// Host ABI v1, import module "lounge" (see SDK/plugins/ABI.md).
+// Host ABI v1, import module "nowork" (see SDK/plugins/ABI.md).
 
-//go:wasmimport lounge input_len
+//go:wasmimport nowork input_len
 func hostInputLen() int32
 
-//go:wasmimport lounge input_read
+//go:wasmimport nowork input_read
 func hostInputRead(ptr unsafe.Pointer, n uint32) int32
 
-//go:wasmimport lounge output_write
+//go:wasmimport nowork output_write
 func hostOutputWrite(ptr unsafe.Pointer, n uint32) int32
 
-//go:wasmimport lounge log
+//go:wasmimport nowork log
 func hostLog(level uint32, ptr unsafe.Pointer, n uint32) int32
 
-//go:wasmimport lounge call
+//go:wasmimport nowork call
 func hostCall(namePtr unsafe.Pointer, nameLen uint32, argsPtr unsafe.Pointer, argsLen uint32) int32
 
-//go:wasmimport lounge result_read
+//go:wasmimport nowork result_read
 func hostResultRead(ptr unsafe.Pointer, n uint32) int32
 
 func ptr(b []byte) unsafe.Pointer {

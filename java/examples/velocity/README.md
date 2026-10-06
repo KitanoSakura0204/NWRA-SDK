@@ -8,12 +8,12 @@
 dependencies {
     compileOnly("com.velocitypowered:velocity-api:3.3.0-SNAPSHOT")
     annotationProcessor("com.velocitypowered:velocity-api:3.3.0-SNAPSHOT")
-    implementation("cyou.lounge:lounge-sdk:1.0.0") // 或直接把 src/main/java/cyou/lounge/sdk 拷进插件
+    implementation("cyou.nowork:nowork-sdk:1.0.0") // 或直接把 src/main/java/cyou/nowork/sdk 拷进插件
 }
 ```
 
 ```java
-package cyou.lounge.example.velocity;
+package cyou.nowork.example.velocity;
 
 import com.google.inject.Inject;
 import com.velocitypowered.api.event.Subscribe;
@@ -22,8 +22,8 @@ import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.event.ResultedEvent.ComponentResult;
-import cyou.lounge.sdk.LoungeClient;
-import cyou.lounge.sdk.LoungeException;
+import cyou.nowork.sdk.NoworkClient;
+import cyou.nowork.sdk.NoWorkException;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.slf4j.Logger;
@@ -33,17 +33,17 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-@Plugin(id = "lounge-whitelist", name = "Lounge Whitelist", version = "1.0.0")
-public final class LoungeVelocityPlugin {
+@Plugin(id = "nowork-whitelist", name = "NoWork Whitelist", version = "1.0.0")
+public final class NoWorkVelocityPlugin {
 
     private final ProxyServer proxy;
     private final Logger logger;
-    private LoungeClient lounge;
+    private NoworkClient nowork;
     /** 最近一次校验结果缓存, 网络故障时兜底 */
     private final Map<UUID, Boolean> cache = new ConcurrentHashMap<>();
 
     @Inject
-    public LoungeVelocityPlugin(ProxyServer proxy, Logger logger) {
+    public NoWorkVelocityPlugin(ProxyServer proxy, Logger logger) {
         this.proxy = proxy;
         this.logger = logger;
     }
@@ -51,11 +51,11 @@ public final class LoungeVelocityPlugin {
     @Subscribe
     public void onInit(ProxyInitializeEvent e) {
         // 建议从 config 读取; 服务器密钥在后台「服务器管理 → 密钥」生成, 只显示一次
-        lounge = new LoungeClient(System.getenv("LOUNGE_BASE"), System.getenv("LOUNGE_SERVER_KEY"));
+        nowork = new NoworkClient(System.getenv("NOWORK_BASE"), System.getenv("NOWORK_SERVER_KEY"));
         proxy.getScheduler().buildTask(this, () -> {
             try {
-                lounge.heartbeat(proxy.getPlayerCount(), proxy.getConfiguration().getShowMaxPlayers(), proxy.getVersion().getVersion());
-            } catch (LoungeException ex) {
+                nowork.heartbeat(proxy.getPlayerCount(), proxy.getConfiguration().getShowMaxPlayers(), proxy.getVersion().getVersion());
+            } catch (NoWorkException ex) {
                 logger.warn("heartbeat failed: {}", ex.getMessage());
             }
         }).repeat(Duration.ofSeconds(60)).schedule();
@@ -66,19 +66,19 @@ public final class LoungeVelocityPlugin {
         UUID uuid = e.getPlayer().getUniqueId();
         String name = e.getPlayer().getUsername();
         try {
-            LoungeClient.CheckResult r = lounge.checkWhitelist(name, uuid.toString());
+            NoworkClient.CheckResult r = nowork.checkWhitelist(name, uuid.toString());
             cache.put(uuid, r.allowed);
             if (!r.allowed) {
                 e.setResult(ComponentResult.denied(Component.text("请先在用户中心绑定角色", NamedTextColor.RED)
                         .append(Component.newline())
                         .append(Component.text("原因: " + r.reason, NamedTextColor.GRAY))));
             }
-        } catch (LoungeException.Transport ex) {
+        } catch (NoWorkException.Transport ex) {
             // 账号中心不可达: 有缓存按缓存, 无缓存拒绝 (fail-closed)
             if (!cache.getOrDefault(uuid, false)) {
                 e.setResult(ComponentResult.denied(Component.text("账号服务暂不可用, 请稍后再试", NamedTextColor.RED)));
             }
-        } catch (LoungeException ex) {
+        } catch (NoWorkException ex) {
             logger.warn("whitelist check failed: {}", ex.getMessage());
         }
     }

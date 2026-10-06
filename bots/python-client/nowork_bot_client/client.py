@@ -1,4 +1,4 @@
-"""Synchronous and async HTTP client for the Lounge Bot API (/api/bot/v1)."""
+"""Synchronous and async HTTP client for the NoWork Bot API (/api/bot/v1)."""
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional

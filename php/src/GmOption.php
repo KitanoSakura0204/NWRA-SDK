@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Lounge\Sdk;
+namespace NoWork\Sdk;
 
 /** One choice of a select parameter or of a named option list (PROTOCOL 2.4). */
 final class GmOption implements \JsonSerializable

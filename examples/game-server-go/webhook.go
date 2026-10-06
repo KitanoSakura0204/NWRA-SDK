@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	lounge "github.com/wangework/lounge-sdk-go"
+	nowork "github.com/wangework/nowork-sdk-go"
 )
 
 // hooks receives the user center's webhooks and applies the ones that matter to a running game
@@ -19,7 +19,7 @@ import (
 type hooks struct {
 	secret    string
 	tolerance time.Duration
-	keys      []*lounge.DecryptionKey
+	keys      []*nowork.DecryptionKey
 	world     *world
 	resync    func()
 	logf      func(string, ...any)
@@ -46,8 +46,8 @@ func (h *hooks) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "payload too large", http.StatusRequestEntityTooLarge)
 		return
 	}
-	ev, err := lounge.VerifyWebhook(h.secret, r.Header, body, h.tolerance)
-	if errors.Is(err, lounge.ErrWebhookSignature) || errors.Is(err, lounge.ErrWebhookStale) {
+	ev, err := nowork.VerifyWebhook(h.secret, r.Header, body, h.tolerance)
+	if errors.Is(err, nowork.ErrWebhookSignature) || errors.Is(err, nowork.ErrWebhookStale) {
 		http.Error(w, "invalid signature", http.StatusUnauthorized)
 		return
 	}
@@ -55,7 +55,7 @@ func (h *hooks) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid payload", http.StatusBadRequest)
 		return
 	}
-	encrypted := strings.EqualFold(r.Header.Get(lounge.HeaderEncryption), "JWE") || hasJWE(body)
+	encrypted := strings.EqualFold(r.Header.Get(nowork.HeaderEncryption), "JWE") || hasJWE(body)
 	switch {
 	case encrypted && len(h.keys) == 0, !encrypted && len(h.keys) > 0:
 		// signed but not readable here (key rotation or a configuration mismatch): 500 keeps it queued
@@ -63,7 +63,7 @@ func (h *hooks) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "cannot decrypt", http.StatusInternalServerError)
 		return
 	case encrypted:
-		if ev, err = lounge.OpenWebhook(body, h.keys...); err != nil {
+		if ev, err = nowork.OpenWebhook(body, h.keys...); err != nil {
 			h.logf("webhook: %v", err)
 			http.Error(w, "cannot decrypt", http.StatusInternalServerError)
 			return
@@ -77,7 +77,7 @@ func (h *hooks) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (h *hooks) apply(ev *lounge.WebhookEvent) {
+func (h *hooks) apply(ev *nowork.WebhookEvent) {
 	var d accountEvent
 	_ = json.Unmarshal(ev.Data, &d) // unknown shapes leave d empty: nothing to do
 	switch ev.Event {

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Lounge\Sdk;
+namespace NoWork\Sdk;
 
-use Lounge\Sdk\Exceptions\DecryptError;
+use NoWork\Sdk\Exceptions\DecryptError;
 
 /**
  * Delivery helpers (SDK/docs/DELIVERY.md): decrypt what the user centre sends when an app registered an

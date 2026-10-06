@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Lounge\Sdk;
+namespace NoWork\Sdk;
 
-use Lounge\Sdk\Internal\Json;
+use NoWork\Sdk\Internal\Json;
 
 /**
  * What a GM publish stored; entries the server could not accept are skipped and listed, never a failure for

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from lounge_bot_client import BotApiError, BotClient
+from nowork_bot_client import BotApiError, BotClient
 
-from .convert import lounge_message_to_text
+from .convert import nowork_message_to_text
 
 
 async def do_bind(client: BotClient, platform: str, user_id: str, name: str, code: str) -> str:
@@ -53,7 +53,7 @@ async def do_passthrough(
         return None
     if not result.handled:
         return None
-    return lounge_message_to_text(result.reply) or None
+    return nowork_message_to_text(result.reply) or None
 
 
 def chat_allowed(allowed_chats: List[str], chat_id: str) -> bool:

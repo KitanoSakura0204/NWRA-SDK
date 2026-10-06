@@ -2,7 +2,7 @@
  * The webhook endpoint as a plain `node:http` handler, independent of the listener
  * so tests can call it directly:
  *
- * - verifies X-Lounge-Signature / X-Lounge-Timestamp over the raw body
+ * - verifies X-NoWork-Signature / X-NoWork-Timestamp over the raw body
  * - opens encrypted deliveries (JWE, SDK/docs/DELIVERY.md section 6)
  * - de-duplicates deliveries by event id (in-memory LRU)
  */
@@ -77,7 +77,7 @@ function header(req: IncomingMessage, name: string): string {
   return Array.isArray(v) ? (v[0] ?? '') : (v ?? '');
 }
 
-/** Detects the encrypted shape even when a proxy dropped the X-Lounge-Encryption header. */
+/** Detects the encrypted shape even when a proxy dropped the X-NoWork-Encryption header. */
 function hasJwe(text: string): boolean {
   try {
     return typeof JSON.parse(text)?.jwe === 'string';
@@ -92,7 +92,7 @@ function hasJwe(text: string): boolean {
  * signed outer ones and that the header ctx is "webhook:<endpoint id>").
  */
 async function open(req: IncomingMessage, text: string, ev: WebhookEvent, keys: PrivateJwk[]): Promise<WebhookEvent> {
-  const encrypted = header(req, 'X-Lounge-Encryption').toUpperCase() === 'JWE' || hasJwe(text);
+  const encrypted = header(req, 'X-NoWork-Encryption').toUpperCase() === 'JWE' || hasJwe(text);
   if (!encrypted) {
     // Refuse plaintext from an endpoint that should encrypt rather than silently accept it.
     if (keys.length > 0) throw new OpenError('decryption keys configured but the delivery is not encrypted');
@@ -118,7 +118,7 @@ export function createReceiver(opts: ReceiverOptions): (req: IncomingMessage, re
       res.setHeader('Allow', 'POST');
       return json(res, 405, { error: 'method not allowed' });
     }
-    const delivery = header(req, 'X-Lounge-Delivery');
+    const delivery = header(req, 'X-NoWork-Delivery');
 
     let body: Buffer;
     try {

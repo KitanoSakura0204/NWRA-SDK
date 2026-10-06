@@ -1,12 +1,12 @@
-class LoungeError(Exception):
+class NoWorkError(Exception):
     """Base error."""
 
 
-class TransportError(LoungeError):
+class TransportError(NoWorkError):
     """Network or decoding failure; the caller decides fail-open vs fail-closed."""
 
 
-class EncryptionError(LoungeError):
+class EncryptionError(NoWorkError):
     """A Server API reply was encrypted and could not be used (no decryption key configured).
 
     Not a TransportError on purpose: the data was never read, so never fail open on it (an
@@ -19,7 +19,7 @@ class EncryptionError(LoungeError):
         self.reason = reason
 
 
-class ApiError(LoungeError):
+class ApiError(NoWorkError):
     """Business error (code != 0)."""
 
     def __init__(self, code: int, message: str):
@@ -28,7 +28,7 @@ class ApiError(LoungeError):
         self.message = message
 
 
-class OAuthError(LoungeError):
+class OAuthError(NoWorkError):
     """RFC 6749 error."""
 
     def __init__(self, error: str, description: str = "", status: int = 0):

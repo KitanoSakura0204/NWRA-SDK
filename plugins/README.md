@@ -1,4 +1,4 @@
-# Lounge 插件 SDK
+# NoWork 插件 SDK
 
 用户中心的**运行时插件**：管理员上传（或从插件市场下载）一个签名插件包、确认权限后启用，不需要重新构建服务器。架构与运维说明见根目录 `docs/PLUGINS.md`。
 
@@ -26,7 +26,7 @@ cd SDK/plugins/examples/hello
 ./build.sh            # Windows: .\build.ps1
 ```
 
-脚本做三件事：`GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o plugin.wasm .`；第一次运行时生成开发密钥 `dev.key` / `dev.pub`；用 `tools/loungeplugin` 打包并签名为 `dist/com.example.hello-1.0.0.zip`。
+脚本做三件事：`GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o plugin.wasm .`；第一次运行时生成开发密钥 `dev.key` / `dev.pub`；用 `tools/noworkplugin` 打包并签名为 `dist/com.example.hello-1.0.0.zip`。
 
 然后在后台「系统 → 插件市场」：
 
@@ -44,19 +44,19 @@ plugins/
 ├── examples/hello/         # Go → WebAssembly 示例 (事件、过滤、GM、任务、页面 + 桥接)
 ├── examples/external-app/  # 外部应用示例 (标准库, 校验签名、用令牌回调)
 ├── schema/                 # 标准 1.1 的 JSON Schema (plugin.json / index.json) 与校验器
-└── tools/loungeplugin/     # keygen / pack / verify / index / lint (只用标准库)
+└── tools/noworkplugin/     # keygen / pack / verify / index / lint (只用标准库)
 ```
 
 ## 打包与签名
 
 ```bash
-go run ./tools/loungeplugin keygen -out publisher          # publisher.key 保密, publisher.pub 给管理员
-go run ./tools/loungeplugin pack -dir my-plugin -key publisher.key -out dist
-go run ./tools/loungeplugin verify -zip dist/<id>-<version>.zip -pub publisher.pub
-go run ./tools/loungeplugin lint -dir my-plugin                              # 按标准 1.1 检查
-go run ./tools/loungeplugin index -dir dist -name "我的插件" > index.json   # 自建插件市场 (索引 1.1)
+go run ./tools/noworkplugin keygen -out publisher          # publisher.key 保密, publisher.pub 给管理员
+go run ./tools/noworkplugin pack -dir my-plugin -key publisher.key -out dist
+go run ./tools/noworkplugin verify -zip dist/<id>-<version>.zip -pub publisher.pub
+go run ./tools/noworkplugin lint -dir my-plugin                              # 按标准 1.1 检查
+go run ./tools/noworkplugin index -dir dist -name "我的插件" > index.json   # 自建插件市场 (索引 1.1)
 ```
 
 `pack` 收录插件目录下除 `*.go`、`go.mod`、`go.sum`、构建脚本、密钥、隐藏文件与 `dist/` 以外的全部文件，zip 可复现（固定时间戳、排序）。签名算法见 [ABI.md §6](ABI.md#6-插件包与签名)。私钥永远不要提交或放进插件包。发布、版本、审核、密钥轮换与撤回见 [PUBLISHING.md](PUBLISHING.md)。
 
-其他语言：任何能编译到 `wasm32-wasi`（或纯 `wasm32`）、导出 `memory` 与 `() -> i32` 处理函数、按 ABI 导入 `lounge.*` 的语言都可以（Rust、TinyGo、AssemblyScript、C）。
+其他语言：任何能编译到 `wasm32-wasi`（或纯 `wasm32`）、导出 `memory` 与 `() -> i32` 处理函数、按 ABI 导入 `nowork.*` 的语言都可以（Rust、TinyGo、AssemblyScript、C）。

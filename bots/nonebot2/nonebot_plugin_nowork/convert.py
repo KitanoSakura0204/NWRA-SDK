@@ -1,4 +1,4 @@
-"""Converts between a NoneBot Event and the Lounge Bot API's generic shapes.
+"""Converts between a NoneBot Event and the NoWork Bot API's generic shapes.
 
 Deliberately adapter-agnostic: every NoneBot adapter's Event exposes get_user_id(),
 get_session_id() and is_tome() the same way (nonebot.adapters.Event base class), which is
@@ -12,8 +12,8 @@ from typing import Optional
 
 from nonebot.adapters import Event
 
-from lounge_bot_client import Message as LoungeMessage
-from lounge_bot_client import Segment
+from nowork_bot_client import Message as NoworkMessage
+from nowork_bot_client import Segment
 
 
 def chat_type_of(event: Event) -> str:
@@ -48,14 +48,14 @@ def sender_name_of(event: Event) -> str:
     return ""
 
 
-def to_lounge_message(text: str) -> LoungeMessage:
+def to_nowork_message(text: str) -> NoworkMessage:
     """A plain-text message; segments beyond text are not needed for replies the plugin
     itself sends (bind / unbind / me confirmations)."""
     return [{"type": "text", "data": {"text": text}}]
 
 
-def lounge_message_to_text(message: Optional[LoungeMessage]) -> str:
-    """Renders a Lounge Message (from /command or a pushed notification) down to plain
+def nowork_message_to_text(message: Optional[NoworkMessage]) -> str:
+    """Renders a NoWork Message (from /command or a pushed notification) down to plain
     text for adapters this plugin sends through generically. Non-text segments degrade to
     a bracketed placeholder rather than being dropped silently."""
     if not message:

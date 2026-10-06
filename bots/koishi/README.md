@@ -1,6 +1,6 @@
-# koishi-plugin-lounge
+# koishi-plugin-nowork
 
-休息室账号（Lounge Account）的 Koishi v4 插件：`bind` / `unbind` / `me` 指令，以及把其余聊天内容转发给站点的指令注册表（`/api/bot/v1/command`），同时通过 WebSocket 接收站点推送的通知并发送到对应会话。
+休息室账号（NoWork Account）的 Koishi v4 插件：`bind` / `unbind` / `me` 指令，以及把其余聊天内容转发给站点的指令注册表（`/api/bot/v1/command`），同时通过 WebSocket 接收站点推送的通知并发送到对应会话。
 
 适配器无关：只使用 Koishi `Session` 的通用字段（`userId` / `channelId` / `guildId` / `platform` / `isDirect` / `content`），理论上适用于任意已安装的 Koishi 适配器（OneBot、Discord、Telegram、Lark/飞书……）；发送通知时用 `ctx.bots` 里第一个在线的机器人和 Koishi 统一的 `bot.sendMessage()`，这是 Koishi 自身的跨适配器发送 API，不需要按平台分支。
 
@@ -12,7 +12,7 @@
 npm install /path/to/D:/Project/Admin/SDK/bots/koishi
 ```
 
-然后在 Koishi 控制台或 `koishi.yml` 里启用 `lounge` 插件并填写配置。
+然后在 Koishi 控制台或 `koishi.yml` 里启用 `nowork` 插件并填写配置。
 
 ## 配置
 
@@ -45,9 +45,9 @@ npm test
 
 ---
 
-# koishi-plugin-lounge (English)
+# koishi-plugin-nowork (English)
 
-A Koishi v4 plugin for Lounge Account: `bind` / `unbind` / `me` commands, plus a middleware
+A Koishi v4 plugin for NoWork Account: `bind` / `unbind` / `me` commands, plus a middleware
 that bridges any other chat text to the site's command registry
 (`/api/bot/v1/command`). It also opens a WebSocket to the site's notification stream and
 sends pushed notifications to the right chat.
@@ -58,7 +58,7 @@ Adapter-agnostic: only uses `Session`'s generic fields (`userId`, `channelId`, `
 
 ## Install
 
-Not published to npm; install from the local path during development, then enable `lounge`
+Not published to npm; install from the local path during development, then enable `nowork`
 in your Koishi config with `baseUrl` and `botToken` set.
 
 ## Config

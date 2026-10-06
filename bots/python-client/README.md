@@ -1,6 +1,6 @@
-# lounge-bot-client
+# nowork-bot-client
 
-休息室账号「机器人 API」(`/api/bot/v1`) 的最小 Python 客户端，供 `nonebot-plugin-lounge` 使用，避免重复实现鉴权、信封解析和事件重连逻辑。
+休息室账号「机器人 API」(`/api/bot/v1`) 的最小 Python 客户端，供 `nonebot-plugin-nowork` 使用，避免重复实现鉴权、信封解析和事件重连逻辑。
 
 ## 安装
 
@@ -9,9 +9,9 @@
 ## 用法
 
 ```python
-from lounge_bot_client import BotClient, connect_events
+from nowork_bot_client import BotClient, connect_events
 
-client = BotClient("https://lounge.example.com", "<bot token>")
+client = BotClient("https://nowork.example.com", "<bot token>")
 
 # 绑定
 bound = await client.bind("qq", "10001", "ABC123", "昵称")
@@ -26,7 +26,7 @@ result = await client.command("qq", "10001", "group", "g1", "/me")
 async def on_event(ev):
     print("notify", ev.target, ev.message)
 
-await connect_events("https://lounge.example.com", "<bot token>", on_event)
+await connect_events("https://nowork.example.com", "<bot token>", on_event)
 ```
 
 没有 WebSocket 的环境可改用轮询：`await client.poll_events()` 取回当前到期的通知，处理后调用 `await client.ack_events([id, ...])`。
@@ -46,10 +46,10 @@ pytest
 
 ---
 
-# lounge-bot-client (English)
+# nowork-bot-client (English)
 
-Minimal Python client for the Lounge Bot API (`/api/bot/v1`), used by
-`nonebot-plugin-lounge` to avoid duplicating auth, envelope parsing and the WebSocket
+Minimal Python client for the NoWork Bot API (`/api/bot/v1`), used by
+`nonebot-plugin-nowork` to avoid duplicating auth, envelope parsing and the WebSocket
 reconnect logic.
 
 ## Install

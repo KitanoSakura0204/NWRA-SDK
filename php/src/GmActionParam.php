@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Lounge\Sdk;
+namespace NoWork\Sdk;
 
 /**
  * One input of a GM action (PROTOCOL 2.4). Only name / type / required / label existed before 2026-09-28;

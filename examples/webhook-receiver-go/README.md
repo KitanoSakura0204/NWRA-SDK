@@ -2,27 +2,27 @@
 
 > English version below.
 
-一个只依赖标准库 + Go SDK 的 Webhook 接收服务：校验 `X-Lounge-Signature`、解密加密投递（JWE）、按事件 `id` 幂等，处理 `game_role.reviewed` / `user.deleted` / `server.offline` / `user.level_changed` / `connection.bound` / `connection.unbound` 并打印日志。可直接作为自己接收端的起点。
+一个只依赖标准库 + Go SDK 的 Webhook 接收服务：校验 `X-NoWork-Signature`、解密加密投递（JWE）、按事件 `id` 幂等，处理 `game_role.reviewed` / `user.deleted` / `server.offline` / `user.level_changed` / `connection.bound` / `connection.unbound` 并打印日志。可直接作为自己接收端的起点。
 
 ## 运行
 
 ```bash
 cd SDK/examples/webhook-receiver-go
-export LOUNGE_WEBHOOK_SECRET=whsec_xxx   # 后台「开放平台 → Webhook」新建 Webhook 时显示（只显示一次，可「重置密钥」）
+export NOWORK_WEBHOOK_SECRET=whsec_xxx   # 后台「开放平台 → Webhook」新建 Webhook 时显示（只显示一次，可「重置密钥」）
 go run .
-# 2026/09/29 20:00:00 listening on :8090/lounge/webhook (timestamp tolerance 5m0s, 0 decryption key(s))
+# 2026/09/29 20:00:00 listening on :8090/nowork/webhook (timestamp tolerance 5m0s, 0 decryption key(s))
 ```
 
-`go.mod` 通过 `replace ../../go` 直接使用仓库内的 SDK 源码；单独拷走这个目录时，把 `replace` 删掉并 `go get github.com/wangework/lounge-sdk-go` 即可。
+`go.mod` 通过 `replace ../../go` 直接使用仓库内的 SDK 源码；单独拷走这个目录时，把 `replace` 删掉并 `go get github.com/wangework/nowork-sdk-go` 即可。
 
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `LOUNGE_WEBHOOK_SECRET` | 必填 | 端点签名密钥 |
+| `NOWORK_WEBHOOK_SECRET` | 必填 | 端点签名密钥 |
 | `LISTEN_ADDR` | `:8090` | 监听地址 |
-| `WEBHOOK_PATH` | `/lounge/webhook` | 接收路径（后台端点 URL 需与之一致，例如 `https://hooks.example.com/lounge/webhook`） |
+| `WEBHOOK_PATH` | `/nowork/webhook` | 接收路径（后台端点 URL 需与之一致，例如 `https://hooks.example.com/nowork/webhook`） |
 | `WEBHOOK_TOLERANCE` | `300` | 允许的时间戳偏差（秒），`0` 关闭检查 |
 | `SEEN_CAPACITY` | `10000` | 幂等缓存保留的事件 id 数量 |
-| `LOUNGE_DECRYPTION_KEYS` | 空 | 私钥 JWK 文件路径，逗号分隔（轮换期间填新旧两把）；留空表示端点未加密 |
+| `NOWORK_DECRYPTION_KEYS` | 空 | 私钥 JWK 文件路径，逗号分隔（轮换期间填新旧两把）；留空表示端点未加密 |
 
 在 Webhook 的「订阅事件」里勾选需要的事件即可；未订阅的事件不会推送，收到未处理的事件本示例也会返回 200（打印 `ignored`）。
 
@@ -38,19 +38,19 @@ go run .
 | 签名正确但无法解密（缺私钥、密钥不符，或配置了私钥却收到明文） | `500` | 同上；补上私钥后重试即可成功 |
 | 请求体超过 1 MiB | `413` | 同上 |
 
-签名是对 `<X-Lounge-Timestamp>.<原始请求体>` 做 HMAC-SHA256，所以**必须用原始字节校验**，不要先反序列化再序列化；反向代理也不能改写请求体。
+签名是对 `<X-NoWork-Timestamp>.<原始请求体>` 做 HMAC-SHA256，所以**必须用原始字节校验**，不要先反序列化再序列化；反向代理也不能改写请求体。
 
 幂等缓存是进程内 LRU（`lru.go`）。多实例部署时请换成共享存储（Redis `SET NX EX`、数据库唯一索引等），并把 `id` 作为键。
 
 ## 加密投递（JWE）
 
-Webhook 绑定的投递配置开启 `webhook.encrypt` 后（后台「开放平台 → 数据投递」，见 `SDK/docs/DELIVERY.md` 第 6 节），请求体变为 `{"id","event","timestamp","jwe"}` 并带 `X-Lounge-Encryption: JWE`。本示例（`jwe.go`）：
+Webhook 绑定的投递配置开启 `webhook.encrypt` 后（后台「开放平台 → 数据投递」，见 `SDK/docs/DELIVERY.md` 第 6 节），请求体变为 `{"id","event","timestamp","jwe"}` 并带 `X-NoWork-Encryption: JWE`。本示例（`jwe.go`）：
 
 1. 先对原始请求体验签（签名覆盖的就是这个外层请求体）；
-2. 再用 `lounge.OpenWebhook` 解密，它会核对内层的 `id` / `event` / `timestamp` 与外层一致、受保护头 `ctx` 为 `webhook:<端点 ID>`；
+2. 再用 `nowork.OpenWebhook` 解密，它会核对内层的 `id` / `event` / `timestamp` 与外层一致、受保护头 `ctx` 为 `webhook:<端点 ID>`；
 3. 配置了私钥却收到明文时拒绝（`500`），避免把本该加密的数据当明文接收。
 
-私钥只放在接收端，后台只上传公钥 JWK。轮换时先把新私钥加进 `LOUNGE_DECRYPTION_KEYS`（`new.jwk,old.jwk`），再在后台启用新公钥；过渡期结束后删掉旧私钥。
+私钥只放在接收端，后台只上传公钥 JWK。轮换时先把新私钥加进 `NOWORK_DECRYPTION_KEYS`（`new.jwk,old.jwk`），再在后台启用新公钥；过渡期结束后删掉旧私钥。
 
 ## 成对匿名标识（pairwise）
 
@@ -90,10 +90,10 @@ SECRET=whsec_xxx
 TS=$(date +%s)
 BODY='{"id":"test-1","event":"game_role.reviewed","timestamp":'$TS',"data":{"roleId":1,"userId":100,"serverId":1,"roleName":"Steve","roleUuid":"069a79f4-44e9-4726-a5be-fca90e38aaf5","status":1,"reviewerId":1}}'
 SIG=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | sed 's/^.* //')
-curl -i -X POST http://127.0.0.1:8090/lounge/webhook \
+curl -i -X POST http://127.0.0.1:8090/nowork/webhook \
   -H 'Content-Type: application/json' \
-  -H 'X-Lounge-Event: game_role.reviewed' -H 'X-Lounge-Delivery: 1' \
-  -H "X-Lounge-Timestamp: $TS" -H "X-Lounge-Signature: sha256=$SIG" \
+  -H 'X-NoWork-Event: game_role.reviewed' -H 'X-NoWork-Delivery: 1' \
+  -H "X-NoWork-Timestamp: $TS" -H "X-NoWork-Signature: sha256=$SIG" \
   --data-binary "$BODY"
 ```
 
@@ -111,26 +111,26 @@ go vet ./... && go test ./... && go build .
 
 # Webhook receiver example (Go)
 
-A webhook endpoint that needs only the standard library and the Go SDK. It verifies `X-Lounge-Signature`, opens encrypted deliveries (JWE), is idempotent by event `id`, and logs `game_role.reviewed`, `user.deleted`, `server.offline`, `user.level_changed`, `connection.bound` and `connection.unbound`. Use it as the starting point for your own receiver.
+A webhook endpoint that needs only the standard library and the Go SDK. It verifies `X-NoWork-Signature`, opens encrypted deliveries (JWE), is idempotent by event `id`, and logs `game_role.reviewed`, `user.deleted`, `server.offline`, `user.level_changed`, `connection.bound` and `connection.unbound`. Use it as the starting point for your own receiver.
 
 ## Run
 
 ```bash
 cd SDK/examples/webhook-receiver-go
-export LOUNGE_WEBHOOK_SECRET=whsec_xxx   # shown once when you create the webhook in 开放平台 → Webhook (Open Platform → Webhooks); 重置密钥 rotates it
+export NOWORK_WEBHOOK_SECRET=whsec_xxx   # shown once when you create the webhook in 开放平台 → Webhook (Open Platform → Webhooks); 重置密钥 rotates it
 go run .
 ```
 
-`go.mod` uses the SDK source in this repo through `replace ../../go`. If you copy the directory elsewhere, delete the `replace` line and run `go get github.com/wangework/lounge-sdk-go`.
+`go.mod` uses the SDK source in this repo through `replace ../../go`. If you copy the directory elsewhere, delete the `replace` line and run `go get github.com/wangework/nowork-sdk-go`.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `LOUNGE_WEBHOOK_SECRET` | required | the endpoint's signing secret |
+| `NOWORK_WEBHOOK_SECRET` | required | the endpoint's signing secret |
 | `LISTEN_ADDR` | `:8090` | listen address |
-| `WEBHOOK_PATH` | `/lounge/webhook` | path; the webhook URL in the console must match it |
+| `WEBHOOK_PATH` | `/nowork/webhook` | path; the webhook URL in the console must match it |
 | `WEBHOOK_TOLERANCE` | `300` | allowed timestamp skew in seconds, `0` turns the check off |
 | `SEEN_CAPACITY` | `10000` | event ids kept for de-duplication |
-| `LOUNGE_DECRYPTION_KEYS` | empty | comma-separated private JWK files (new and old during a rotation); empty means the endpoint is not encrypted |
+| `NOWORK_DECRYPTION_KEYS` | empty | comma-separated private JWK files (new and old during a rotation); empty means the endpoint is not encrypted |
 
 Subscribe to the events you need on the webhook; unsubscribed events are never sent, and events this example does not handle still get 200 (logged as `ignored`).
 
@@ -146,11 +146,11 @@ Subscribe to the events you need on the webhook; unsubscribed events are never s
 | signed but cannot be opened (no key, wrong key, or plaintext while keys are set) | `500` | same; succeeds once the key is in place |
 | body over 1 MiB | `413` | same |
 
-The signature is HMAC-SHA256 over `<X-Lounge-Timestamp>.<raw body>`, so verify the raw bytes: never decode and re-encode first, and make sure no reverse proxy rewrites the body. The de-duplication cache is an in-process LRU (`lru.go`); with several instances use a shared store keyed by `id` (Redis `SET NX EX`, a unique DB column).
+The signature is HMAC-SHA256 over `<X-NoWork-Timestamp>.<raw body>`, so verify the raw bytes: never decode and re-encode first, and make sure no reverse proxy rewrites the body. The de-duplication cache is an in-process LRU (`lru.go`); with several instances use a shared store keyed by `id` (Redis `SET NX EX`, a unique DB column).
 
 ## Encrypted deliveries (JWE)
 
-When the webhook's delivery profile turns on `webhook.encrypt` (开放平台 → 数据投递, see `SDK/docs/DELIVERY.md` section 6), the body becomes `{"id","event","timestamp","jwe"}` with `X-Lounge-Encryption: JWE`. `jwe.go` verifies the signature over that outer body first, then opens it with `lounge.OpenWebhook`, which checks that the inner `id` / `event` / `timestamp` repeat the outer ones and that the header `ctx` is `webhook:<endpoint id>`. With keys configured, a plaintext delivery is refused. Keep the private key on the receiver only; the console stores the public JWK. To rotate, add the new private key first (`LOUNGE_DECRYPTION_KEYS=new.jwk,old.jwk`), then activate the new public key in the console, and drop the old key after the overlap.
+When the webhook's delivery profile turns on `webhook.encrypt` (开放平台 → 数据投递, see `SDK/docs/DELIVERY.md` section 6), the body becomes `{"id","event","timestamp","jwe"}` with `X-NoWork-Encryption: JWE`. `jwe.go` verifies the signature over that outer body first, then opens it with `nowork.OpenWebhook`, which checks that the inner `id` / `event` / `timestamp` repeat the outer ones and that the header `ctx` is `webhook:<endpoint id>`. With keys configured, a plaintext delivery is refused. Keep the private key on the receiver only; the console stores the public JWK. To rotate, add the new private key first (`NOWORK_DECRYPTION_KEYS=new.jwk,old.jwk`), then activate the new public key in the console, and drop the old key after the overlap.
 
 ## Pairwise subjects
 

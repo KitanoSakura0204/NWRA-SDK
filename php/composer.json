@@ -1,10 +1,10 @@
 {
-    "name": "lounge/sdk",
-    "description": "Lounge Account user center SDK: game-server whitelist API, OpenID Connect helpers and webhook verification",
+    "name": "nowork/sdk",
+    "description": "NoWork Account user center SDK: game-server whitelist API, OpenID Connect helpers and webhook verification",
     "version": "1.1.0",
     "type": "library",
     "license": "proprietary",
-    "keywords": ["lounge", "oidc", "oauth2", "whitelist", "webhook", "minecraft"],
+    "keywords": ["nowork", "oidc", "oauth2", "whitelist", "webhook", "minecraft"],
     "require": {
         "php": ">=8.1",
         "ext-curl": "*",
@@ -16,7 +16,7 @@
     },
     "autoload": {
         "psr-4": {
-            "Lounge\\Sdk\\": "src/"
+            "NoWork\\Sdk\\": "src/"
         }
     },
     "scripts": {

@@ -16,7 +16,7 @@ export interface Config {
   seenCapacity: number;
   botToken: string;
   guildId: string;
-  /** Given to every member whose Lounge account is linked; empty: none. */
+  /** Given to every member whose NoWork account is linked; empty: none. */
   linkedRoleId: string;
   /** "Level N and above" roles, ascending by level. */
   levelRoles: LevelRole[];
@@ -46,7 +46,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     if (v && !SNOWFLAKE.test(v)) throw new Error(`${name}: "${v}" is not a Discord id`);
     return v;
   };
-  const secret = need('LOUNGE_WEBHOOK_SECRET', 'admin console: 开放平台 -> Webhook -> 签名密钥');
+  const secret = need('NOWORK_WEBHOOK_SECRET', 'admin console: 开放平台 -> Webhook -> 签名密钥');
   const dryRun = env.DRY_RUN === '1';
   const botToken = dryRun ? '' : need('DISCORD_BOT_TOKEN', 'Discord Developer Portal -> your application -> Bot -> Reset Token');
   const guildId = snowflake('DISCORD_GUILD_ID', need('DISCORD_GUILD_ID', 'Discord Developer Mode -> right-click the server -> Copy Server ID'));
@@ -56,11 +56,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (levelRoles.some((r) => r.roleId === linkedRoleId)) throw new Error('LEVEL_ROLES: use a different role than LINKED_ROLE_ID');
   return {
     secret,
-    keysPath: env.LOUNGE_DECRYPTION_KEYS ?? '',
+    keysPath: env.NOWORK_DECRYPTION_KEYS ?? '',
     tolerance: Number(env.WEBHOOK_TOLERANCE ?? 300),
     host: env.HOST ?? '0.0.0.0',
     port: Number(env.PORT ?? 8093),
-    path: env.WEBHOOK_PATH ?? '/lounge/webhook',
+    path: env.WEBHOOK_PATH ?? '/nowork/webhook',
     seenCapacity: Number(env.SEEN_CAPACITY ?? 10000),
     botToken,
     guildId,

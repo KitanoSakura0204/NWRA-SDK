@@ -17,7 +17,7 @@ webhook-receiver-node/
 └── package.json               build / start / test 脚本
 ```
 
-`src/server.ts` 里 `import ... from '../../../typescript/src/index.js'` 指向 SDK 源码；编译后对应 `dist/typescript/src/index.js`，所以运行时不需要安装 `@lounge/sdk`。若单独拷走本目录，把导入改成 `from '@lounge/sdk'` 并 `npm i @lounge/sdk`，`tsconfig.json` 的 `rootDir` 改回 `src`、`include` 只保留 `src` 即可。
+`src/server.ts` 里 `import ... from '../../../typescript/src/index.js'` 指向 SDK 源码；编译后对应 `dist/typescript/src/index.js`，所以运行时不需要安装 `@nowork/sdk`。若单独拷走本目录，把导入改成 `from '@nowork/sdk'` 并 `npm i @nowork/sdk`，`tsconfig.json` 的 `rootDir` 改回 `src`、`include` 只保留 `src` 即可。
 
 ## 运行
 
@@ -27,21 +27,21 @@ webhook-receiver-node/
 cd SDK/examples/webhook-receiver-node
 npm install            # 只装 typescript 与 @types/node（开发期）
 npm run build          # tsc -> dist/
-export LOUNGE_WEBHOOK_SECRET=whsec_xxx   # 后台「开放平台 → Webhook」新建 Webhook 时显示（只显示一次，可「重置密钥」）
+export NOWORK_WEBHOOK_SECRET=whsec_xxx   # 后台「开放平台 → Webhook」新建 Webhook 时显示（只显示一次，可「重置密钥」）
 node dist/examples/webhook-receiver-node/src/server.js
-# listening on http://0.0.0.0:8091/lounge/webhook (timestamp tolerance 300s, 0 decryption key(s))
+# listening on http://0.0.0.0:8091/nowork/webhook (timestamp tolerance 300s, 0 decryption key(s))
 ```
 
 `npm start` 等价于最后一行。生产环境建议用 `pm2` / `systemd` 托管并放在反向代理（HTTPS）之后。
 
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `LOUNGE_WEBHOOK_SECRET` | 必填 | 端点签名密钥 |
+| `NOWORK_WEBHOOK_SECRET` | 必填 | 端点签名密钥 |
 | `HOST` / `PORT` | `0.0.0.0` / `8091` | 监听地址 |
-| `WEBHOOK_PATH` | `/lounge/webhook` | 接收路径（后台端点 URL 需与之一致） |
+| `WEBHOOK_PATH` | `/nowork/webhook` | 接收路径（后台端点 URL 需与之一致） |
 | `WEBHOOK_TOLERANCE` | `300` | 允许的时间戳偏差（秒），`0` 关闭检查 |
 | `SEEN_CAPACITY` | `10000` | 幂等缓存保留的事件 id 数量 |
-| `LOUNGE_DECRYPTION_KEYS` | 空 | 私钥 JWK 文件路径，逗号分隔（轮换期间填新旧两把）；留空表示端点未加密 |
+| `NOWORK_DECRYPTION_KEYS` | 空 | 私钥 JWK 文件路径，逗号分隔（轮换期间填新旧两把）；留空表示端点未加密 |
 
 ## 行为约定
 
@@ -57,14 +57,14 @@ node dist/examples/webhook-receiver-node/src/server.js
 
 要点：
 
-- 签名覆盖 `<X-Lounge-Timestamp>.<原始请求体>`，所以要把原始 `Buffer` 交给 `verifyWebhook`，不要经过任何 body parser 再序列化。
+- 签名覆盖 `<X-NoWork-Timestamp>.<原始请求体>`，所以要把原始 `Buffer` 交给 `verifyWebhook`，不要经过任何 body parser 再序列化。
 - `verifyWebhook` 直接接受 `req.headers`（Node 会把头名转成小写，SDK 按不区分大小写查找）。
 - 幂等缓存是进程内 LRU；多实例部署时换成 Redis `SET NX EX` 或数据库唯一索引。
 - 处理逻辑必须在 10 秒内返回；耗时任务先入队再响应。自己的业务写在 `src/events.ts` 的 `dispatch` 里（可以是 `async`），抛错即返回 `500` 并由用户中心重试。
 
 ## 加密投递（JWE）
 
-Webhook 绑定的投递配置开启 `webhook.encrypt` 后（后台「开放平台 → 数据投递」，见 `SDK/docs/DELIVERY.md` 第 6 节），请求体变为 `{"id","event","timestamp","jwe"}` 并带 `X-Lounge-Encryption: JWE`。`src/receiver.ts` 先对外层原始请求体验签，再用 SDK 的 `openWebhook` 解密（核对内层 `id` / `event` / `timestamp` 与外层一致、受保护头 `ctx` 为 `webhook:<端点 ID>`）；配置了私钥却收到明文时拒绝。私钥只放在接收端，后台只保存公钥 JWK；轮换时先把新私钥加进 `LOUNGE_DECRYPTION_KEYS=new.jwk,old.jwk`，再在后台启用新公钥，过渡期结束后删掉旧私钥。
+Webhook 绑定的投递配置开启 `webhook.encrypt` 后（后台「开放平台 → 数据投递」，见 `SDK/docs/DELIVERY.md` 第 6 节），请求体变为 `{"id","event","timestamp","jwe"}` 并带 `X-NoWork-Encryption: JWE`。`src/receiver.ts` 先对外层原始请求体验签，再用 SDK 的 `openWebhook` 解密（核对内层 `id` / `event` / `timestamp` 与外层一致、受保护头 `ctx` 为 `webhook:<端点 ID>`）；配置了私钥却收到明文时拒绝。私钥只放在接收端，后台只保存公钥 JWK；轮换时先把新私钥加进 `NOWORK_DECRYPTION_KEYS=new.jwk,old.jwk`，再在后台启用新公钥，过渡期结束后删掉旧私钥。
 
 ## 成对匿名标识（pairwise）
 
@@ -96,10 +96,10 @@ Webhook 绑定的投递配置开启 `webhook.encrypt` 后（后台「开放平�
 
 ```bash
 node -e '
-const c=require("crypto");const s=process.env.LOUNGE_WEBHOOK_SECRET;const ts=Math.floor(Date.now()/1000);
+const c=require("crypto");const s=process.env.NOWORK_WEBHOOK_SECRET;const ts=Math.floor(Date.now()/1000);
 const body=JSON.stringify({id:"test-1",event:"user.deleted",timestamp:ts,data:{userId:100,uid:100001,username:"alice",reason:"self-service"}});
 const sig="sha256="+c.createHmac("sha256",s).update(ts+"."+body).digest("hex");
-fetch("http://127.0.0.1:8091/lounge/webhook",{method:"POST",headers:{"Content-Type":"application/json","X-Lounge-Event":"user.deleted","X-Lounge-Delivery":"1","X-Lounge-Timestamp":String(ts),"X-Lounge-Signature":sig},body}).then(async r=>console.log(r.status,await r.text()));'
+fetch("http://127.0.0.1:8091/nowork/webhook",{method:"POST",headers:{"Content-Type":"application/json","X-NoWork-Event":"user.deleted","X-NoWork-Delivery":"1","X-NoWork-Timestamp":String(ts),"X-NoWork-Signature":sig},body}).then(async r=>console.log(r.status,await r.text()));'
 ```
 
 再发一次同样的 `id` 会得到 `{"status":"duplicate"}`；改动请求体任意字节会得到 `401`。`../discord-role-sync/scripts/send-event.mjs` 提供了更完整的发送工具，也可用于本示例。
@@ -118,7 +118,7 @@ npm test   # tsc 编译后运行 tests/receiver.test.mjs
 
 A webhook endpoint on Node's own `node:http` (no Express) that imports the TypeScript SDK source in this repo by relative path. It verifies signatures, opens encrypted deliveries (JWE), is idempotent by event `id`, and logs `game_role.reviewed`, `user.deleted`, `server.offline`, `user.level_changed`, `connection.bound` and `connection.unbound`.
 
-`src/server.ts` is the entry point (environment, listener, `/healthz`), `src/receiver.ts` the endpoint (`createReceiver`: signature, decryption, idempotency, status codes), `src/events.ts` the business logic (`dispatch`), `src/lru.ts` the in-process de-duplication cache. The imports point at `../../../typescript/src/index.js`, compiled to `dist/typescript/src/index.js`, so no `@lounge/sdk` install is needed. To copy the directory out of the repo, import from `@lounge/sdk` instead, `npm i @lounge/sdk`, and set `rootDir` back to `src` with `include: ["src"]`.
+`src/server.ts` is the entry point (environment, listener, `/healthz`), `src/receiver.ts` the endpoint (`createReceiver`: signature, decryption, idempotency, status codes), `src/events.ts` the business logic (`dispatch`), `src/lru.ts` the in-process de-duplication cache. The imports point at `../../../typescript/src/index.js`, compiled to `dist/typescript/src/index.js`, so no `@nowork/sdk` install is needed. To copy the directory out of the repo, import from `@nowork/sdk` instead, `npm i @nowork/sdk`, and set `rootDir` back to `src` with `include: ["src"]`.
 
 ## Run
 
@@ -127,23 +127,23 @@ Node 20+ (global WebCrypto; X25519 decryption needs 20 or later).
 ```bash
 cd SDK/examples/webhook-receiver-node
 npm install && npm run build
-export LOUNGE_WEBHOOK_SECRET=whsec_xxx   # shown once when you create the webhook in 开放平台 → Webhook (Open Platform → Webhooks)
+export NOWORK_WEBHOOK_SECRET=whsec_xxx   # shown once when you create the webhook in 开放平台 → Webhook (Open Platform → Webhooks)
 npm start
 ```
 
-Variables: `LOUNGE_WEBHOOK_SECRET` (required), `HOST` / `PORT` (`0.0.0.0` / `8091`), `WEBHOOK_PATH` (`/lounge/webhook`, must match the URL in the console), `WEBHOOK_TOLERANCE` (`300` seconds, `0` turns the check off), `SEEN_CAPACITY` (`10000`), `LOUNGE_DECRYPTION_KEYS` (comma-separated private JWK files, new and old during a rotation; empty means the endpoint is not encrypted). Run it under `pm2` / `systemd` behind an HTTPS reverse proxy.
+Variables: `NOWORK_WEBHOOK_SECRET` (required), `HOST` / `PORT` (`0.0.0.0` / `8091`), `WEBHOOK_PATH` (`/nowork/webhook`, must match the URL in the console), `WEBHOOK_TOLERANCE` (`300` seconds, `0` turns the check off), `SEEN_CAPACITY` (`10000`), `NOWORK_DECRYPTION_KEYS` (comma-separated private JWK files, new and old during a rotation; empty means the endpoint is not encrypted). Run it under `pm2` / `systemd` behind an HTTPS reverse proxy.
 
 ## Responses
 
 `200 {"status":"ok"}` on first delivery, `200 {"status":"duplicate"}` for an `id` already handled, `401` for a bad or missing signature or a timestamp too far off, `400` for a body that is not JSON or has no `id`, `500` when `dispatch` throws or a signed delivery cannot be opened (no key, wrong key, or plaintext while keys are set), `413` over 1 MiB. Anything but 2xx is retried after 30s / 2m / 10m / 30m / 2h / 6h with the same `id`.
 
-- The signature covers `<X-Lounge-Timestamp>.<raw body>`: hand the raw `Buffer` to `verifyWebhook`, never a parsed and re-serialised body. `req.headers` can be passed as is (the SDK looks names up case-insensitively).
+- The signature covers `<X-NoWork-Timestamp>.<raw body>`: hand the raw `Buffer` to `verifyWebhook`, never a parsed and re-serialised body. `req.headers` can be passed as is (the SDK looks names up case-insensitively).
 - Return within 10 s; queue anything slow. Put your logic in `dispatch` (it may be `async`); a throw answers `500` and the delivery is retried.
 - The LRU is per process; with several instances use Redis `SET NX EX` or a unique DB column keyed by `id`.
 
 ## Encrypted deliveries and pairwise subjects
 
-With `webhook.encrypt` on the webhook's delivery profile (开放平台 → 数据投递, `SDK/docs/DELIVERY.md` section 6) the body becomes `{"id","event","timestamp","jwe"}` with `X-Lounge-Encryption: JWE`. The receiver verifies the outer body, then opens it with `openWebhook`, which checks that the inner `id` / `event` / `timestamp` repeat the outer ones and that the header `ctx` is `webhook:<endpoint id>`; with keys configured a plaintext delivery is refused. To rotate, add the new private key first (`new.jwk,old.jwk`), activate the new public key in the console, then drop the old one. With `subject: pairwise`, `data.user.sub` replaces `userId` / `uid` / `username` / `externalId` and the other identifying fields; `who()` prints either. The Discord role sync needs `externalId`, so it needs a non-pairwise endpoint.
+With `webhook.encrypt` on the webhook's delivery profile (开放平台 → 数据投递, `SDK/docs/DELIVERY.md` section 6) the body becomes `{"id","event","timestamp","jwe"}` with `X-NoWork-Encryption: JWE`. The receiver verifies the outer body, then opens it with `openWebhook`, which checks that the inner `id` / `event` / `timestamp` repeat the outer ones and that the header `ctx` is `webhook:<endpoint id>`; with keys configured a plaintext delivery is refused. To rotate, add the new private key first (`new.jwk,old.jwk`), activate the new public key in the console, then drop the old one. With `subject: pairwise`, `data.user.sub` replaces `userId` / `uid` / `username` / `externalId` and the other identifying fields; `who()` prints either. The Discord role sync needs `externalId`, so it needs a non-pairwise endpoint.
 
 ## Test and check
 

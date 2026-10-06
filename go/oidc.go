@@ -1,4 +1,4 @@
-package lounge
+package nowork
 
 import (
 	"context"
@@ -19,7 +19,7 @@ type OAuthError struct {
 }
 
 func (e *OAuthError) Error() string {
-	return fmt.Sprintf("lounge: oauth error %s: %s", e.Code, e.Description)
+	return fmt.Sprintf("nowork: oauth error %s: %s", e.Code, e.Description)
 }
 
 // OIDC is a minimal OpenID Connect relying-party helper for the user center.

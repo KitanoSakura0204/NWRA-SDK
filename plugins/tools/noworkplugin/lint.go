@@ -10,7 +10,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/wangework/lounge-sdk-plugins/schema"
+	"github.com/wangework/nowork-sdk-plugins/schema"
 )
 
 // Package limits of the host (Backend internal/modules/plugins/package.go) and the listing

@@ -1,5 +1,5 @@
-name: LoungeAccount
+name: NoWorkAccount
 version: "${version}"
-main: cyou.lounge.example.paper.LoungePaperPlugin
+main: cyou.nowork.example.paper.NoWorkPaperPlugin
 api-version: "1.21"
-description: Lounge Account whitelist, heartbeat and GM channel
+description: NoWork Account whitelist, heartbeat and GM channel

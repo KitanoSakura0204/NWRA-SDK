@@ -1,4 +1,4 @@
-"""Lounge Account webhook receiver on the standard library's http.server (no framework).
+"""NoWork Account webhook receiver on the standard library's http.server (no framework).
 
 The endpoint itself is receiver.py, the business logic events.py. Configuration comes from the
 environment; see README.md.
@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from events import dispatch
 from receiver import MAX_BODY, Receiver, load_keys
 
-log = logging.getLogger("lounge.webhook")
+log = logging.getLogger("nowork.webhook")
 
 
 def _env_int(name: str, default: int) -> int:
@@ -28,7 +28,7 @@ def _env_int(name: str, default: int) -> int:
 
 def make_handler(receiver: Receiver, path: str):
     class Handler(BaseHTTPRequestHandler):
-        server_version = "lounge-webhook-receiver"
+        server_version = "nowork-webhook-receiver"
         timeout = 10  # seconds per socket read: a slow client cannot hold a thread forever
 
         def _reply(self, status: int, body: dict) -> None:
@@ -72,22 +72,22 @@ def make_handler(receiver: Receiver, path: str):
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    secret = os.environ.get("LOUNGE_WEBHOOK_SECRET", "")
+    secret = os.environ.get("NOWORK_WEBHOOK_SECRET", "")
     if not secret:
-        sys.exit("set LOUNGE_WEBHOOK_SECRET (admin console: 开放平台 -> Webhook -> 签名密钥)")
+        sys.exit("set NOWORK_WEBHOOK_SECRET (admin console: 开放平台 -> Webhook -> 签名密钥)")
     try:
-        keys = load_keys(os.environ.get("LOUNGE_DECRYPTION_KEYS", ""))
+        keys = load_keys(os.environ.get("NOWORK_DECRYPTION_KEYS", ""))
     except ValueError as exc:
-        sys.exit("LOUNGE_DECRYPTION_KEYS: %s" % exc)
+        sys.exit("NOWORK_DECRYPTION_KEYS: %s" % exc)
     if keys:
         try:  # the delivery helpers need it: fail at start, not on the first encrypted delivery
             import cryptography  # noqa: F401
         except ImportError:
-            sys.exit("LOUNGE_DECRYPTION_KEYS is set: pip install cryptography")
+            sys.exit("NOWORK_DECRYPTION_KEYS is set: pip install cryptography")
     tolerance = _env_int("WEBHOOK_TOLERANCE", 300)
     receiver = Receiver(secret, dispatch, tolerance=tolerance, keys=keys, capacity=_env_int("SEEN_CAPACITY", 10000))
     host, port = os.environ.get("HOST", "0.0.0.0"), _env_int("PORT", 8092)
-    path = os.environ.get("WEBHOOK_PATH", "/lounge/webhook")
+    path = os.environ.get("WEBHOOK_PATH", "/nowork/webhook")
 
     server = ThreadingHTTPServer((host, port), make_handler(receiver, path))
     server.daemon_threads = True

@@ -2,9 +2,9 @@
 
 ## 1.1.0 — 2026-09-14
 
-- 五语言新增 Webhook 签名校验助手（`X-Lounge-Signature` = sha256=HMAC-SHA256(secret, `<ts>.<body>`)，含时间戳容差与常量时间比较）；Go / Python / TypeScript 附测试。
+- 五语言新增 Webhook 签名校验助手（`X-NoWork-Signature` = sha256=HMAC-SHA256(secret, `<ts>.<body>`)，含时间戳容差与常量时间比较）；Go / Python / TypeScript 附测试。
 - 协议文档新增第 5 节「Webhook」。
-- 新增 PHP SDK（`php/`，Composer `lounge/sdk`，PHP 8.1+，仅依赖 `ext-curl` / `ext-json`）：Server API、OIDC（含 PKCE S256 助手）、Webhook 校验（`Webhook::verify` / `verifyRequest`），与其它语言相同的信封校验与错误模型；`php tests/run.php` 无需 PHPUnit，含 `php -S` 端到端用例。
+- 新增 PHP SDK（`php/`，Composer `nowork/sdk`，PHP 8.1+，仅依赖 `ext-curl` / `ext-json`）：Server API、OIDC（含 PKCE S256 助手）、Webhook 校验（`Webhook::verify` / `verifyRequest`），与其它语言相同的信封校验与错误模型；`php tests/run.php` 无需 PHPUnit，含 `php -S` 端到端用例。
 
 ## 1.0.1 — 2026-09-13
 

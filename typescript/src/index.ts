@@ -1,4 +1,4 @@
-/** Lounge Account SDK — Server API (whitelist / heartbeat) and OIDC helpers. Requires global fetch (Node 18+). */
+/** NoWork Account SDK — Server API (whitelist / heartbeat) and OIDC helpers. Requires global fetch (Node 18+). */
 
 import type { BanOptions, BanTarget, KickEntry, ServerBan, UserData, UserSchema, WriteOptions } from './serverusers.js';
 
@@ -7,7 +7,7 @@ export class TransportError extends Error {
     message: string,
     public cause?: unknown
   ) {
-    super(`lounge: transport error: ${message}`);
+    super(`nowork: transport error: ${message}`);
     this.name = 'TransportError';
   }
 }
@@ -17,7 +17,7 @@ export class ApiError extends Error {
     public code: number,
     message: string
   ) {
-    super(`lounge: api error ${code}: ${message}`);
+    super(`nowork: api error ${code}: ${message}`);
     this.name = 'ApiError';
   }
 }
@@ -28,13 +28,13 @@ export class OAuthError extends Error {
     public description = '',
     public status = 0
   ) {
-    super(`lounge: oauth error ${error}: ${description}`);
+    super(`nowork: oauth error ${error}: ${description}`);
     this.name = 'OAuthError';
   }
 }
 
 /** Header marking a Server API reply whose data is the {"jwe": "..."} envelope (DELIVERY.md §5). */
-export const HEADER_ENCRYPTION = 'X-Lounge-Encryption';
+export const HEADER_ENCRYPTION = 'X-NoWork-Encryption';
 
 /**
  * A Server API reply was encrypted and could not be used (no decryption key configured). The data
@@ -46,7 +46,7 @@ export class EncryptionError extends Error {
     public route: string,
     public reason: string
   ) {
-    super(`lounge: encrypted response on ${route}: ${reason}`);
+    super(`nowork: encrypted response on ${route}: ${reason}`);
     this.name = 'EncryptionError';
   }
 }
@@ -59,7 +59,7 @@ export interface RawResponse {
   data: unknown;
   /** The whole parsed body {code, message, data}. */
   envelope: Record<string, unknown>;
-  /** X-Lounge-Encryption is set or data is exactly {"jwe": "<string>"}. */
+  /** X-NoWork-Encryption is set or data is exactly {"jwe": "<string>"}. */
   encrypted: boolean;
 }
 
@@ -94,7 +94,7 @@ export interface CheckResult {
   player?: WhitelistEntry | null;
 }
 
-export interface LoungeClientOptions {
+export interface NoworkClientOptions {
   serverKey: string;
   timeoutMs?: number;
   fetch?: typeof fetch;
@@ -107,13 +107,13 @@ interface Envelope<T> {
 }
 
 /** Server API client authenticated with X-Server-Key. */
-export class LoungeClient {
+export class NoworkClient {
   private readonly base: string;
   private readonly key: string;
   private readonly timeout: number;
   private readonly f: typeof fetch;
 
-  constructor(base: string, opts: LoungeClientOptions) {
+  constructor(base: string, opts: NoworkClientOptions) {
     this.base = base.replace(/\/+$/, '');
     this.key = opts.serverKey;
     this.timeout = opts.timeoutMs ?? 10_000;
@@ -319,7 +319,7 @@ export class LoungeClient {
 }
 
 function userPath(uid: number): string {
-  if (!Number.isSafeInteger(uid) || uid <= 0) throw new TypeError(`lounge: uid must be a positive integer, got ${uid}`);
+  if (!Number.isSafeInteger(uid) || uid <= 0) throw new TypeError(`nowork: uid must be a positive integer, got ${uid}`);
   return `/server/v1/users/${uid}/data`;
 }
 
@@ -436,7 +436,7 @@ export interface UserInfo {
 }
 
 /** Minimal OIDC relying-party helper. */
-export class LoungeOIDC {
+export class NoworkOIDC {
   private readonly issuer: string;
 
   constructor(
@@ -633,13 +633,13 @@ export async function verifyWebhook<T = Record<string, unknown>>(
     const v = key ? map[key] : undefined;
     return Array.isArray(v) ? v[0] ?? '' : v ?? '';
   };
-  const ts = Number.parseInt(get('X-Lounge-Timestamp').trim(), 10);
-  if (!Number.isFinite(ts)) throw new WebhookError('missing or invalid X-Lounge-Timestamp');
+  const ts = Number.parseInt(get('X-NoWork-Timestamp').trim(), 10);
+  if (!Number.isFinite(ts)) throw new WebhookError('missing or invalid X-NoWork-Timestamp');
   if (toleranceSeconds > 0 && Math.abs(Date.now() / 1000 - ts) > toleranceSeconds) {
     throw new WebhookError('webhook timestamp outside tolerance');
   }
   const expected = await webhookSignature(secret, ts, body);
-  if (!timingSafeEqual(expected, get('X-Lounge-Signature').trim())) throw new WebhookError('invalid webhook signature');
+  if (!timingSafeEqual(expected, get('X-NoWork-Signature').trim())) throw new WebhookError('invalid webhook signature');
   const text = typeof body === 'string' ? body : new TextDecoder().decode(body);
   let payload: any;
   try {

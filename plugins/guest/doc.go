@@ -1,4 +1,4 @@
-// Package guest is the Go side of the Lounge plugin host ABI (SDK/plugins/ABI.md) for
+// Package guest is the Go side of the NoWork plugin host ABI (SDK/plugins/ABI.md) for
 // WebAssembly plugins built with
 //
 //	GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o plugin.wasm .

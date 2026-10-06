@@ -1,6 +1,6 @@
 //go:build wasip1
 
-// Command hello is an example Lounge WebAssembly plugin. It counts sign-ins per user (event
+// Command hello is an example NoWork WebAssembly plugin. It counts sign-ins per user (event
 // user.login), adds the count to tokens (filter token.claims), greets a player (GM action),
 // logs every hour (job) and shows the count on a user-centre page (UI slot + bridge invoke).
 //
@@ -12,7 +12,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/wangework/lounge-sdk-plugins/guest"
+	"github.com/wangework/nowork-sdk-plugins/guest"
 )
 
 // main never runs: a c-shared (reactor) module only initialises and waits for the host to call
@@ -95,7 +95,7 @@ func tick() int32 {
 	return 0
 }
 
-// page handles the user-centre page's bridge calls (lounge.invoke('stats')).
+// page handles the user-centre page's bridge calls (nowork.invoke('stats')).
 //
 //go:wasmexport page
 func page() int32 {

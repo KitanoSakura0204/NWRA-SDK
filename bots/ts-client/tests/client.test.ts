@@ -30,7 +30,7 @@ test("bind sends the token header and parses data", async () => {
     { "/api/bot/v1/bind": { code: 0, data: { userId: 1, uid: 100001, nickname: "Ada", level: 2 } } },
     calls,
   );
-  const client = new BotClient({ baseUrl: "https://lounge.example.com", token: "tok123", fetch: fetchImpl });
+  const client = new BotClient({ baseUrl: "https://nowork.example.com", token: "tok123", fetch: fetchImpl });
   const result = await client.bind("qq", "10001", "ABC123", "Ada");
   assert.equal(result.nickname, "Ada");
   assert.equal(calls[0].headers.Authorization, "Bot tok123");
@@ -40,7 +40,7 @@ test("bind sends the token header and parses data", async () => {
 test("lookup sends query params and GET", async () => {
   const calls: FakeCall[] = [];
   const fetchImpl = fakeFetch({ "/api/bot/v1/lookup": { code: 0, data: { bound: true, nickname: "Ada", level: 2 } } }, calls);
-  const client = new BotClient({ baseUrl: "https://lounge.example.com/", token: "t", fetch: fetchImpl });
+  const client = new BotClient({ baseUrl: "https://nowork.example.com/", token: "t", fetch: fetchImpl });
   const result = await client.lookup("qq", "10001");
   assert.equal(result.bound, true);
   assert.equal(calls[0].method, "GET");
@@ -51,7 +51,7 @@ test("lookup sends query params and GET", async () => {
 test("a non-zero code throws BotApiError", async () => {
   const calls: FakeCall[] = [];
   const fetchImpl = fakeFetch({ "/api/bot/v1/unbind": { code: 404, message: "not bound" } }, calls);
-  const client = new BotClient({ baseUrl: "https://lounge.example.com", token: "t", fetch: fetchImpl });
+  const client = new BotClient({ baseUrl: "https://nowork.example.com", token: "t", fetch: fetchImpl });
   await assert.rejects(() => client.unbind("qq", "x"), (err: unknown) => {
     assert.ok(err instanceof BotApiError);
     assert.equal(err.code, 404);
@@ -66,7 +66,7 @@ test("command posts the chat context and returns reply + handled", async () => {
     { "/api/bot/v1/command": { code: 0, data: { handled: true, reply: [{ type: "text", data: { text: "ok" } }] } } },
     calls,
   );
-  const client = new BotClient({ baseUrl: "https://lounge.example.com", token: "t", fetch: fetchImpl });
+  const client = new BotClient({ baseUrl: "https://nowork.example.com", token: "t", fetch: fetchImpl });
   const result = await client.command({ platform: "qq", platformUserId: "1", chatType: "group", chatId: "g1", text: "/me" });
   assert.equal(result.handled, true);
   assert.equal(result.reply[0].data?.text, "ok");
@@ -81,7 +81,7 @@ test("pollEvents and ackEvents hit the right paths", async () => {
     },
     calls,
   );
-  const client = new BotClient({ baseUrl: "https://lounge.example.com", token: "t", fetch: fetchImpl });
+  const client = new BotClient({ baseUrl: "https://nowork.example.com", token: "t", fetch: fetchImpl });
   const polled = await client.pollEvents();
   assert.equal(polled.events[0].id, 7);
   const acked = await client.ackEvents([7]);

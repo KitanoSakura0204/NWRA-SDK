@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Lounge\Sdk;
+namespace NoWork\Sdk;
 
-use Lounge\Sdk\Internal\Json;
+use NoWork\Sdk\Internal\Json;
 
 /** A verified webhook envelope: `{ id, event, timestamp, data }`. Deliveries are retried, so de-duplicate on `id`. */
 final class WebhookEvent

@@ -1,11 +1,11 @@
-// Paper plugin skeleton for Lounge Account. Build: gradle build (Gradle 8.5+, JDK 21);
+// Paper plugin skeleton for NoWork Account. Build: gradle build (Gradle 8.5+, JDK 21);
 // the jar lands in build/libs. The SDK has no dependencies, so its sources are compiled in
 // directly instead of being published and shaded.
 plugins {
     java
 }
 
-group = "cyou.lounge.example"
+group = "cyou.nowork.example"
 version = "1.0.0"
 
 repositories {

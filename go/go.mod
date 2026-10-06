@@ -1,3 +1,3 @@
-module github.com/wangework/lounge-sdk-go
+module github.com/wangework/nowork-sdk-go
 
 go 1.21

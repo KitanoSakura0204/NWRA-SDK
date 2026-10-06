@@ -1,4 +1,4 @@
-"""Wire types for the Lounge Bot API. Mirrors
+"""Wire types for the NoWork Bot API. Mirrors
 Backend/internal/modules/bots/platform.go (Segment, Message, Target) and the handlers in
 api.go / ws.go / hub.go.
 """

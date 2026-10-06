@@ -1,4 +1,4 @@
-package cyou.lounge.sdk;
+package cyou.nowork.sdk;
 
 import com.sun.net.httpserver.HttpServer;
 import java.io.OutputStream;
@@ -12,8 +12,8 @@ import java.util.Map;
 /**
  * Dependency-free checks of the Server API client against an in-process HTTP server (the repo has
  * no JUnit). Run from SDK/java:
- * javac -d out src/main/java/cyou/lounge/sdk/*.java src/test/java/cyou/lounge/sdk/SelfCheck.java
- * java -cp out cyou.lounge.sdk.SelfCheck
+ * javac -d out src/main/java/cyou/nowork/sdk/*.java src/test/java/cyou/nowork/sdk/SelfCheck.java
+ * java -cp out cyou.nowork.sdk.SelfCheck
  */
 public final class SelfCheck {
     private static volatile String reply = "";
@@ -30,7 +30,7 @@ public final class SelfCheck {
         server.createContext("/", ex -> {
             bodies.add(new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             requests.add(ex.getRequestMethod() + " " + ex.getRequestURI());
-            if (header != null) ex.getResponseHeaders().set(LoungeClient.HEADER_ENCRYPTION, header);
+            if (header != null) ex.getResponseHeaders().set(NoworkClient.HEADER_ENCRYPTION, header);
             byte[] out = reply.getBytes(StandardCharsets.UTF_8);
             ex.sendResponseHeaders(200, out.length);
             try (OutputStream os = ex.getResponseBody()) {
@@ -39,14 +39,14 @@ public final class SelfCheck {
         });
         server.start();
         try {
-            run(new LoungeClient("http://127.0.0.1:" + server.getAddress().getPort(), "k"));
+            run(new NoworkClient("http://127.0.0.1:" + server.getAddress().getPort(), "k"));
         } finally {
             server.stop(0);
         }
         System.out.println("SelfCheck: all checks passed");
     }
 
-    private static void run(LoungeClient c) throws Exception {
+    private static void run(NoworkClient c) throws Exception {
         // Encrypted replies fail closed, with and without the header (a proxy may drop it).
         String sealed = "{\"code\":0,\"message\":\"ok\",\"data\":{\"jwe\":\"aGVhZA.a2V5.aXY.Y2lwaGVy.dGFn\"}}";
         for (String h : new String[] {"JWE", null}) {
@@ -55,7 +55,7 @@ public final class SelfCheck {
             expectEncryption("whitelist", c::whitelist);
             expectEncryption("whitelist/check", () -> c.checkWhitelist("Steve", null));
             expectEncryption("gm/commands", c::pollGMCommands);
-            LoungeClient.RawResponse raw = c.raw("GET", "/server/v1/whitelist", null);
+            NoworkClient.RawResponse raw = c.raw("GET", "/server/v1/whitelist", null);
             check(raw.encrypted && raw.body.equals(sealed) && raw.data instanceof Map, "raw keeps the envelope");
         }
         header = null;
@@ -67,7 +67,7 @@ public final class SelfCheck {
             try {
                 c.whitelist();
                 throw new AssertionError("expected Transport for " + bad);
-            } catch (LoungeException.Transport expected) {
+            } catch (NoWorkException.Transport expected) {
                 // ok
             }
         }
@@ -76,7 +76,7 @@ public final class SelfCheck {
         reply = "{\"code\":0,\"data\":{\"status\":\"ok\"}}";
         bodies.clear();
         c.heartbeat(2, 20, "1.21.1");
-        c.heartbeat(2, 20, "1.21.1", 19.8, List.of(new LoungeClient.OnlinePlayer("Steve", "069a79f4-44e9-4726-a5be-fca90e38aaf5"), new LoungeClient.OnlinePlayer("Alex")));
+        c.heartbeat(2, 20, "1.21.1", 19.8, List.of(new NoworkClient.OnlinePlayer("Steve", "069a79f4-44e9-4726-a5be-fca90e38aaf5"), new NoworkClient.OnlinePlayer("Alex")));
         c.heartbeat(0, 0, null, Double.NaN, List.of());
         c.heartbeat(0, 0, "", Double.POSITIVE_INFINITY, null);
         check(bodies.equals(List.of(
@@ -88,11 +88,11 @@ public final class SelfCheck {
         // GM catalogue: object form with typed actions and named lists; skipped entries are listed.
         reply = "{\"code\":0,\"data\":{\"count\":1,\"skipped\":[{\"key\":\"bad key\",\"reason\":\"invalid key\"}]}}";
         bodies.clear();
-        LoungeClient.GMAction kick = new LoungeClient.GMAction("kick", "Kick").category("players").danger("confirm")
-            .param(new LoungeClient.GMActionParam("player", "player").required())
-            .param(new LoungeClient.GMActionParam("world", "select").source("worlds").defaultValue("overworld"))
-            .param(new LoungeClient.GMActionParam("amount", "number").range(0, 64));
-        LoungeClient.GMPublishResult res = c.publishGMCatalog(List.of(kick), Map.of("worlds", List.of(new LoungeClient.GMOption("overworld", "Overworld"))));
+        NoworkClient.GMAction kick = new NoworkClient.GMAction("kick", "Kick").category("players").danger("confirm")
+            .param(new NoworkClient.GMActionParam("player", "player").required())
+            .param(new NoworkClient.GMActionParam("world", "select").source("worlds").defaultValue("overworld"))
+            .param(new NoworkClient.GMActionParam("amount", "number").range(0, 64));
+        NoworkClient.GMPublishResult res = c.publishGMCatalog(List.of(kick), Map.of("worlds", List.of(new NoworkClient.GMOption("overworld", "Overworld"))));
         check(res.count == 1 && res.skipped.size() == 1 && res.skipped.get(0).get("key").equals("bad key"), "publish result");
         check(bodies.get(0).equals("{\"actions\":[{\"key\":\"kick\",\"title\":\"Kick\",\"params\":["
             + "{\"name\":\"player\",\"type\":\"player\",\"required\":true,\"label\":\"\"},"
@@ -101,7 +101,7 @@ public final class SelfCheck {
             + "\"category\":\"players\",\"danger\":\"confirm\"}],"
             + "\"options\":{\"worlds\":[{\"value\":\"overworld\",\"label\":\"Overworld\"}]}}"), "catalogue body: " + bodies.get(0));
         reply = "{\"code\":0,\"data\":{\"count\":1}}";
-        check(c.publishGMOptions(Map.of("worlds", List.of(new LoungeClient.GMOption("overworld")))).skipped.isEmpty(), "options result");
+        check(c.publishGMOptions(Map.of("worlds", List.of(new NoworkClient.GMOption("overworld")))).skipped.isEmpty(), "options result");
         check(bodies.get(1).equals("{\"worlds\":[{\"value\":\"overworld\"}]}"), "options body: " + bodies.get(1));
         check(c.publishGMCatalog(null, null).count == 1 && bodies.get(2).equals("{}"), "null keeps both: " + bodies.get(2));
 
@@ -109,7 +109,7 @@ public final class SelfCheck {
     }
 
     // Player data and per-server bans (SERVER_USERS.md): paths, bodies and decoding.
-    private static void serverUsers(LoungeClient c) throws Exception {
+    private static void serverUsers(NoworkClient c) throws Exception {
         bodies.clear();
         requests.clear();
         reply = "{\"code\":0,\"data\":{\"fields\":[{\"key\":\"coins\",\"label\":\"Coins\",\"type\":\"number\",\"visible\":true,\"integer\":true,\"min\":0}],\"maxUserBytes\":8192}}";
@@ -128,7 +128,7 @@ public final class SelfCheck {
         try {
             c.putUserData(100001, Map.of("coins", 1), 1);
             throw new AssertionError("expected a version conflict");
-        } catch (LoungeException.Api e) {
+        } catch (NoWorkException.Api e) {
             check(ServerUsers.isVersionConflict(e), "409 is a version conflict");
         }
 
@@ -145,14 +145,14 @@ public final class SelfCheck {
         check(bodies.get(2).equals("{\"name\":\"Steve\",\"reason\":\"x-ray\",\"durationMinutes\":1440}") && bodies.get(3).equals("{\"uid\":100001,\"reason\":\"appeal\"}"), "ban bodies: " + bodies);
 
         reply = "{\"code\":0,\"data\":{\"allowed\":false,\"bound\":true,\"reason\":\"banned\",\"message\":\"x-ray\",\"player\":null}}";
-        LoungeClient.CheckResult r = c.checkWhitelist("Steve", null);
+        NoworkClient.CheckResult r = c.checkWhitelist("Steve", null);
         check(!r.allowed && r.reason.equals("banned") && r.message.equals("x-ray"), "ban message on the join check");
     }
 
     private static void expectEncryption(String route, Call call) throws Exception {
         try {
             call.run();
-        } catch (LoungeException.Encryption e) {
+        } catch (NoWorkException.Encryption e) {
             check(e.route.equals(route), "route " + e.route + " != " + route);
             return;
         }

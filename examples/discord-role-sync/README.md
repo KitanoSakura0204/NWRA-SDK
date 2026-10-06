@@ -25,14 +25,14 @@ discord-role-sync/
 └── tests/sync.test.mjs       node:test 测试（不联网，Discord 用内存替身）
 ```
 
-单独拷走本目录时要连同 `../webhook-receiver-node/src/{receiver,lru}.ts` 一起拷走，并把导入改成 `@lounge/sdk`（见该示例的 README）。
+单独拷走本目录时要连同 `../webhook-receiver-node/src/{receiver,lru}.ts` 一起拷走，并把导入改成 `@nowork/sdk`（见该示例的 README）。
 
 ## 配置步骤
 
 1. **Discord 应用与机器人**：在 Discord Developer Portal 新建应用 → Bot → Reset Token，得到 `DISCORD_BOT_TOKEN`。用 OAuth2 URL Generator 勾选 scope `bot` 与权限 `Manage Roles` 邀请进服务器。在服务器「身份组」设置里把机器人自己的身份组**拖到要管理的身份组之上**，否则 Discord 返回 403。
 2. **拿到 ID**：Discord 设置 → 高级 → 开启开发者模式；右键服务器「复制服务器 ID」得到 `DISCORD_GUILD_ID`，右键身份组「复制身份组 ID」。
 3. **让用户能绑定 Discord**：后台「开放平台 → 登录身份源」启用 Discord 预设（代码 `discord`），用户即可在账号里绑定 Discord。
-4. **Webhook**：后台「开放平台 → Webhook」新建端点，URL 指向本服务（例如 `https://bot.example.com/lounge/webhook`），订阅 `connection.bound` / `connection.unbound` / `user.level_changed` / `user.deleted`，保存后复制签名密钥。这个端点**不能**绑定 `subject = pairwise` 的投递配置：pairwise 事件不带 `userId` / `externalId`，无法对应到 Discord 账号（本示例会记录错误并跳过）。
+4. **Webhook**：后台「开放平台 → Webhook」新建端点，URL 指向本服务（例如 `https://bot.example.com/nowork/webhook`），订阅 `connection.bound` / `connection.unbound` / `user.level_changed` / `user.deleted`，保存后复制签名密钥。这个端点**不能**绑定 `subject = pairwise` 的投递配置：pairwise 事件不带 `userId` / `externalId`，无法对应到 Discord 账号（本示例会记录错误并跳过）。
 5. **可选：绑定时就按等级发身份组**：`connection.bound` 本身不带信任等级。给端点绑定一个投递配置（「开放平台 → 数据投递」），在 `webhook` 规则里下发 `security_level`，事件里就会有 `data.user.security_level`，绑定当下即可发等级身份组；不配置的话，等级身份组要等下一次 `user.level_changed` 才会发放。
 
 ## 运行
@@ -42,7 +42,7 @@ discord-role-sync/
 ```bash
 cd SDK/examples/discord-role-sync
 npm install && npm run build
-export LOUNGE_WEBHOOK_SECRET=whsec_xxx
+export NOWORK_WEBHOOK_SECRET=whsec_xxx
 export DISCORD_BOT_TOKEN=xxx DISCORD_GUILD_ID=300000000000000001
 export LINKED_ROLE_ID=100000000000000001                              # 已绑定
 export LEVEL_ROLES=2:100000000000000002,3:100000000000000003          # 等级 2 及以上、3 及以上
@@ -51,7 +51,7 @@ npm start
 
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `LOUNGE_WEBHOOK_SECRET` | 必填 | 端点签名密钥 |
+| `NOWORK_WEBHOOK_SECRET` | 必填 | 端点签名密钥 |
 | `DISCORD_BOT_TOKEN` | 必填（`DRY_RUN=1` 时可省） | 机器人令牌，只放在环境变量里 |
 | `DISCORD_GUILD_ID` | 必填 | 服务器 ID |
 | `LINKED_ROLE_ID` | 空 | 所有已绑定账号都有的身份组 |
@@ -59,9 +59,9 @@ npm start
 | `LINKS_FILE` | `links.json` | 账号对应关系的存放位置 |
 | `DRY_RUN` | 空 | `1`：只打印将要做的改动，不调用 Discord |
 | `HOST` / `PORT` | `0.0.0.0` / `8093` | 监听地址 |
-| `WEBHOOK_PATH` | `/lounge/webhook` | 接收路径 |
+| `WEBHOOK_PATH` | `/nowork/webhook` | 接收路径 |
 | `WEBHOOK_TOLERANCE` / `SEEN_CAPACITY` | `300` / `10000` | 时间戳容差（秒）/ 幂等缓存大小 |
-| `LOUNGE_DECRYPTION_KEYS` | 空 | 端点开启加密投递时的私钥 JWK 文件，逗号分隔 |
+| `NOWORK_DECRYPTION_KEYS` | 空 | 端点开启加密投递时的私钥 JWK 文件，逗号分隔 |
 
 ## 行为与限制
 
@@ -89,19 +89,19 @@ npm test   # tsc 编译后运行 tests/sync.test.mjs，不联网
 不连 Discord 的演练（两个终端）：
 
 ```bash
-DRY_RUN=1 LOUNGE_WEBHOOK_SECRET=whsec_test DISCORD_GUILD_ID=300000000000000001 \
+DRY_RUN=1 NOWORK_WEBHOOK_SECRET=whsec_test DISCORD_GUILD_ID=300000000000000001 \
   LINKED_ROLE_ID=100000000000000001 LINKS_FILE=/tmp/links.json npm start
 
-LOUNGE_WEBHOOK_SECRET=whsec_test node scripts/send-event.mjs connection.bound \
+NOWORK_WEBHOOK_SECRET=whsec_test node scripts/send-event.mjs connection.bound \
   '{"userId":100,"uid":100001,"provider":"discord","externalId":"200000000000000001","externalName":"alice"}'
-# 200 {"status":"ok"}；机器人打印 [dry run] add role 100000000000000001 to 200000000000000001 (Lounge account linked)
+# 200 {"status":"ok"}；机器人打印 [dry run] add role 100000000000000001 to 200000000000000001 (NoWork account linked)
 ```
 
 ---
 
 # Discord role sync example (Node.js / TypeScript)
 
-A webhook endpoint that keeps Discord roles in step with Lounge Account: when a user links Discord, their Discord account gets roles in your server; when their trust level changes the level roles follow; when they unlink or delete the account the roles are removed. Node built-ins and the Discord REST API (`fetch`) only, no runtime dependencies; signature, JWE and idempotency come from `../webhook-receiver-node/src/receiver.ts` (copy `receiver.ts` and `lru.ts` along if you move this directory, and import from `@lounge/sdk`).
+A webhook endpoint that keeps Discord roles in step with NoWork Account: when a user links Discord, their Discord account gets roles in your server; when their trust level changes the level roles follow; when they unlink or delete the account the roles are removed. Node built-ins and the Discord REST API (`fetch`) only, no runtime dependencies; signature, JWE and idempotency come from `../webhook-receiver-node/src/receiver.ts` (copy `receiver.ts` and `lru.ts` along if you move this directory, and import from `@nowork/sdk`).
 
 `connection.bound` (provider `discord`) grants `LINKED_ROLE_ID` plus the `LEVEL_ROLES` the trust level earns; `user.level_changed` adjusts the level roles; `connection.unbound` and `user.deleted` remove every managed role. Only the configured roles are ever touched.
 
@@ -113,7 +113,7 @@ A webhook endpoint that keeps Discord roles in step with Lounge Account: when a 
 4. Under 开放平台 → Webhook create an endpoint pointing at this service, subscribe `connection.bound`, `connection.unbound`, `user.level_changed`, `user.deleted`, and copy the signing secret. Do **not** bind it to a `subject: pairwise` delivery profile: pairwise events carry no `userId` / `externalId`, so nothing maps to Discord (the bot logs an error and skips them).
 5. Optional: `connection.bound` carries no trust level. Bind the endpoint to a delivery profile (开放平台 → 数据投递) whose `webhook` rules include `security_level` and the event carries `data.user.security_level`, so level roles are granted at link time; otherwise they follow the next `user.level_changed`.
 
-Node 20+: `npm install && npm run build && npm start`. Variables: `LOUNGE_WEBHOOK_SECRET`, `DISCORD_BOT_TOKEN` (not needed with `DRY_RUN=1`), `DISCORD_GUILD_ID` (required); `LINKED_ROLE_ID`, `LEVEL_ROLES` (`level:roleId,...`, each role held from its level upwards; set at least one of the two); `LINKS_FILE` (`links.json`), `DRY_RUN` (`1` logs instead of calling Discord), `HOST` / `PORT` (`0.0.0.0` / `8093`), `WEBHOOK_PATH`, `WEBHOOK_TOLERANCE`, `SEEN_CAPACITY`, `LOUNGE_DECRYPTION_KEYS`.
+Node 20+: `npm install && npm run build && npm start`. Variables: `NOWORK_WEBHOOK_SECRET`, `DISCORD_BOT_TOKEN` (not needed with `DRY_RUN=1`), `DISCORD_GUILD_ID` (required); `LINKED_ROLE_ID`, `LEVEL_ROLES` (`level:roleId,...`, each role held from its level upwards; set at least one of the two); `LINKS_FILE` (`links.json`), `DRY_RUN` (`1` logs instead of calling Discord), `HOST` / `PORT` (`0.0.0.0` / `8093`), `WEBHOOK_PATH`, `WEBHOOK_TOLERANCE`, `SEEN_CAPACITY`, `NOWORK_DECRYPTION_KEYS`.
 
 ## Behaviour, limits, security
 

@@ -1,6 +1,6 @@
-# nonebot-plugin-lounge
+# nonebot-plugin-nowork
 
-休息室账号（Lounge Account）的 NoneBot2 插件：绑定 / 解绑 / 查询个人信息，并把其余未命中内置指令的聊天内容转发给站点的指令注册表（`/api/bot/v1/command`），同时通过 WebSocket 接收站点推送的通知（如安全提醒、工单回复）并转发到已绑定的聊天。
+休息室账号（NoWork Account）的 NoneBot2 插件：绑定 / 解绑 / 查询个人信息，并把其余未命中内置指令的聊天内容转发给站点的指令注册表（`/api/bot/v1/command`），同时通过 WebSocket 接收站点推送的通知（如安全提醒、工单回复）并转发到已绑定的聊天。
 
 适配器无关：只使用 NoneBot2 `Event` 的通用方法（`get_user_id` / `get_plaintext` / `get_session_id`），理论上适用于 OneBot v11 / v12、Feishu、Telegram 等任意 NoneBot2 适配器；已验证见下方「实测清单」。
 
@@ -12,17 +12,17 @@
 pip install -e "D:/Project/Admin/SDK/bots/nonebot2"
 ```
 
-然后在 `pyproject.toml` 或 `bot.py` 里加载 `nonebot_plugin_lounge`。
+然后在 `pyproject.toml` 或 `bot.py` 里加载 `nonebot_plugin_nowork`。
 
 ## 配置（.env）
 
 ```ini
-LOUNGE_BASE_URL=https://lounge.example.com
-LOUNGE_BOT_TOKEN=<机器人令牌，在管理后台「开放平台 -> 机器人」创建并签发>
-LOUNGE_COMMAND_PREFIX=/
-LOUNGE_PLATFORM=            # 留空按适配器自动判断；桥接型机器人可强制指定，如 feishu
-LOUNGE_ALLOWED_CHATS=       # 逗号分隔的会话 id 白名单；留空表示不限制
-LOUNGE_LANG=                # 发给站点的 Accept-Language（zh-CN / en / ja / zh-TW）
+NOWORK_BASE_URL=https://nowork.example.com
+NOWORK_BOT_TOKEN=<机器人令牌，在管理后台「开放平台 -> 机器人」创建并签发>
+NOWORK_COMMAND_PREFIX=/
+NOWORK_PLATFORM=            # 留空按适配器自动判断；桥接型机器人可强制指定，如 feishu
+NOWORK_ALLOWED_CHATS=       # 逗号分隔的会话 id 白名单；留空表示不限制
+NOWORK_LANG=                # 发给站点的 Accept-Language（zh-CN / en / ja / zh-TW）
 ```
 
 ## 指令
@@ -52,9 +52,9 @@ pytest
 
 ---
 
-# nonebot-plugin-lounge (English)
+# nonebot-plugin-nowork (English)
 
-A NoneBot2 plugin for Lounge Account: bind / unbind / check your profile, and bridge any
+A NoneBot2 plugin for NoWork Account: bind / unbind / check your profile, and bridge any
 chat text that isn't a built-in command to the site's command registry
 (`/api/bot/v1/command`). It also opens a WebSocket to the site's notification stream and
 forwards pushed notifications (security alerts, ticket replies, ...) to the bound chat.
@@ -72,11 +72,11 @@ Not published to PyPI yet; install from the local path during development:
 pip install -e "D:/Project/Admin/SDK/bots/nonebot2"
 ```
 
-Then load `nonebot_plugin_lounge` from your `pyproject.toml` or `bot.py`.
+Then load `nonebot_plugin_nowork` from your `pyproject.toml` or `bot.py`.
 
 ## Config (.env)
 
-See the Chinese section above for the full list of `LOUNGE_*` keys.
+See the Chinese section above for the full list of `NOWORK_*` keys.
 
 ## Commands
 

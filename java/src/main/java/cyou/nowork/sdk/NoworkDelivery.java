@@ -1,4 +1,4 @@
-package cyou.lounge.sdk;
+package cyou.nowork.sdk;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
@@ -35,8 +35,8 @@ import javax.crypto.spec.SecretKeySpec;
  * encryption key. RSA-OAEP-256 or ECDH-ES+A256KW (P-256 / X25519), enc A256GCM. JCA only (Java 17+).
  * Keys are private JWKs as JSON text.
  */
-public final class LoungeDelivery {
-    private LoungeDelivery() {
+public final class NoWorkDelivery {
+    private NoWorkDelivery() {
     }
 
     /** A JWE could not be opened, or a check on its content failed. */
@@ -277,7 +277,7 @@ public final class LoungeDelivery {
 
     /**
      * Opens an encrypted webhook body ({"id","event","timestamp","jwe"}); verify the signature with
-     * LoungeWebhook first. Returns the inner document JSON (it must repeat id, event and timestamp).
+     * NoWorkWebhook first. Returns the inner document JSON (it must repeat id, event and timestamp).
      */
     public static String openWebhook(String body, PrivateJwk... keys) {
         Map<String, Object> outer = obj(Json.parse(body));

@@ -1,6 +1,6 @@
 //go:build !wasip1
 
-// Command hello is a Lounge WebAssembly plugin; see main.go. On other platforms it only tells
+// Command hello is a NoWork WebAssembly plugin; see main.go. On other platforms it only tells
 // how to build it, so `go vet ./...` works on the host.
 package main
 

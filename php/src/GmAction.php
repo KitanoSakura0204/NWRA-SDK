@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Lounge\Sdk;
+namespace NoWork\Sdk;
 
 /**
  * A GM action the plugin offers to the admin panel (PROTOCOL 2.4).

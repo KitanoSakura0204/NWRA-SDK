@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://lounge.example/schema/plugin-1.1.schema.json",
-  "title": "Lounge plugin manifest (plugin.json), standard 1.1",
+  "$id": "https://nowork.example/schema/plugin-1.1.schema.json",
+  "title": "NoWork plugin manifest (plugin.json), standard 1.1",
   "description": "Mirrors Backend internal/modules/plugins/manifest.go and internal/modules/pluginmarket/pluginstd (the host checks more: extension points against its registry, handler / capability pairing, file references). Every v1 manifest is a valid 1.1 manifest.",
   "type": "object",
   "additionalProperties": false,
@@ -64,9 +64,9 @@
     "engines": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Host compatibility (standard 1.1). lounge: a range over the host plugin API version (1.1.0 today); abi: the wasm host ABI version (1). Absent = any 1.x host, ABI 1.",
+      "description": "Host compatibility (standard 1.1). nowork: a range over the host plugin API version (1.1.0 today); abi: the wasm host ABI version (1). Absent = any 1.x host, ABI 1.",
       "properties": {
-        "lounge": { "$ref": "#/$defs/semverRange" },
+        "nowork": { "$ref": "#/$defs/semverRange" },
         "abi": { "type": "integer", "minimum": 0, "maximum": 1, "description": "0 or absent = ABI 1" }
       }
     },

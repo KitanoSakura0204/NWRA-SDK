@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Lounge\Sdk;
+namespace NoWork\Sdk;
 
-use Lounge\Sdk\Internal\Json;
+use NoWork\Sdk\Internal\Json;
 
 /** One approved binding between a user-center account and an in-game identity. */
 final class WhitelistEntry

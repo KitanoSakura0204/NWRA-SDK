@@ -2,7 +2,7 @@
   "id": "com.example.hello",
   "name": "Hello",
   "version": "1.0.0",
-  "author": "Lounge examples",
+  "author": "NoWork examples",
   "description": "Counts sign-ins, adds the count to tokens, greets players from the GM panel, runs an hourly job and shows a user-centre page.",
   "kind": "wasm",
   "locales": {

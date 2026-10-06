@@ -1,8 +1,8 @@
-"""Maps a NoneBot2 adapter to the platform name the Lounge Bot API expects.
+"""Maps a NoneBot2 adapter to the platform name the NoWork Bot API expects.
 
 The gateway's codecs (Backend/internal/modules/bots/platform/**) register kinds such as
 "onebot11", "feishu", "telegram", "discord", "wecom", "dingtalk", "wechat_mp", "qq_bot",
-"generic". Config `lounge_platform` overrides this when a bot bridges a kind the gateway
+"generic". Config `nowork_platform` overrides this when a bot bridges a kind the gateway
 does not know the adapter name for.
 """
 from __future__ import annotations

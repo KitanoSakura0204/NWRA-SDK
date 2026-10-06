@@ -1,9 +1,9 @@
-"""nonebot-plugin-lounge: binds a chat account to a Lounge Account user, and lets any chat
-reach the Lounge Bot API's command registry. Adapter-agnostic: uses nonebot.adapters.Event's
+"""nonebot-plugin-nowork: binds a chat account to a NoWork Account user, and lets any chat
+reach the NoWork Bot API's command registry. Adapter-agnostic: uses nonebot.adapters.Event's
 generic surface, so it works on OneBot v11 / v12, Feishu, Telegram and any adapter that
 reaches NoneBot's generic Message handling.
 
-Protocol: see SDK/docs/BOTS_SDK.md and lounge_bot_client (read from the landed backend,
+Protocol: see SDK/docs/BOTS_SDK.md and nowork_bot_client (read from the landed backend,
 Backend/internal/modules/bots, commit df7b675 / d52a936, 2026-09-29).
 """
 from __future__ import annotations
@@ -17,19 +17,19 @@ from nonebot.adapters import Bot, Event
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 
-from lounge_bot_client import BotClient, PluginEvent, connect_events
+from nowork_bot_client import BotClient, PluginEvent, connect_events
 
 from . import logic
 from .config import Config
-from .convert import chat_id_of, chat_type_of, lounge_message_to_text, sender_name_of
+from .convert import chat_id_of, chat_type_of, nowork_message_to_text, sender_name_of
 from .platform import platform_of
 
 __plugin_meta__ = PluginMetadata(
     name="休息室账号",
-    description="Lounge Account 绑定 / 解绑 / 查询，并把聊天指令转发给站点的指令注册表",
+    description="NoWork Account 绑定 / 解绑 / 查询，并把聊天指令转发给站点的指令注册表",
     usage="/bind <code>  /unbind  /me  其余未命中内置指令的消息转发给站点处理",
     type="application",
-    homepage="https://github.com/wangework/lounge",
+    homepage="https://github.com/wangework/nowork",
     config=Config,
     supported_adapters=None,  # generic: no adapter-specific import, works on every adapter
 )
@@ -45,16 +45,16 @@ _events_task: Optional[asyncio.Task] = None
 def client() -> BotClient:
     global _client
     if _client is None:
-        _client = BotClient(plugin_config.lounge_base_url, plugin_config.lounge_bot_token, lang=plugin_config.lounge_lang)
+        _client = BotClient(plugin_config.nowork_base_url, plugin_config.nowork_bot_token, lang=plugin_config.nowork_lang)
     return _client
 
 
 def _platform(bot: Bot) -> str:
-    return platform_of(bot.adapter.get_name(), plugin_config.lounge_platform)
+    return platform_of(bot.adapter.get_name(), plugin_config.nowork_platform)
 
 
 def _chat_allowed(chat_id: str) -> bool:
-    return logic.chat_allowed(plugin_config.lounge_allowed_chats, chat_id)
+    return logic.chat_allowed(plugin_config.nowork_allowed_chats, chat_id)
 
 
 bind_cmd = on_command("bind", aliases={"绑定"}, priority=5, block=True)
@@ -108,7 +108,7 @@ async def _start_events() -> None:
     _events_stop = asyncio.Event()
 
     async def on_event(ev: PluginEvent) -> None:
-        text = lounge_message_to_text(ev.message)
+        text = nowork_message_to_text(ev.message)
         if not text:
             return
         for bot in get_driver().bots.values():
@@ -120,11 +120,11 @@ async def _start_events() -> None:
                 await bot.send_msg(user_id=target_user, group_id=ev.target.get("chatId"), message=text)  # type: ignore[call-arg]
                 return
             except Exception as exc:  # noqa: BLE001 - adapters raise different types; try the next bot
-                logger.debug(f"lounge: notify send attempt failed on {bot.self_id}: {exc}")
-        logger.warning("lounge: no connected bot could deliver a notification")
+                logger.debug(f"nowork: notify send attempt failed on {bot.self_id}: {exc}")
+        logger.warning("nowork: no connected bot could deliver a notification")
 
     async def run() -> None:
-        await connect_events(plugin_config.lounge_base_url, plugin_config.lounge_bot_token, on_event, stop=_events_stop)
+        await connect_events(plugin_config.nowork_base_url, plugin_config.nowork_bot_token, on_event, stop=_events_stop)
 
     _events_task = asyncio.create_task(run())
 

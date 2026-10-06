@@ -1,4 +1,4 @@
-"""Minimal client for the Lounge Bot API (/api/bot/v1).
+"""Minimal client for the NoWork Bot API (/api/bot/v1).
 
 Contract read from the landed backend (Backend/internal/modules/bots: api.go, ws.go, hub.go,
 platform.go; commit df7b675 / d52a936), read on 2026-09-29. No public spec exists yet; see

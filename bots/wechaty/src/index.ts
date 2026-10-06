@@ -1,10 +1,10 @@
-import { BotClient, connectEvents, type PluginEvent } from "@lounge/bot-client";
+import { BotClient, connectEvents, type PluginEvent } from "@nowork/bot-client";
 import type { Message, Wechaty } from "wechaty";
 import { chatAllowed, doBind, doMe, doPassthrough, parseCommand, doUnbind } from "./logic.js";
-import { loungeMessageToText } from "./convert.js";
+import { noworkMessageToText } from "./convert.js";
 
-export interface LoungePluginConfig {
-  /** Lounge site base URL, e.g. "https://lounge.example.com". */
+export interface NoWorkPluginConfig {
+  /** NoWork site base URL, e.g. "https://nowork.example.com". */
   baseUrl: string;
   /** This bot's token (issued in the admin: 开放平台 -> 机器人). */
   botToken: string;
@@ -19,16 +19,16 @@ export interface LoungePluginConfig {
 }
 
 /**
- * wechaty-plugin-lounge: a Wechaty plugin (see
+ * wechaty-plugin-nowork: a Wechaty plugin (see
  * https://wechaty.js.org/docs/tutorials/using-plugin-with-wechaty, read 2026-09-29: "A
  * Wechaty Plugin is a JavaScript function that returns a function which accepts a Wechaty
- * instance") for binding a WeChat account to a Lounge Account user, and bridging chat text
- * to the Lounge Bot API's command registry. Works with any Wechaty puppet.
+ * instance") for binding a WeChat account to a NoWork Account user, and bridging chat text
+ * to the NoWork Bot API's command registry. Works with any Wechaty puppet.
  *
- * Protocol: see SDK/docs/BOTS_SDK.md and @lounge/bot-client (read from the landed backend,
+ * Protocol: see SDK/docs/BOTS_SDK.md and @nowork/bot-client (read from the landed backend,
  * Backend/internal/modules/bots, commit df7b675 / d52a936, 2026-09-29).
  */
-export function LoungePlugin(config: LoungePluginConfig) {
+export function NoWorkPlugin(config: NoWorkPluginConfig) {
   const platform = config.platform ?? "wechaty";
   const prefixes = config.prefixes ?? ["/"];
   const allowedChats = config.allowedChats ?? [];
@@ -42,7 +42,7 @@ export function LoungePlugin(config: LoungePluginConfig) {
         baseUrl: config.baseUrl,
         token: config.botToken,
         onEvent: async (ev: PluginEvent) => {
-          const text = loungeMessageToText(ev.message);
+          const text = noworkMessageToText(ev.message);
           if (!text) return;
           // Target.chatId is an opaque WeChat room/contact id (not a topic or display
           // name), so Room.find({topic}) / Contact.find({name}) do not apply here;

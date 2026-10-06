@@ -7,10 +7,10 @@ import time
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
-from .errors import LoungeError
+from .errors import NoWorkError
 
 
-class WebhookError(LoungeError):
+class WebhookError(NoWorkError):
     """Signature or timestamp verification failed."""
 
 
@@ -29,21 +29,21 @@ def webhook_signature(secret: str, ts: int, body: bytes) -> str:
 
 
 def verify_webhook(secret: str, headers: Mapping[str, str], body: bytes, tolerance: Optional[int] = 300) -> WebhookEvent:
-    """Verify X-Lounge-Signature / X-Lounge-Timestamp and parse the event.
+    """Verify X-NoWork-Signature / X-NoWork-Timestamp and parse the event.
 
     headers may be any case-insensitive mapping (Flask/Django request.headers work). tolerance is the
     replay window in seconds (None or 0 disables).
     """
     lookup = {k.lower(): v for k, v in headers.items()}
     try:
-        ts = int(str(lookup.get("x-lounge-timestamp", "")).strip())
+        ts = int(str(lookup.get("x-nowork-timestamp", "")).strip())
     except ValueError as e:
-        raise WebhookError("missing or invalid X-Lounge-Timestamp") from e
+        raise WebhookError("missing or invalid X-NoWork-Timestamp") from e
     # tolerance None or 0 disables the replay window (same as the Go / TS / Java / C# / PHP SDKs)
     if tolerance and abs(time.time() - ts) > tolerance:
         raise WebhookError("webhook timestamp outside tolerance")
     expected = webhook_signature(secret, ts, body)
-    given = str(lookup.get("x-lounge-signature", "")).strip()
+    given = str(lookup.get("x-nowork-signature", "")).strip()
     if not hmac.compare_digest(expected, given):
         raise WebhookError("invalid webhook signature")
     try:

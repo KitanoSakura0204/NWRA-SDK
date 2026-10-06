@@ -1,5 +1,5 @@
 /**
- * Lounge account -> Discord account links, learned from connection.bound and kept in a small JSON
+ * NoWork account -> Discord account links, learned from connection.bound and kept in a small JSON
  * file: user.level_changed and user.deleted carry no Discord id, so the bot needs them to know whose
  * roles to change.
  *

@@ -109,7 +109,7 @@ external 插件只写 `point`（可选 `handler` 作为标签），所有调用�
 
 | 字段 | 说明 |
 | --- | --- |
-| `engines` | `{"lounge": ">=1.1.0 <2.0.0", "abi": 1}`。`lounge` 是宿主插件接口版本（当前 1.1.0）的范围：`>=` `>` `<=` `<` `=` `^` `~` `*`，空格为“且”，`\|\|` 为“或”，最长 128，预发布标记只能跟在完整版本后（`>=1.1.0-beta` 可以，`>=1.1-beta` 不行）；`abi` 是 wasm 宿主 ABI（当前 1，`0` 与不写相同）。不写 = 任何 1.x 宿主、ABI 1。不兼容时上传与市场安装都会拒绝 |
+| `engines` | `{"nowork": ">=1.1.0 <2.0.0", "abi": 1}`。`nowork` 是宿主插件接口版本（当前 1.1.0）的范围：`>=` `>` `<=` `<` `=` `^` `~` `*`，空格为“且”，`\|\|` 为“或”，最长 128，预发布标记只能跟在完整版本后（`>=1.1.0-beta` 可以，`>=1.1-beta` 不行）；`abi` 是 wasm 宿主 ABI（当前 1，`0` 与不写相同）。不写 = 任何 1.x 宿主、ABI 1。不兼容时上传与市场安装都会拒绝 |
 | `icon` | 包内 png / webp，≤ 256 KB，建议 256×256 |
 | `screenshots` | 最多 8 个 `{ "path": "shots/1.png", "caption"?: Text }`，png / webp / jpeg，每张 ≤ 1 MB |
 | `categories` | 1–3 个，取自固定列表：`account` 账号、`security` 安全、`game` 游戏、`server` 服务器、`community` 社区、`notification` 通知、`integration` 集成、`analytics` 统计、`appearance` 外观、`developer` 开发、`other` 其他 |
@@ -118,4 +118,4 @@ external 插件只写 `point`（可选 `handler` 作为标签），所有调用�
 | `repository` | https 源码地址 |
 | `support` | `{ "url"?: "https://…", "email"?: "…" }`，至少一项 |
 
-图标与截图按文件内容（不是扩展名）判断类型。`loungeplugin lint -dir .` 在本地做同样的检查；发布流程见 [PUBLISHING.md](PUBLISHING.md)。
+图标与截图按文件内容（不是扩展名）判断类型。`noworkplugin lint -dir .` 在本地做同样的检查；发布流程见 [PUBLISHING.md](PUBLISHING.md)。

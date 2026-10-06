@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://lounge.example/schema/index-1.1.schema.json",
-  "title": "Lounge plugin market index (index.json), standard 1.1",
-  "description": "Written by loungeplugin index and by the pluginmarket module (GET /api/market/index.json); read by Backend internal/modules/plugins/market.go. A 1.0 index (no format field) stays readable: every 1.1 field is optional.",
+  "$id": "https://nowork.example/schema/index-1.1.schema.json",
+  "title": "NoWork plugin market index (index.json), standard 1.1",
+  "description": "Written by noworkplugin index and by the pluginmarket module (GET /api/market/index.json); read by Backend internal/modules/plugins/market.go. A 1.0 index (no format field) stays readable: every 1.1 field is optional.",
   "type": "object",
   "required": [
     "name",
@@ -20,7 +20,7 @@
       "maxLength": 64
     },
     "url": {
-      "$ref": "https://lounge.example/schema/plugin-1.1.schema.json#/$defs/httpsUrl",
+      "$ref": "https://nowork.example/schema/plugin-1.1.schema.json#/$defs/httpsUrl",
       "description": "the market's own site"
     },
     "updatedAt": {
@@ -72,7 +72,7 @@
           "maxLength": 64
         },
         "url": {
-          "$ref": "https://lounge.example/schema/plugin-1.1.schema.json#/$defs/httpsUrl"
+          "$ref": "https://nowork.example/schema/plugin-1.1.schema.json#/$defs/httpsUrl"
         },
         "publicKey": {
           "type": "string",
@@ -131,7 +131,7 @@
           "$ref": "#/$defs/assetUrl"
         },
         "caption": {
-          "$ref": "https://lounge.example/schema/plugin-1.1.schema.json#/$defs/text"
+          "$ref": "https://nowork.example/schema/plugin-1.1.schema.json#/$defs/text"
         }
       }
     },
@@ -174,16 +174,16 @@
           ]
         },
         "homepage": {
-          "$ref": "https://lounge.example/schema/plugin-1.1.schema.json#/$defs/httpsUrl"
+          "$ref": "https://nowork.example/schema/plugin-1.1.schema.json#/$defs/httpsUrl"
         },
         "repository": {
-          "$ref": "https://lounge.example/schema/plugin-1.1.schema.json#/$defs/httpsUrl"
+          "$ref": "https://nowork.example/schema/plugin-1.1.schema.json#/$defs/httpsUrl"
         },
         "support": {
           "type": "object",
           "properties": {
             "url": {
-              "$ref": "https://lounge.example/schema/plugin-1.1.schema.json#/$defs/httpsUrl"
+              "$ref": "https://nowork.example/schema/plugin-1.1.schema.json#/$defs/httpsUrl"
             },
             "email": {
               "type": "string",
@@ -194,7 +194,7 @@
         "locales": {
           "type": "object",
           "propertyNames": {
-            "$ref": "https://lounge.example/schema/plugin-1.1.schema.json#/$defs/lang"
+            "$ref": "https://nowork.example/schema/plugin-1.1.schema.json#/$defs/lang"
           },
           "additionalProperties": {
             "type": "object",
@@ -224,7 +224,7 @@
           "type": "array",
           "maxItems": 3,
           "items": {
-            "$ref": "https://lounge.example/schema/plugin-1.1.schema.json#/$defs/category"
+            "$ref": "https://nowork.example/schema/plugin-1.1.schema.json#/$defs/category"
           }
         },
         "keywords": {
@@ -287,25 +287,25 @@
           "format": "date-time"
         },
         "changelog": {
-          "$ref": "https://lounge.example/schema/plugin-1.1.schema.json#/$defs/longText"
+          "$ref": "https://nowork.example/schema/plugin-1.1.schema.json#/$defs/longText"
         },
         "permissions": {
           "type": "array",
           "items": {
-            "$ref": "https://lounge.example/schema/plugin-1.1.schema.json#/$defs/permission"
+            "$ref": "https://nowork.example/schema/plugin-1.1.schema.json#/$defs/permission"
           }
         },
         "capabilities": {
           "type": "array",
           "items": {
-            "$ref": "https://lounge.example/schema/plugin-1.1.schema.json#/$defs/capability"
+            "$ref": "https://nowork.example/schema/plugin-1.1.schema.json#/$defs/capability"
           }
         },
         "engines": {
           "type": "object",
           "properties": {
-            "lounge": {
-              "$ref": "https://lounge.example/schema/plugin-1.1.schema.json#/$defs/semverRange"
+            "nowork": {
+              "$ref": "https://nowork.example/schema/plugin-1.1.schema.json#/$defs/semverRange"
             },
             "abi": {
               "type": "integer",

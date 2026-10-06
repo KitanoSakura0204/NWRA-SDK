@@ -1,7 +1,7 @@
 {
-  "name": "@lounge/bot-client",
+  "name": "@nowork/bot-client",
   "version": "0.1.0",
-  "description": "Minimal client for the Lounge Bot API (/api/bot/v1), used by framework plugins (Koishi, Wechaty)",
+  "description": "Minimal client for the NoWork Bot API (/api/bot/v1), used by framework plugins (Koishi, Wechaty)",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

@@ -11,7 +11,7 @@ var pngBytes = []byte("\x89PNG\r\n\x1a\n0000")
 
 const listingManifest = `{"id":"com.example.demo","name":"Demo","version":"%s","author":"Me","kind":"declarative",
  "capabilities":["ui"],"icon":"icon.png","categories":["account"],"changelog":{"en":"v%s"},
- "engines":{"lounge":">=1.1.0 <2.0.0","abi":1},
+ "engines":{"nowork":">=1.1.0 <2.0.0","abi":1},
  "ui":[{"slot":"home.page","title":{"en":"Demo"},"entry":"ui/index.html"}]}`
 
 func demoFiles(version string) map[string][]byte {

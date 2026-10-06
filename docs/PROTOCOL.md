@@ -160,7 +160,7 @@ UserInfo 关键字段：
 ## 4. 错误处理约定
 
 - Server API 网络错误 → 抛出/返回 `TransportError`；`code != 0` → `ApiError{code,message}`。
-- Server API 加密响应（响应头 `X-Lounge-Encryption`，或 `data` 恰为 `{"jwe": "..."}`，见 [DELIVERY.md](DELIVERY.md) §5）无法打开时 → `EncryptionError`（未配置私钥、解密失败、`ctx` 不是 `server:<代码>:<本路由>`；配置私钥后 `whitelist` / `whitelist/check` 返回明文也按此拒绝）。它不属于 `TransportError`，插件应按拒绝处理（fail closed），不能走网络异常的放行降级。各 SDK 另提供原始响应访问（Go `Raw`、TypeScript / Python / Java / PHP `raw`、C# `RawAsync`），不解码 `data`。
+- Server API 加密响应（响应头 `X-NoWork-Encryption`，或 `data` 恰为 `{"jwe": "..."}`，见 [DELIVERY.md](DELIVERY.md) §5）无法打开时 → `EncryptionError`（未配置私钥、解密失败、`ctx` 不是 `server:<代码>:<本路由>`；配置私钥后 `whitelist` / `whitelist/check` 返回明文也按此拒绝）。它不属于 `TransportError`，插件应按拒绝处理（fail closed），不能走网络异常的放行降级。各 SDK 另提供原始响应访问（Go `Raw`、TypeScript / Python / Java / PHP `raw`、C# `RawAsync`），不解码 `data`。
 - 心跳的 `tps` / `players`（§2.3）与 GM 类型化动作与 `{actions, options}` 发布（§2.4）六种语言 SDK 均已支持；非有限或 ≤ 0 的 TPS 与空玩家列表不发送。
 - OIDC 端点遵循 RFC 6749 错误格式 `{ "error": "...", "error_description": "..." }` → `OAuthError`。
 - 所有 SDK 默认超时 10s，可配置；建议服务器插件对白名单校验做本地缓存与降级（网络异常时按 `mode` 决定放行策略）。
@@ -177,16 +177,16 @@ UserInfo 关键字段：
 
 | 头 | 说明 |
 | --- | --- |
-| `X-Lounge-Event` | 事件名 |
-| `X-Lounge-Delivery` | 投递 ID（重投时不变） |
-| `X-Lounge-Timestamp` | Unix 秒 |
-| `X-Lounge-Signature` | `sha256=` + HMAC-SHA256(secret, `<timestamp>.<body>`) 的十六进制 |
+| `X-NoWork-Event` | 事件名 |
+| `X-NoWork-Delivery` | 投递 ID（重投时不变） |
+| `X-NoWork-Timestamp` | Unix 秒 |
+| `X-NoWork-Signature` | `sha256=` + HMAC-SHA256(secret, `<timestamp>.<body>`) 的十六进制 |
 
 接收方应：校验签名（定时比较）、拒绝时间戳偏差过大的请求（默认 5 分钟；各语言 SDK 的容差参数传 0 / null 表示关闭该检查）、幂等处理同一 `id`，并在 10 秒内返回 2xx；非 2xx 或超时将按 30s / 2m / 10m / 30m / 2h / 6h 退避重试。
 
 事件：`user.registered` `user.login` `user.login_failed` `user.locked` `user.frozen` `user.level_changed` `user.deleted` `realname.reviewed` `game_role.reviewed` `connection.bound` `connection.unbound` `oauth.consent_granted` `oauth.consent_revoked` `server.offline`。
 
-各语言 SDK 提供校验助手：Go `lounge.VerifyWebhook` / `ReadWebhook`，Java `LoungeWebhook.verify`，Python `lounge_sdk.verify_webhook`，TypeScript `verifyWebhook`，C# `LoungeWebhook.Verify`，PHP `Webhook::verify` / `Webhook::verifyRequest`。
+各语言 SDK 提供校验助手：Go `nowork.VerifyWebhook` / `ReadWebhook`，Java `NoWorkWebhook.verify`，Python `nowork_sdk.verify_webhook`，TypeScript `verifyWebhook`，C# `NoWorkWebhook.Verify`，PHP `Webhook::verify` / `Webhook::verifyRequest`。
 
 ## 6. SDK 登录页（游戏客户端登录，2026-09-28）
 
@@ -214,7 +214,7 @@ UserInfo 关键字段：
 ### 6.2 回传方式
 
 - **redirect**：页面跳转到 `redirect_uri?code=…&state=…&iss=…`（失败时为 `error` / `error_description` / `state` / `iss`）。适用于自定义协议（`mygame://auth`、`com.example.game:/cb`）、本机回环（`http://127.0.0.1:47823/cb`，端口须与登记一致）或 https。浏览器可能拦下自定义协议，页面 2.5 秒后给出手动返回的链接。
-- **postMessage**：页面向 `window.opener`（弹窗）或 `window.parent`（内嵌）发送 `{ type: "lounge:sdk-login", code, state, iss, server }`（失败时带 `error`、`error_description`），`targetOrigin` 恒为回调地址的源，从不使用 `*`。接收方必须校验 `event.origin`（登录页的源）、`type` 与 `state`。该模式的回调地址只能是 https 或本机 http。后端托管前端时，该服务器登录页的响应头为 `Content-Security-Policy: frame-ancestors <回调地址的源…>`（其他模式与站内其他页面仍为 `'none'` + `X-Frame-Options: DENY`）；前端由独立 Web 服务器托管时，需为 `/sdk/login/{serverCode}` 自行下发同样的头。内嵌时页面不提供第三方登录（需要整页跳转）；通行密钥需要宿主 iframe 带 `allow="publickey-credentials-get"`。弹窗失去 opener 时页面提供「返回 {host}」按钮，跳转到 redirect 形式的地址。
+- **postMessage**：页面向 `window.opener`（弹窗）或 `window.parent`（内嵌）发送 `{ type: "nowork:sdk-login", code, state, iss, server }`（失败时带 `error`、`error_description`），`targetOrigin` 恒为回调地址的源，从不使用 `*`。接收方必须校验 `event.origin`（登录页的源）、`type` 与 `state`。该模式的回调地址只能是 https 或本机 http。后端托管前端时，该服务器登录页的响应头为 `Content-Security-Policy: frame-ancestors <回调地址的源…>`（其他模式与站内其他页面仍为 `'none'` + `X-Frame-Options: DENY`）；前端由独立 Web 服务器托管时，需为 `/sdk/login/{serverCode}` 自行下发同样的头。内嵌时页面不提供第三方登录（需要整页跳转）；通行密钥需要宿主 iframe 带 `allow="publickey-credentials-get"`。弹窗失去 opener 时页面提供「返回 {host}」按钮，跳转到 redirect 形式的地址。
 - **code-display**：页面显示 8 位登录码（字母表 `ABCDEFGHJKMNPQRSTVWXYZ23456789`，分两组显示），玩家在客户端输入。登录码就是授权码：单次有效、与普通授权码同一有效期（默认 300 秒）、绑定 PKCE，没有 `code_verifier` 猜中也无用。客户端去掉空格与横线并转大写后作为 `code` 使用（SDK `NormalizeLoginCode` / `normalizeLoginCode`）。适用于主机、电视等无法接收回调的客户端。
 
 ### 6.3 换取令牌

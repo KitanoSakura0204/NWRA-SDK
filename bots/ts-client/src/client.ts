@@ -11,7 +11,7 @@ import type {
 } from "./types.js";
 
 export interface BotClientOptions {
-  /** Site base URL, e.g. "https://lounge.example.com" (no trailing slash required). */
+  /** Site base URL, e.g. "https://nowork.example.com" (no trailing slash required). */
   baseUrl: string;
   /** The bot's token (Backend BotToken), sent as "Authorization: Bot <token>". */
   token: string;
@@ -22,7 +22,7 @@ export interface BotClientOptions {
 }
 
 /**
- * Minimal client for the Lounge Bot API (/api/bot/v1). Framework plugins (Koishi, Wechaty)
+ * Minimal client for the NoWork Bot API (/api/bot/v1). Framework plugins (Koishi, Wechaty)
  * use it for bind / unbind / lookup / command and for pulling queued notifications
  * (events + eventsPoll + ack); `connectEvents` in ws.ts drives the WebSocket.
  *

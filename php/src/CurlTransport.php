@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Lounge\Sdk;
+namespace NoWork\Sdk;
 
-use Lounge\Sdk\Exceptions\TransportError;
+use NoWork\Sdk\Exceptions\TransportError;
 
 /**
  * Default HTTP transport built on ext-curl.
@@ -13,10 +13,10 @@ use Lounge\Sdk\Exceptions\TransportError;
  * `fn(string $method, string $url, array<string,string> $headers, ?string $body, float $timeout): array{int, string}`
  * returning the HTTP status code and the raw response body (also for 4xx/5xx answers). A transport may add the
  * response headers as a third element (`array<string, string>`, any name case): the Server API client reads
- * `X-Lounge-Encryption` from them, and falls back to the body shape without them. Network failures must be
+ * `X-NoWork-Encryption` from them, and falls back to the body shape without them. Network failures must be
  * thrown as TransportError; other exceptions are wrapped into TransportError by the SDK. Inject your own
  * (Guzzle, Symfony HttpClient, a fake in tests) through the `$transport` constructor argument of
- * LoungeClient / LoungeOidc.
+ * NoworkClient / NoworkOidc.
  */
 final class CurlTransport
 {
@@ -27,7 +27,7 @@ final class CurlTransport
     public function __construct(private array $options = [])
     {
         if (!\function_exists('curl_init')) {
-            throw new \RuntimeException('lounge: ext-curl is required by the default transport; install it or inject another transport');
+            throw new \RuntimeException('nowork: ext-curl is required by the default transport; install it or inject another transport');
         }
     }
 

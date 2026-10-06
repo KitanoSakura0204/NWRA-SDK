@@ -1,4 +1,4 @@
-package lounge
+package nowork
 
 import (
 	"crypto"
@@ -22,7 +22,7 @@ import (
 // enc A256GCM. Standard library only.
 
 // ErrDecrypt is returned for any JWE that cannot be opened (wrong key, tampered, unsupported).
-var ErrDecrypt = errors.New("lounge: cannot decrypt the JWE")
+var ErrDecrypt = errors.New("nowork: cannot decrypt the JWE")
 
 // DecryptionKey is an app's private key, parsed from its private JWK.
 type DecryptionKey struct {
@@ -63,7 +63,7 @@ func ParseDecryptionKey(jwk []byte) (*DecryptionKey, error) {
 		}
 		k.x25519 = priv
 	default:
-		return nil, errors.New("lounge: need a private RSA, EC P-256 or X25519 JWK")
+		return nil, errors.New("nowork: need a private RSA, EC P-256 or X25519 JWK")
 	}
 	return k, nil
 }
@@ -207,19 +207,19 @@ func aesKeyUnwrap(kek, wrapped []byte) ([]byte, error) {
 func VerifyIDToken(token string, jwks []byte, issuer, audience string, now time.Time) (map[string]any, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		return nil, errors.New("lounge: not a signed JWT")
+		return nil, errors.New("nowork: not a signed JWT")
 	}
 	raw := make([][]byte, 3)
 	for i, p := range parts {
 		v, err := base64.RawURLEncoding.DecodeString(p)
 		if err != nil {
-			return nil, errors.New("lounge: malformed JWT")
+			return nil, errors.New("nowork: malformed JWT")
 		}
 		raw[i] = v
 	}
 	var hdr struct{ Alg, Kid string }
 	if json.Unmarshal(raw[0], &hdr) != nil || hdr.Alg != "RS256" {
-		return nil, errors.New("lounge: ID token must be RS256")
+		return nil, errors.New("nowork: ID token must be RS256")
 	}
 	var set struct {
 		Keys []struct{ Kty, Kid, N, E string } `json:"keys"`
@@ -237,28 +237,28 @@ func VerifyIDToken(token string, jwks []byte, issuer, audience string, now time.
 		}
 	}
 	if pub == nil {
-		return nil, errors.New("lounge: signing key not in the JWKS")
+		return nil, errors.New("nowork: signing key not in the JWKS")
 	}
 	sum := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
 	if err := rsa.VerifyPKCS1v15(pub, crypto.SHA256, sum[:], raw[2]); err != nil {
-		return nil, errors.New("lounge: invalid ID token signature")
+		return nil, errors.New("nowork: invalid ID token signature")
 	}
 	var claims map[string]any
 	if err := json.Unmarshal(raw[1], &claims); err != nil {
 		return nil, err
 	}
 	if issuer != "" && claims["iss"] != issuer {
-		return nil, errors.New("lounge: ID token issuer mismatch")
+		return nil, errors.New("nowork: ID token issuer mismatch")
 	}
 	if audience != "" && !hasAudience(claims["aud"], audience) {
-		return nil, errors.New("lounge: ID token audience mismatch")
+		return nil, errors.New("nowork: ID token audience mismatch")
 	}
 	leeway := int64(60)
 	if exp, ok := claims["exp"].(float64); !ok || int64(exp)+leeway < now.Unix() {
-		return nil, errors.New("lounge: ID token expired")
+		return nil, errors.New("nowork: ID token expired")
 	}
 	if nbf, ok := claims["nbf"].(float64); ok && int64(nbf)-leeway > now.Unix() {
-		return nil, errors.New("lounge: ID token not valid yet")
+		return nil, errors.New("nowork: ID token not valid yet")
 	}
 	return claims, nil
 }
@@ -288,7 +288,7 @@ func DecryptIDToken(token string, jwks []byte, issuer, audience string, keys ...
 }
 
 // OpenServerData opens the plugin-API envelope: data {"jwe": "..."} of a response that carried
-// X-Lounge-Encryption: JWE (the whole response body is accepted too). ctx, when set, must equal
+// X-NoWork-Encryption: JWE (the whole response body is accepted too). ctx, when set, must equal
 // the header's ctx ("server:<code>:<route>"). It fails on a plain body: a server that turned
 // encryption on must not silently accept plaintext.
 func OpenServerData(data []byte, ctx string, keys ...*DecryptionKey) ([]byte, error) {
@@ -305,14 +305,14 @@ func OpenServerData(data []byte, ctx string, keys ...*DecryptionKey) ([]byte, er
 		env.JWE = env.Data.JWE
 	}
 	if env.JWE == "" {
-		return nil, errors.New("lounge: response is not encrypted")
+		return nil, errors.New("nowork: response is not encrypted")
 	}
 	plain, hdr, err := DecryptJWE(env.JWE, keys...)
 	if err != nil {
 		return nil, err
 	}
 	if ctx != "" && hdr["ctx"] != ctx {
-		return nil, errors.New("lounge: envelope ctx mismatch")
+		return nil, errors.New("nowork: envelope ctx mismatch")
 	}
 	return plain, nil
 }
@@ -331,21 +331,21 @@ func OpenWebhook(body []byte, keys ...*DecryptionKey) (*WebhookEvent, error) {
 		return nil, err
 	}
 	if outer.JWE == "" {
-		return nil, errors.New("lounge: webhook is not encrypted")
+		return nil, errors.New("nowork: webhook is not encrypted")
 	}
 	plain, hdr, err := DecryptJWE(outer.JWE, keys...)
 	if err != nil {
 		return nil, err
 	}
 	if ctx, _ := hdr["ctx"].(string); !strings.HasPrefix(ctx, "webhook:") {
-		return nil, errors.New("lounge: envelope ctx mismatch")
+		return nil, errors.New("nowork: envelope ctx mismatch")
 	}
 	var ev WebhookEvent
 	if err := json.Unmarshal(plain, &ev); err != nil {
 		return nil, err
 	}
 	if ev.ID != outer.ID || ev.Event != outer.Event || ev.Timestamp != outer.Timestamp {
-		return nil, errors.New("lounge: webhook envelope does not match its content")
+		return nil, errors.New("nowork: webhook envelope does not match its content")
 	}
 	return &ev, nil
 }

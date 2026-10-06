@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from lounge_bot_client.ws import connect_events
+from nowork_bot_client.ws import connect_events
 
 
 class FakeConnection:
@@ -48,7 +48,7 @@ async def test_acks_a_delivered_message_and_answers_ping():
         received.append(ev)
 
     async def runner():
-        await connect_events("https://lounge.example.com", "tok", on_event, connector=connector, stop=stop)
+        await connect_events("https://nowork.example.com", "tok", on_event, connector=connector, stop=stop)
 
     task = asyncio.create_task(runner())
     for _ in range(20):
@@ -86,7 +86,7 @@ async def test_reconnects_with_backoff_after_drop():
         pass
 
     async def runner():
-        await connect_events("https://lounge.example.com", "tok", on_event, connector=connector, backoff=[0.01, 0.01], stop=stop)
+        await connect_events("https://nowork.example.com", "tok", on_event, connector=connector, backoff=[0.01, 0.01], stop=stop)
 
     task = asyncio.create_task(runner())
     for _ in range(50):

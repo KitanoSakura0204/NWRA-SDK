@@ -1,7 +1,7 @@
 /** SDK login page helpers (PROTOCOL.md §6): PKCE, the login URL, and reading the result. */
 
 /** Message type the login page posts in postMessage mode. */
-export const SDK_LOGIN_MESSAGE = 'lounge:sdk-login';
+export const SDK_LOGIN_MESSAGE = 'nowork:sdk-login';
 
 function b64url(bytes: Uint8Array): string {
   let s = '';

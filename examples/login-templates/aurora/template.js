@@ -1,8 +1,8 @@
-// "Aurora" example SDK login template. Talks to the user centre only through window.LoungeLogin
+// "Aurora" example SDK login template. Talks to the user centre only through window.NoWorkLogin
 // (SDK/docs/LOGIN_TEMPLATES.md): no network, no storage; consent, captcha, the result screen and
 // the hand-back to the game are done by the user centre after a call resolves with "done".
 (async () => {
-  const L = window.LoungeLogin;
+  const L = window.NoWorkLogin;
   const cfg = await L.ready();
   const t = L.t;
   const $ = (s) => document.querySelector(s);

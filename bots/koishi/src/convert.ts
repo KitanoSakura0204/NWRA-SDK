@@ -1,8 +1,8 @@
-import type { Message } from "@lounge/bot-client";
+import type { Message } from "@nowork/bot-client";
 
-/** Renders a Lounge Message (from /command or a pushed notification) down to plain text.
+/** Renders a NoWork Message (from /command or a pushed notification) down to plain text.
  * Non-text segments degrade to a bracketed placeholder rather than being dropped silently. */
-export function loungeMessageToText(message: Message | undefined | null): string {
+export function noworkMessageToText(message: Message | undefined | null): string {
   if (!message || message.length === 0) return "";
   const parts: string[] = [];
   for (const seg of message) {

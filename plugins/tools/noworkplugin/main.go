@@ -1,15 +1,15 @@
-// Command loungeplugin creates signing keys, packs and signs plugin packages, verifies them
+// Command noworkplugin creates signing keys, packs and signs plugin packages, verifies them
 // and writes a market index. Standard library only.
 //
-//	loungeplugin keygen -out dev             → dev.key (PKCS#8 PEM, keep it secret) + dev.pub (base64)
-//	loungeplugin pack -dir ./hello -key dev.key -out dist
-//	loungeplugin verify -zip dist/com.example.hello-1.0.0.zip -pub dev.pub
-//	loungeplugin index -dir dist -name "My plugins" > index.json
-//	loungeplugin lint -dir ./hello            (or -zip dist/com.example.hello-1.0.0.zip, -index index.json)
+//	noworkplugin keygen -out dev             → dev.key (PKCS#8 PEM, keep it secret) + dev.pub (base64)
+//	noworkplugin pack -dir ./hello -key dev.key -out dist
+//	noworkplugin verify -zip dist/com.example.hello-1.0.0.zip -pub dev.pub
+//	noworkplugin index -dir dist -name "My plugins" > index.json
+//	noworkplugin lint -dir ./hello            (or -zip dist/com.example.hello-1.0.0.zip, -index index.json)
 //
 // The package is a zip of plugin.json plus every other file of the directory (hidden files,
 // *.go, go.mod / go.sum, build scripts and dist/ are left out) and signature.json. The
-// signature is ed25519 over "lounge-plugin-v1\n<id>\n<version>\n<digest>\n", where digest is
+// signature is ed25519 over "nowork-plugin-v1\n<id>\n<version>\n<digest>\n", where digest is
 // the hex SHA-256 over the sorted lines "<path>\x00<hex sha256 of the file>\n" of every file
 // except signature.json. The user centre verifies exactly that (Backend
 // internal/modules/plugins/sign.go).
@@ -41,7 +41,7 @@ import (
 const (
 	manifestFile  = "plugin.json"
 	signatureFile = "signature.json"
-	sigDomain     = "lounge-plugin-v1"
+	sigDomain     = "nowork-plugin-v1"
 )
 
 func main() {
@@ -64,13 +64,13 @@ func main() {
 		usage()
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "loungeplugin:", err)
+		fmt.Fprintln(os.Stderr, "noworkplugin:", err)
 		os.Exit(1)
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: loungeplugin keygen|pack|verify|index|lint [flags] (see -h of each)")
+	fmt.Fprintln(os.Stderr, "usage: noworkplugin keygen|pack|verify|index|lint [flags] (see -h of each)")
 	os.Exit(2)
 }
 

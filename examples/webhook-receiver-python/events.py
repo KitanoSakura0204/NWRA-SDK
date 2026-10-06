@@ -8,9 +8,9 @@ import time
 from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 if TYPE_CHECKING:
-    from lounge_sdk import WebhookEvent
+    from nowork_sdk import WebhookEvent
 
-log = logging.getLogger("lounge.events")
+log = logging.getLogger("nowork.events")
 
 # Review results carried by game_role.reviewed -> data.status.
 ROLE_PENDING, ROLE_APPROVED, ROLE_REJECTED, ROLE_BANNED = 0, 1, 2, 3

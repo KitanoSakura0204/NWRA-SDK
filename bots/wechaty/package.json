@@ -1,7 +1,7 @@
 {
-  "name": "wechaty-plugin-lounge",
+  "name": "wechaty-plugin-nowork",
   "version": "0.1.0",
-  "description": "Lounge Account bind/unbind/me and command bridge for Wechaty (personal WeChat, any puppet)",
+  "description": "NoWork Account bind/unbind/me and command bridge for Wechaty (personal WeChat, any puppet)",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -20,7 +20,7 @@
     "wechaty": "^1.20.0"
   },
   "dependencies": {
-    "@lounge/bot-client": "file:../ts-client"
+    "@nowork/bot-client": "file:../ts-client"
   },
   "devDependencies": {
     "wechaty": "1.20.2",

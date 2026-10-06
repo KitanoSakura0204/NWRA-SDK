@@ -1,6 +1,6 @@
 """The webhook endpoint as a plain function, independent of the HTTP server so tests can call it:
 
-- verifies X-Lounge-Signature / X-Lounge-Timestamp over the raw body (Python SDK)
+- verifies X-NoWork-Signature / X-NoWork-Timestamp over the raw body (Python SDK)
 - opens encrypted deliveries (JWE, SDK/docs/DELIVERY.md section 6)
 - de-duplicates deliveries by event id (in-memory LRU)
 
@@ -19,13 +19,13 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 # The SDK source in this repo (SDK/python). Copied out of the repo, `pip install` the SDK instead.
 _SDK = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "python"))
-if os.path.isdir(os.path.join(_SDK, "lounge_sdk")):
+if os.path.isdir(os.path.join(_SDK, "nowork_sdk")):
     sys.path.insert(0, _SDK)
 
-from lounge_sdk import WebhookError, WebhookEvent, verify_webhook  # noqa: E402
-from lounge_sdk.delivery import DecryptError, open_webhook  # noqa: E402
+from nowork_sdk import WebhookError, WebhookEvent, verify_webhook  # noqa: E402
+from nowork_sdk.delivery import DecryptError, open_webhook  # noqa: E402
 
-log = logging.getLogger("lounge.webhook")
+log = logging.getLogger("nowork.webhook")
 
 MAX_BODY = 1 << 20  # 1 MiB, same cap as the SDKs
 
@@ -83,7 +83,7 @@ class _OpenError(Exception):
 
 
 def _has_jwe(body: bytes) -> bool:
-    """Detects the encrypted shape even when a proxy dropped the X-Lounge-Encryption header."""
+    """Detects the encrypted shape even when a proxy dropped the X-NoWork-Encryption header."""
     try:
         doc = json.loads(body)
     except ValueError:
@@ -106,7 +106,7 @@ class Receiver:
         """A plain delivery is returned as verified; an encrypted one is decrypted (open_webhook also
         checks that the inner id, event and timestamp repeat the signed outer ones and that the
         header ctx is "webhook:<endpoint id>")."""
-        encrypted = str(headers.get("x-lounge-encryption", "")).upper() == "JWE" or _has_jwe(body)
+        encrypted = str(headers.get("x-nowork-encryption", "")).upper() == "JWE" or _has_jwe(body)
         if not encrypted:
             # Refuse plaintext from an endpoint that should encrypt rather than silently accept it.
             if self.keys:
@@ -126,7 +126,7 @@ class Receiver:
         if method != "POST":
             return 405, {"error": "method not allowed"}
         lower = {k.lower(): v for k, v in headers.items()}
-        delivery = lower.get("x-lounge-delivery", "")
+        delivery = lower.get("x-nowork-delivery", "")
 
         # Verify against the raw bytes: the signature covers "<timestamp>.<body>" exactly as sent,
         # and an encrypted body is opened only after it verified.

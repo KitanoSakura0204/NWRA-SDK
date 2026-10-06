@@ -35,7 +35,7 @@
 
 **导出**：`memory`；每个处理函数 `() -> i32`（清单里 `handler` 写的名字）；可选 `_initialize`（反应器模块，例如 Go `-buildmode=c-shared`）。返回 0 = 成功；非 0 = 处理函数自己报告的错误（此时输出作为错误信息，建议 `{"error": "…"}`），只记审计，**不计入**自动停用。
 
-**导入**，模块名 `lounge`（除此之外只允许 `wasi_snapshot_preview1`，其他导入在安装时拒绝）：
+**导入**，模块名 `nowork`（除此之外只允许 `wasi_snapshot_preview1`，其他导入在安装时拒绝）：
 
 | 函数 | 签名 | 说明 |
 | --- | --- | --- |
@@ -80,7 +80,7 @@ wasm 用 `call(name, args)`，外部应用用 `POST /api/plugin/v1/call/<name>`�
 | `server.get` | `server.read` | `{id \| code}` → 服务器（server 范围插件只能看到它开启的服务器） |
 | `servers.list` | `server.read` | `{}` → `{servers}`（已审核，最多 200 台） |
 
-`http.fetch`：只允许 https（调试模式下也允许 http）；主机必须在 `http.allowHosts`；连接前按解析出的 IP 再做一次 SSRF 检查（内网、回环、元数据地址一律拒绝）；最多 3 次跳转且必须留在允许的主机内；10 秒超时；响应 ≤ 1 MiB（`body` 是文本，二进制会被替换为 U+FFFD）；不能设置 Host、Content-Length、Connection 等逐跳头；User-Agent 固定为 `LoungePlugin/1 (<插件 id>)`。
+`http.fetch`：只允许 https（调试模式下也允许 http）；主机必须在 `http.allowHosts`；连接前按解析出的 IP 再做一次 SSRF 检查（内网、回环、元数据地址一律拒绝）；最多 3 次跳转且必须留在允许的主机内；10 秒超时；响应 ≤ 1 MiB（`body` 是文本，二进制会被替换为 U+FFFD）；不能设置 Host、Content-Length、Connection 等逐跳头；User-Agent 固定为 `NoWorkPlugin/1 (<插件 id>)`。
 
 ## 4. 外部应用与声明式钩子
 
@@ -88,12 +88,12 @@ wasm 用 `call(name, args)`，外部应用用 `POST /api/plugin/v1/call/<name>`�
 
 ```
 Content-Type: application/json
-X-Lounge-Plugin: com.example.app        X-Lounge-Event: user.login
-X-Lounge-Delivery: <信封 id>             X-Lounge-Timestamp: <unix 秒>
-X-Lounge-Signature: sha256=<hex HMAC-SHA256(签名密钥, "<timestamp>.<正文>")>
+X-NoWork-Plugin: com.example.app        X-NoWork-Event: user.login
+X-NoWork-Delivery: <信封 id>             X-NoWork-Timestamp: <unix 秒>
+X-NoWork-Signature: sha256=<hex HMAC-SHA256(签名密钥, "<timestamp>.<正文>")>
 ```
 
-接收方必须校验签名、拒绝超过 5 分钟的时间戳、按 `X-Lounge-Delivery` 去重。签名密钥（`lps_…`）安装时只显示一次，可在插件详情里重新生成。
+接收方必须校验签名、拒绝超过 5 分钟的时间戳、按 `X-NoWork-Delivery` 去重。签名密钥（`lps_…`）安装时只显示一次，可在插件详情里重新生成。
 
 **响应**：10 秒内返回 2xx（过滤在同步预算内）；正文 ≤ 256 KiB，就是处理函数的输出。非 2xx、超时、连接失败都算失败。业务错误请返回 200 与 `{"error": "…"}`。事件只投递一次、不重试；每个实例 4 个工作协程、队列 1024，队列满时丢弃并记审计（`dropped`）。慢任务请先回 204 再在后台处理。
 
@@ -118,7 +118,7 @@ Content-Security-Policy: sandbox allow-scripts; default-src 'none'; script-src '
 
 因此页面是不透明源：**不能写内联脚本**（脚本放包里的 .js 文件），不能 fetch / XHR / WebSocket，没有 Cookie 与 localStorage，不能提交表单或弹窗，只能嵌在本站。宿主 iframe 另有 `sandbox="allow-scripts"`、`referrerpolicy="no-referrer"`、`allow=""`。
 
-**协议**（`examples/hello/ui/bridge.js` 可直接复制）：页面 → 宿主 `{lounge: 1, id, method, params}`；宿主 → 页面 `{lounge: 1, id, ok, result | error}`；宿主推送 `{lounge: 1, event: "context", data}`（主题或语言变化）。宿主只接受自己 iframe 发出的消息。
+**协议**（`examples/hello/ui/bridge.js` 可直接复制）：页面 → 宿主 `{nowork: 1, id, method, params}`；宿主 → 页面 `{nowork: 1, id, ok, result | error}`；宿主推送 `{nowork: 1, event: "context", data}`（主题或语言变化）。宿主只接受自己 iframe 发出的消息。
 
 | method | params → result |
 | --- | --- |
@@ -138,7 +138,7 @@ zip 根目录：`plugin.json`、可选 `signature.json` 与其他文件。
 ```
 
 - **摘要** = SHA-256（十六进制）覆盖按路径排序的每一行 `"<路径>\x00<该文件 SHA-256 十六进制>\n"`，包含除 `signature.json` 外的所有文件（含 `plugin.json`）。
-- **签名内容** = `"lounge-plugin-v1\n<id>\n<version>\n<摘要>\n"`（id、version 取自 plugin.json，去掉首尾空白）。
+- **签名内容** = `"nowork-plugin-v1\n<id>\n<version>\n<摘要>\n"`（id、version 取自 plugin.json，去掉首尾空白）。
 - **受信任的发布者**：后台设置里的 32 字节 ed25519 公钥（标准 base64），只有超级管理员能改。
 - **安装策略**：受信任签名 → 任何有 `plugin:manage` 的管理员可以安装；未签名或签名者未受信任 → 拒绝，除非超级管理员开启了「允许未签名插件」**且**安装者是超级管理员；在受信任公钥下验证失败 → 永远拒绝（包被改过）。
 
@@ -156,7 +156,7 @@ zip 根目录：`plugin.json`、可选 `signature.json` 与其他文件。
 }
 ```
 
-`url` 可以相对索引地址。索引 ≤ 2 MiB、最多 500 个插件，经 SSRF 防护获取，缓存 10 分钟并由定时维护刷新（用于“有新版本”提示）。索引只是指针：下载的包必须与 `sha256` 一致、通过 §6 的签名校验，且 id / version 与索引一致。用 `loungeplugin index -dir dist` 生成。
+`url` 可以相对索引地址。索引 ≤ 2 MiB、最多 500 个插件，经 SSRF 防护获取，缓存 10 分钟并由定时维护刷新（用于“有新版本”提示）。索引只是指针：下载的包必须与 `sha256` 一致、通过 §6 的签名校验，且 id / version 与索引一致。用 `noworkplugin index -dir dist` 生成。
 
 ### 7.1 索引 1.1
 
@@ -166,4 +166,4 @@ zip 根目录：`plugin.json`、可选 `signature.json` 与其他文件。
 - 每个插件：`scope`、`locales`、`icon`、`screenshots`（`[{url, caption}]`）、`categories`、`keywords`、`repository`、`support`、`featured`、`downloads`、`updatedAt`；`icon` 与截图 `url` 可相对索引地址。
 - 每个版本：`publishedAt`、`changelog`、`permissions`、`capabilities`、`engines`、`yanked` + `yankedReason`（显示但不能安装）。
 
-定义见 [schema/index.schema.json](schema/index.schema.json)。`loungeplugin index` 写 1.1 索引（`-publisher-key`、`-revoked`、`-yanked`，并把图标、截图复制到 `assets/<id>/<version>/`）；站点自带的插件市场模块在 `GET /api/market/index.json` 提供同样格式。
+定义见 [schema/index.schema.json](schema/index.schema.json)。`noworkplugin index` 写 1.1 索引（`-publisher-key`、`-revoked`、`-yanked`，并把图标、截图复制到 `assets/<id>/<version>/`）；站点自带的插件市场模块在 `GET /api/market/index.json` 提供同样格式。

@@ -8,7 +8,7 @@ import urllib.request
 from .errors import OAuthError, TransportError
 
 
-class LoungeOIDC:
+class NoworkOIDC:
     """Minimal OIDC relying-party helper (authorization code + PKCE, refresh, userinfo, introspection)."""
 
     def __init__(self, issuer: str, client_id: str, client_secret: str = "", redirect_uri: str = "", timeout: float = 10.0):

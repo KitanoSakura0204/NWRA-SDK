@@ -6,11 +6,11 @@
 
 | 目录 | 包名 | 框架 | 语言 |
 | --- | --- | --- | --- |
-| `SDK/bots/ts-client` | `@lounge/bot-client` | （共享客户端，非插件） | TypeScript |
-| `SDK/bots/python-client` | `lounge-bot-client` | （共享客户端，非插件） | Python |
-| `SDK/bots/nonebot2` | `nonebot-plugin-lounge` | NoneBot2 | Python |
-| `SDK/bots/koishi` | `koishi-plugin-lounge` | Koishi v4 | TypeScript |
-| `SDK/bots/wechaty` | `wechaty-plugin-lounge` | Wechaty（个人微信） | TypeScript |
+| `SDK/bots/ts-client` | `@nowork/bot-client` | （共享客户端，非插件） | TypeScript |
+| `SDK/bots/python-client` | `nowork-bot-client` | （共享客户端，非插件） | Python |
+| `SDK/bots/nonebot2` | `nonebot-plugin-nowork` | NoneBot2 | Python |
+| `SDK/bots/koishi` | `koishi-plugin-nowork` | Koishi v4 | TypeScript |
+| `SDK/bots/wechaty` | `wechaty-plugin-nowork` | Wechaty（个人微信） | TypeScript |
 
 三个插件给用户的功能一致：`/bind <code>`（绑定）、`/unbind`（解绑）、`/me`（查看绑定状态/等级/实名状态），以及把其余未命中内置指令的聊天转发给站点的指令注册表；同时通过 WebSocket 接收站点推送的通知并发到绑定的聊天。各自的配置项、安装方式见各插件目录下的 README（中文在前，英文在后）。
 

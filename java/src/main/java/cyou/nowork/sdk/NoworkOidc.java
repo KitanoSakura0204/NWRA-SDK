@@ -1,4 +1,4 @@
-package cyou.lounge.sdk;
+package cyou.nowork.sdk;
 
 import java.io.IOException;
 import java.net.URI;
@@ -12,17 +12,17 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Minimal OpenID Connect relying-party helper for the Lounge Account provider.
+ * Minimal OpenID Connect relying-party helper for the NoWork Account provider.
  * Supports authorization-code (+PKCE), refresh, client_credentials, userinfo, introspection, revocation.
  */
-public class LoungeOidc {
+public class NoworkOidc {
     private final String issuer;
     private final String clientId;
     private final String clientSecret;
     private final String redirectUri;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
-    public LoungeOidc(String issuer, String clientId, String clientSecret, String redirectUri) {
+    public NoworkOidc(String issuer, String clientId, String clientSecret, String redirectUri) {
         this.issuer = issuer.endsWith("/") ? issuer.substring(0, issuer.length() - 1) : issuer;
         this.clientId = clientId;
         this.clientSecret = clientSecret == null ? "" : clientSecret;
@@ -42,7 +42,7 @@ public class LoungeOidc {
         return issuer + "/oauth2/authorize?" + q;
     }
 
-    public Map<String, Object> exchange(String code, String codeVerifier) throws LoungeException {
+    public Map<String, Object> exchange(String code, String codeVerifier) throws NoWorkException {
         Map<String, String> f = new LinkedHashMap<>();
         f.put("grant_type", "authorization_code");
         f.put("code", code);
@@ -51,34 +51,34 @@ public class LoungeOidc {
         return post("/oauth2/token", f);
     }
 
-    public Map<String, Object> refresh(String refreshToken) throws LoungeException {
+    public Map<String, Object> refresh(String refreshToken) throws NoWorkException {
         Map<String, String> f = new LinkedHashMap<>();
         f.put("grant_type", "refresh_token");
         f.put("refresh_token", refreshToken);
         return post("/oauth2/token", f);
     }
 
-    public Map<String, Object> clientCredentials(String scope) throws LoungeException {
+    public Map<String, Object> clientCredentials(String scope) throws NoWorkException {
         Map<String, String> f = new LinkedHashMap<>();
         f.put("grant_type", "client_credentials");
         f.put("scope", scope == null ? "" : scope);
         return post("/oauth2/token", f);
     }
 
-    public Map<String, Object> introspect(String token) throws LoungeException {
+    public Map<String, Object> introspect(String token) throws NoWorkException {
         Map<String, String> f = new LinkedHashMap<>();
         f.put("token", token);
         return post("/oauth2/introspect", f);
     }
 
-    public void revoke(String token) throws LoungeException {
+    public void revoke(String token) throws NoWorkException {
         Map<String, String> f = new LinkedHashMap<>();
         f.put("token", token);
         post("/oauth2/revoke", f);
     }
 
     @SuppressWarnings("unchecked")
-    public Map<String, Object> userInfo(String accessToken) throws LoungeException {
+    public Map<String, Object> userInfo(String accessToken) throws NoWorkException {
         HttpRequest req = HttpRequest.newBuilder(URI.create(issuer + "/oauth2/userinfo"))
             .timeout(Duration.ofSeconds(10))
             .header("Authorization", "Bearer " + accessToken)
@@ -88,11 +88,11 @@ public class LoungeOidc {
             HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             Object parsed = Json.parse(res.body());
             Map<String, Object> m = parsed instanceof Map<?, ?> ? (Map<String, Object>) parsed : Map.of();
-            if (res.statusCode() >= 400) throw new LoungeException.OAuth(Json.str(m.get("error")), Json.str(m.get("error_description")));
+            if (res.statusCode() >= 400) throw new NoWorkException.OAuth(Json.str(m.get("error")), Json.str(m.get("error_description")));
             return m;
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            throw new LoungeException.Transport(e);
+            throw new NoWorkException.Transport(e);
         }
     }
 
@@ -105,7 +105,7 @@ public class LoungeOidc {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> post(String path, Map<String, String> form) throws LoungeException {
+    private Map<String, Object> post(String path, Map<String, String> form) throws NoWorkException {
         form.put("client_id", clientId);
         if (!clientSecret.isEmpty()) form.put("client_secret", clientSecret);
         StringBuilder body = new StringBuilder();
@@ -119,11 +119,11 @@ public class LoungeOidc {
             HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             Object parsed = res.body() == null || res.body().isBlank() ? Map.of() : Json.parse(res.body());
             Map<String, Object> m = parsed instanceof Map<?, ?> ? (Map<String, Object>) parsed : Map.of();
-            if (res.statusCode() >= 400) throw new LoungeException.OAuth(Json.str(m.get("error")), Json.str(m.get("error_description")));
+            if (res.statusCode() >= 400) throw new NoWorkException.OAuth(Json.str(m.get("error")), Json.str(m.get("error_description")));
             return m;
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            throw new LoungeException.Transport(e);
+            throw new NoWorkException.Transport(e);
         }
     }
 

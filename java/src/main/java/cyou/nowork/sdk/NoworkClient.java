@@ -1,4 +1,4 @@
-package cyou.lounge.sdk;
+package cyou.nowork.sdk;
 
 import java.io.IOException;
 import java.net.URI;
@@ -15,29 +15,29 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Lounge Account Server API client (whitelist sync / join check / heartbeat).
+ * NoWork Account Server API client (whitelist sync / join check / heartbeat).
  * Zero dependencies: uses java.net.http and a tiny built-in JSON parser.
  *
  * <pre>{@code
- * LoungeClient client = new LoungeClient("https://account.example.com", System.getenv("LOUNGE_SERVER_KEY"));
+ * NoworkClient client = new NoworkClient("https://account.example.com", System.getenv("NOWORK_SERVER_KEY"));
  * CheckResult r = client.checkWhitelist(player.getName(), player.getUniqueId().toString());
  * if (!r.allowed) event.disallow(Result.KICK_WHITELIST, "未绑定账号: " + r.reason);
  * }</pre>
  */
-public class LoungeClient {
+public class NoworkClient {
     /** Marks a Server API reply whose data is the {"jwe": "..."} envelope (DELIVERY.md section 5). */
-    public static final String HEADER_ENCRYPTION = "X-Lounge-Encryption";
+    public static final String HEADER_ENCRYPTION = "X-NoWork-Encryption";
 
     private final String base;
     private final String serverKey;
     private final HttpClient http;
     private final Duration timeout;
 
-    public LoungeClient(String base, String serverKey) {
+    public NoworkClient(String base, String serverKey) {
         this(base, serverKey, Duration.ofSeconds(10));
     }
 
-    public LoungeClient(String base, String serverKey, Duration timeout) {
+    public NoworkClient(String base, String serverKey, Duration timeout) {
         this.base = base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
         this.serverKey = Objects.requireNonNull(serverKey, "serverKey");
         this.timeout = timeout;
@@ -45,7 +45,7 @@ public class LoungeClient {
     }
 
     /** Full whitelist for this server. */
-    public Whitelist whitelist() throws LoungeException {
+    public Whitelist whitelist() throws NoWorkException {
         Map<String, Object> data = call("GET", "/server/v1/whitelist", null);
         Whitelist w = new Whitelist();
         w.server = Json.str(data.get("server"));
@@ -64,7 +64,7 @@ public class LoungeClient {
     }
 
     /** Join check by name and/or uuid (either may be null). */
-    public CheckResult checkWhitelist(String name, String uuid) throws LoungeException {
+    public CheckResult checkWhitelist(String name, String uuid) throws NoWorkException {
         StringBuilder q = new StringBuilder();
         if (name != null && !name.isEmpty()) q.append("name=").append(enc(name));
         if (uuid != null && !uuid.isEmpty()) q.append(q.length() > 0 ? "&" : "").append("uuid=").append(enc(uuid));
@@ -80,7 +80,7 @@ public class LoungeClient {
     }
 
     /** Report live status; call about every 60 seconds. */
-    public void heartbeat(int online, int max, String version) throws LoungeException {
+    public void heartbeat(int online, int max, String version) throws NoWorkException {
         heartbeat(online, max, version, Double.NaN, null);
     }
 
@@ -88,7 +88,7 @@ public class LoungeClient {
      * Report live status with the optional TPS and player list (PROTOCOL 2.3). A tps that is not a
      * finite number above 0 is left out (pass Double.NaN for "unknown"); players may be null.
      */
-    public void heartbeat(int online, int max, String version, double tps, List<OnlinePlayer> players) throws LoungeException {
+    public void heartbeat(int online, int max, String version, double tps, List<OnlinePlayer> players) throws NoWorkException {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("online", online);
         body.put("max", max);
@@ -104,7 +104,7 @@ public class LoungeClient {
 
     /** Modules enabled for this server, keyed by module name, with their per-server config. */
     @SuppressWarnings("unchecked")
-    public Map<String, Object> modules() throws LoungeException {
+    public Map<String, Object> modules() throws NoWorkException {
         Object m = call("GET", "/server/v1/modules", null).get("modules");
         return m instanceof Map<?, ?> ? (Map<String, Object>) m : Map.of();
     }
@@ -114,7 +114,7 @@ public class LoungeClient {
      * a map with {@code key}, {@code title}, optional {@code description} and {@code params} (list of
      * maps with {@code name}, {@code type}, {@code required}, {@code label}). Returns the stored count.
      */
-    public int publishGMActions(List<?> actions) throws LoungeException {
+    public int publishGMActions(List<?> actions) throws NoWorkException {
         return Json.num(call("PUT", "/server/v1/gm/actions", encode(actions)).get("count")).intValue();
     }
 
@@ -124,7 +124,7 @@ public class LoungeClient {
      * Entries the server cannot accept are skipped and listed in the result, never a failure for the
      * whole call.
      */
-    public GMPublishResult publishGMCatalog(List<?> actions, Map<String, ? extends List<?>> options) throws LoungeException {
+    public GMPublishResult publishGMCatalog(List<?> actions, Map<String, ? extends List<?>> options) throws NoWorkException {
         Map<String, Object> body = new LinkedHashMap<>();
         if (actions != null) body.put("actions", actions);
         if (options != null) body.put("options", options);
@@ -132,13 +132,13 @@ public class LoungeClient {
     }
 
     /** Replace only the named option lists (the published actions stay), e.g. when a world loads. */
-    public GMPublishResult publishGMOptions(Map<String, ? extends List<?>> options) throws LoungeException {
+    public GMPublishResult publishGMOptions(Map<String, ? extends List<?>> options) throws NoWorkException {
         return GMPublishResult.from(call("PUT", "/server/v1/gm/options", encode(options == null ? Map.of() : options)));
     }
 
     /** Queued GM commands (each becomes "sent"); poll alongside the heartbeat. */
     @SuppressWarnings("unchecked")
-    public List<Map<String, Object>> pollGMCommands() throws LoungeException {
+    public List<Map<String, Object>> pollGMCommands() throws NoWorkException {
         Object data = callRaw("GET", "/server/v1/gm/commands", null);
         List<Map<String, Object>> out = new ArrayList<>();
         if (data instanceof List<?>) {
@@ -148,7 +148,7 @@ public class LoungeClient {
     }
 
     /** Report how a command went; result is free text (at most 4000 characters). */
-    public void reportGMResult(long commandId, boolean ok, String result) throws LoungeException {
+    public void reportGMResult(long commandId, boolean ok, String result) throws NoWorkException {
         String body = "{\"ok\":" + ok + ",\"result\":" + Json.quote(result == null ? "" : result) + "}";
         call("POST", "/server/v1/gm/commands/" + commandId + "/result", body);
     }
@@ -156,12 +156,12 @@ public class LoungeClient {
     // ---- Player data and per-server bans (SERVER_USERS.md) ----
 
     /** The data schema the server owner defined (needs the module on for this server). */
-    public ServerUsers.UserSchema userSchema() throws LoungeException {
+    public ServerUsers.UserSchema userSchema() throws NoWorkException {
         return ServerUsers.UserSchema.from(call("GET", "/server/v1/users/schema", null));
     }
 
     /** One account's data (uid from the join check or the whitelist). */
-    public ServerUsers.UserData userData(long uid) throws LoungeException {
+    public ServerUsers.UserData userData(long uid) throws NoWorkException {
         return ServerUsers.UserData.from(call("GET", userPath(uid), null));
     }
 
@@ -170,12 +170,12 @@ public class LoungeClient {
      * read, or -1 to write unconditionally; a stale version throws Api 409
      * ({@link ServerUsers#isVersionConflict}). Returns the data as stored.
      */
-    public ServerUsers.UserData putUserData(long uid, Map<String, ?> data, long version) throws LoungeException {
+    public ServerUsers.UserData putUserData(long uid, Map<String, ?> data, long version) throws NoWorkException {
         return ServerUsers.UserData.from(call("PUT", userPath(uid), writeBody(data, version)));
     }
 
     /** Merge values into the stored ones; a null value deletes that field. version as for putUserData. */
-    public ServerUsers.UserData patchUserData(long uid, Map<String, ?> data, long version) throws LoungeException {
+    public ServerUsers.UserData patchUserData(long uid, Map<String, ?> data, long version) throws NoWorkException {
         return ServerUsers.UserData.from(call("PATCH", userPath(uid), writeBody(data, version)));
     }
 
@@ -183,7 +183,7 @@ public class LoungeClient {
      * Active bans on this server: all (only == null; at most 5000, newest first) or those of the
      * matching accounts. Works with the module off too.
      */
-    public List<ServerUsers.ServerBan> bans(ServerUsers.Target only) throws LoungeException {
+    public List<ServerUsers.ServerBan> bans(ServerUsers.Target only) throws NoWorkException {
         StringBuilder q = new StringBuilder();
         if (only != null) {
             for (Map.Entry<String, Object> e : only.toMap().entrySet()) {
@@ -197,7 +197,7 @@ public class LoungeClient {
     }
 
     /** Online players (as of the last heartbeat) whose account is banned here: disconnect them. */
-    public List<ServerUsers.KickEntry> kickList() throws LoungeException {
+    public List<ServerUsers.KickEntry> kickList() throws NoWorkException {
         List<ServerUsers.KickEntry> out = new ArrayList<>();
         Object list = call("GET", "/server/v1/bans/kick", null).get("players");
         if (list instanceof List<?>) for (Object o : (List<?>) list) if (o instanceof Map<?, ?>) out.add(ServerUsers.KickEntry.from((Map<?, ?>) o));
@@ -209,7 +209,7 @@ public class LoungeClient {
      * ("2006-01-02 15:04:05" or RFC 3339) or durationMinutes &gt; 0; neither (null / 0) = permanent.
      * A ban an administrator placed cannot be replaced (Api 403). Returns the ban now in force.
      */
-    public ServerUsers.ServerBan ban(ServerUsers.Target target, String reason, String expireTime, long durationMinutes) throws LoungeException {
+    public ServerUsers.ServerBan ban(ServerUsers.Target target, String reason, String expireTime, long durationMinutes) throws NoWorkException {
         Map<String, Object> body = target.toMap();
         putText(body, "reason", reason);
         putText(body, "expireTime", expireTime);
@@ -219,14 +219,14 @@ public class LoungeClient {
     }
 
     /** Lift the account's active ban on this server (not one an administrator placed); returns the uid. */
-    public long unban(ServerUsers.Target target, String reason) throws LoungeException {
+    public long unban(ServerUsers.Target target, String reason) throws NoWorkException {
         Map<String, Object> body = target.toMap();
         putText(body, "reason", reason);
         return Json.num(call("POST", "/server/v1/bans/lift", encode(body)).get("uid")).longValue();
     }
 
     private static String userPath(long uid) {
-        if (uid <= 0) throw new IllegalArgumentException("lounge: uid must be positive, got " + uid);
+        if (uid <= 0) throw new IllegalArgumentException("nowork: uid must be positive, got " + uid);
         return "/server/v1/users/" + uid + "/data";
     }
 
@@ -274,26 +274,26 @@ public class LoungeClient {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> call(String method, String path, String body) throws LoungeException {
+    private Map<String, Object> call(String method, String path, String body) throws NoWorkException {
         Object data = callRaw(method, path, body);
         return data instanceof Map<?, ?> ? (Map<String, Object>) data : Map.of();
     }
 
-    /** Decoded data; an encrypted reply throws {@link LoungeException.Encryption} instead (fail closed). */
-    private Object callRaw(String method, String path, String body) throws LoungeException {
+    /** Decoded data; an encrypted reply throws {@link NoWorkException.Encryption} instead (fail closed). */
+    private Object callRaw(String method, String path, String body) throws NoWorkException {
         RawResponse res = raw(method, path, body);
-        if (res.encrypted) throw new LoungeException.Encryption(route(path), "no decryption key configured");
-        if (res.data == null) throw new LoungeException.Transport("invalid response (" + res.status + "): missing data");
+        if (res.encrypted) throw new NoWorkException.Encryption(route(path), "no decryption key configured");
+        if (res.data == null) throw new NoWorkException.Transport("invalid response (" + res.status + "): missing data");
         return res.data;
     }
 
     /**
      * Call a Server API route (e.g. "/server/v1/whitelist", query included) and return the reply
-     * without decoding data, e.g. to hand {@code body} to LoungeDelivery.openServerData. Transport
+     * without decoding data, e.g. to hand {@code body} to NoWorkDelivery.openServerData. Transport
      * failures and business errors (code != 0) still throw.
      */
     @SuppressWarnings("unchecked")
-    public RawResponse raw(String method, String path, String body) throws LoungeException {
+    public RawResponse raw(String method, String path, String body) throws NoWorkException {
         HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(base + path))
             .timeout(timeout)
             .header("Accept", "application/json")
@@ -308,22 +308,22 @@ public class LoungeClient {
             res = http.send(b.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            throw new LoungeException.Transport(e);
+            throw new NoWorkException.Transport(e);
         }
         Object parsed;
         try {
             parsed = Json.parse(res.body());
         } catch (RuntimeException e) { // an HTML error page or a cut-off body must not escape unchecked
-            throw new LoungeException.Transport("invalid json (" + res.statusCode() + ")");
+            throw new NoWorkException.Transport("invalid json (" + res.statusCode() + ")");
         }
-        if (!(parsed instanceof Map<?, ?>)) throw new LoungeException.Transport("invalid response (" + res.statusCode() + ")");
+        if (!(parsed instanceof Map<?, ?>)) throw new NoWorkException.Transport("invalid response (" + res.statusCode() + ")");
         Map<String, Object> env = (Map<String, Object>) parsed;
         if (!(env.get("code") instanceof Number)) {
-            throw new LoungeException.Transport("invalid response (" + res.statusCode() + "): missing code");
+            throw new NoWorkException.Transport("invalid response (" + res.statusCode() + "): missing code");
         }
         int code = ((Number) env.get("code")).intValue();
-        if (code != 0) throw new LoungeException.Api(code, Json.str(env.get("message")));
-        if (res.statusCode() >= 400) throw new LoungeException.Transport("http " + res.statusCode());
+        if (code != 0) throw new NoWorkException.Api(code, Json.str(env.get("message")));
+        if (res.statusCode() >= 400) throw new NoWorkException.Transport("http " + res.statusCode());
         RawResponse out = new RawResponse();
         out.status = res.statusCode();
         out.headers = res.headers().map();
@@ -387,7 +387,7 @@ public class LoungeClient {
         public WhitelistEntry player;
     }
 
-    /** A Server API reply as received, data left undecoded (see {@link LoungeClient#raw}). */
+    /** A Server API reply as received, data left undecoded (see {@link NoworkClient#raw}). */
     public static class RawResponse {
         public int status;
         public Map<String, List<String>> headers;
@@ -396,7 +396,7 @@ public class LoungeClient {
         public Object data;
         /** The whole response body. */
         public String body;
-        /** X-Lounge-Encryption is set or data is exactly {"jwe": "<string>"}. */
+        /** X-NoWork-Encryption is set or data is exactly {"jwe": "<string>"}. */
         public boolean encrypted;
     }
 

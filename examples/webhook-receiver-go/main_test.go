@@ -11,18 +11,18 @@ import (
 	"testing"
 	"time"
 
-	lounge "github.com/wangework/lounge-sdk-go"
+	nowork "github.com/wangework/nowork-sdk-go"
 )
 
 const testSecret = "whsec_test"
 
-func newReceiver(secret string, tolerance time.Duration, keys []*lounge.DecryptionKey) *receiver {
+func newReceiver(secret string, tolerance time.Duration, keys []*nowork.DecryptionKey) *receiver {
 	return &receiver{secret: secret, tolerance: tolerance, seen: newSeenSet(100), keys: keys}
 }
 
 // post calls the handler directly (no listener, no network).
 func post(rc *receiver, body string, headers map[string]string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodPost, "/lounge/webhook", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/nowork/webhook", strings.NewReader(body))
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
@@ -34,8 +34,8 @@ func post(rc *receiver, body string, headers map[string]string) *httptest.Respon
 func signed(secret string, ts int64, body string) map[string]string {
 	return map[string]string{
 		"Content-Type":       "application/json",
-		"X-Lounge-Timestamp": strconv.FormatInt(ts, 10),
-		"X-Lounge-Signature": lounge.WebhookSignature(secret, ts, []byte(body)),
+		"X-NoWork-Timestamp": strconv.FormatInt(ts, 10),
+		"X-NoWork-Signature": nowork.WebhookSignature(secret, ts, []byte(body)),
 	}
 }
 
@@ -76,7 +76,7 @@ func TestRejections(t *testing.T) {
 	status(t, post(rc, noID, signed(testSecret, now, noID)), http.StatusBadRequest, "")
 
 	rec := httptest.NewRecorder()
-	rc.handle(rec, httptest.NewRequest(http.MethodGet, "/lounge/webhook", nil))
+	rc.handle(rec, httptest.NewRequest(http.MethodGet, "/nowork/webhook", nil))
 	status(t, rec, http.StatusMethodNotAllowed, "")
 }
 

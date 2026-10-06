@@ -1,5 +1,5 @@
-// Command webhook-receiver-go is a minimal Lounge Account webhook endpoint:
-// it verifies X-Lounge-Signature with the Go SDK, opens encrypted deliveries
+// Command webhook-receiver-go is a minimal NoWork Account webhook endpoint:
+// it verifies X-NoWork-Signature with the Go SDK, opens encrypted deliveries
 // (JWE, SDK/docs/DELIVERY.md section 6), de-duplicates deliveries by event id
 // and reacts to a few events. Configuration comes from the environment (see
 // README.md).
@@ -19,7 +19,7 @@ import (
 	"syscall"
 	"time"
 
-	lounge "github.com/wangework/lounge-sdk-go"
+	nowork "github.com/wangework/nowork-sdk-go"
 )
 
 // maxBody is the largest body accepted, the same cap as the SDK's ReadWebhook.
@@ -100,21 +100,21 @@ type receiver struct {
 	secret    string
 	tolerance time.Duration
 	seen      *seenSet
-	keys      []*lounge.DecryptionKey // empty: the endpoint is not encrypted
+	keys      []*nowork.DecryptionKey // empty: the endpoint is not encrypted
 }
 
 func main() {
-	secret := os.Getenv("LOUNGE_WEBHOOK_SECRET")
+	secret := os.Getenv("NOWORK_WEBHOOK_SECRET")
 	if secret == "" {
-		log.Fatal("set LOUNGE_WEBHOOK_SECRET (admin console: 开放平台 -> Webhook -> 签名密钥)")
+		log.Fatal("set NOWORK_WEBHOOK_SECRET (admin console: 开放平台 -> Webhook -> 签名密钥)")
 	}
 	addr := envOr("LISTEN_ADDR", ":8090")
-	path := envOr("WEBHOOK_PATH", "/lounge/webhook")
+	path := envOr("WEBHOOK_PATH", "/nowork/webhook")
 	tolerance := time.Duration(envInt("WEBHOOK_TOLERANCE", 300)) * time.Second
 
-	keys, err := loadKeys(os.Getenv("LOUNGE_DECRYPTION_KEYS"))
+	keys, err := loadKeys(os.Getenv("NOWORK_DECRYPTION_KEYS"))
 	if err != nil {
-		log.Fatalf("LOUNGE_DECRYPTION_KEYS: %v", err)
+		log.Fatalf("NOWORK_DECRYPTION_KEYS: %v", err)
 	}
 	rc := &receiver{secret: secret, tolerance: tolerance, seen: newSeenSet(envInt("SEEN_CAPACITY", 10000)), keys: keys}
 
@@ -156,7 +156,7 @@ func (rc *receiver) handle(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method not allowed"})
 		return
 	}
-	delivery := r.Header.Get("X-Lounge-Delivery")
+	delivery := r.Header.Get("X-NoWork-Delivery")
 
 	// Keep the raw bytes: the signature covers "<timestamp>.<body>" exactly as sent,
 	// and an encrypted body is opened only after it verified.
@@ -166,10 +166,10 @@ func (rc *receiver) handle(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]any{"error": "payload too large"})
 		return
 	}
-	ev, err := lounge.VerifyWebhook(rc.secret, r.Header, body, rc.tolerance)
+	ev, err := nowork.VerifyWebhook(rc.secret, r.Header, body, rc.tolerance)
 	if err == nil {
 		ev, err = rc.open(r.Header, body, ev)
-		if errors.Is(err, errNotEncrypted) || errors.Is(err, errNoKeys) || errors.Is(err, lounge.ErrDecrypt) {
+		if errors.Is(err, errNotEncrypted) || errors.Is(err, errNoKeys) || errors.Is(err, nowork.ErrDecrypt) {
 			// Signed by the user center but not readable here: a key rotation or a
 			// configuration mismatch. 500 keeps the delivery queued for a retry.
 			log.Printf("delivery=%s cannot open: %v", delivery, err)
@@ -178,11 +178,11 @@ func (rc *receiver) handle(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	switch {
-	case errors.Is(err, lounge.ErrWebhookStale):
+	case errors.Is(err, nowork.ErrWebhookStale):
 		log.Printf("delivery=%s rejected: stale timestamp", delivery)
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "stale timestamp"})
 		return
-	case errors.Is(err, lounge.ErrWebhookSignature):
+	case errors.Is(err, nowork.ErrWebhookSignature):
 		log.Printf("delivery=%s rejected: bad signature", delivery)
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "invalid signature"})
 		return
@@ -216,7 +216,7 @@ func (rc *receiver) handle(w http.ResponseWriter, r *http.Request) {
 
 // dispatch routes a verified event. Keep the work short (the sender waits at most
 // 10 s); push anything heavier onto a queue and return.
-func (rc *receiver) dispatch(ev *lounge.WebhookEvent) error {
+func (rc *receiver) dispatch(ev *nowork.WebhookEvent) error {
 	at := time.Unix(ev.Timestamp, 0).Format(time.RFC3339)
 	switch ev.Event {
 	case "game_role.reviewed":

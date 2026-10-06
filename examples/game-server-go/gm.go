@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	lounge "github.com/wangework/lounge-sdk-go"
+	nowork "github.com/wangework/nowork-sdk-go"
 )
 
 func ptr(f float64) *float64 { return &f }
@@ -14,12 +14,12 @@ func ptr(f float64) *float64 { return &f }
 // catalog is what this server offers the GM panel (PROTOCOL 2.4). The "worlds" option list is
 // published next to it, so the select for the time action always matches the loaded worlds.
 // Labels are keyed by the admin console locale (zh_CN, zh_TW, en, ja); Title is the fallback.
-func catalog() []lounge.GMAction {
-	return []lounge.GMAction{
+func catalog() []nowork.GMAction {
+	return []nowork.GMAction{
 		{
 			Key: "kick", Title: "踢出玩家", Description: "立即断开连接", Category: "players", Danger: "confirm",
 			Labels: map[string]string{"en": "Kick player", "zh_TW": "踢出玩家", "ja": "プレイヤーをキック"},
-			Params: []lounge.GMActionParam{
+			Params: []nowork.GMActionParam{
 				{Name: "player", Type: "player", Required: true, Label: "玩家"},
 				{Name: "reason", Type: "string", Label: "原因", Placeholder: "违反服务器规则", MaxLength: 200},
 			},
@@ -27,7 +27,7 @@ func catalog() []lounge.GMAction {
 		{
 			Key: "broadcast", Title: "全服广播", Category: "chat",
 			Labels: map[string]string{"en": "Broadcast", "zh_TW": "全服廣播", "ja": "全体アナウンス"},
-			Params: []lounge.GMActionParam{
+			Params: []nowork.GMActionParam{
 				{Name: "message", Type: "text", Required: true, Label: "内容", MaxLength: 500},
 				{Name: "repeat", Type: "number", Label: "重复次数", Min: ptr(1), Max: ptr(5), Integer: true, Default: json.RawMessage("1")},
 			},
@@ -35,9 +35,9 @@ func catalog() []lounge.GMAction {
 		{
 			Key: "time", Title: "设置时间", Category: "world",
 			Labels: map[string]string{"en": "Set time", "zh_TW": "設定時間", "ja": "時間を設定"},
-			Params: []lounge.GMActionParam{
+			Params: []nowork.GMActionParam{
 				{Name: "world", Type: "select", Required: true, Label: "世界", Source: "worlds"},
-				{Name: "value", Type: "select", Required: true, Label: "时间", Options: []lounge.GMOption{
+				{Name: "value", Type: "select", Required: true, Label: "时间", Options: []nowork.GMOption{
 					{Value: "day", Label: "白天"}, {Value: "night", Label: "夜晚"},
 				}},
 			},
@@ -49,17 +49,17 @@ func catalog() []lounge.GMAction {
 	}
 }
 
-func worldOptions(w *world) map[string][]lounge.GMOption {
+func worldOptions(w *world) map[string][]nowork.GMOption {
 	names := w.worlds()
-	opts := make([]lounge.GMOption, 0, len(names))
+	opts := make([]nowork.GMOption, 0, len(names))
 	for _, n := range names {
-		opts = append(opts, lounge.GMOption{Value: n})
+		opts = append(opts, nowork.GMOption{Value: n})
 	}
-	return map[string][]lounge.GMOption{"worlds": opts}
+	return map[string][]nowork.GMOption{"worlds": opts}
 }
 
 // publishGM sends the catalogue and the option lists; skipped entries are logged, not fatal.
-func publishGM(ctx context.Context, api *lounge.Client, w *world, logf func(string, ...any)) error {
+func publishGM(ctx context.Context, api *nowork.Client, w *world, logf func(string, ...any)) error {
 	res, err := api.PublishGMCatalog(ctx, catalog(), worldOptions(w))
 	if err != nil {
 		return err
@@ -73,7 +73,7 @@ func publishGM(ctx context.Context, api *lounge.Client, w *world, logf func(stri
 
 // runGM executes one queued command. The error text becomes the failed result shown in the panel;
 // the caller stops the server after reporting a successful "stop".
-func runGM(w *world, cmd lounge.GMCommand, broadcast func(string)) (string, error) {
+func runGM(w *world, cmd nowork.GMCommand, broadcast func(string)) (string, error) {
 	var p struct {
 		Player  string          `json:"player"`
 		Reason  string          `json:"reason"`

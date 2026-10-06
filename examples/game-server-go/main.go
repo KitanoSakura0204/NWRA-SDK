@@ -1,4 +1,4 @@
-// Command game-server-go is a minimal game server wired to Lounge Account with the Go SDK:
+// Command game-server-go is a minimal game server wired to NoWork Account with the Go SDK:
 // whitelist sync and join checks (encrypted replies included), heartbeat with TPS and the player
 // list, the GM channel (typed catalogue, option lists, command polling and results), webhooks
 // that kick frozen or deleted accounts at once, and the SDK login page hand-off for a game client.
@@ -24,18 +24,18 @@ import (
 	"syscall"
 	"time"
 
-	lounge "github.com/wangework/lounge-sdk-go"
+	nowork "github.com/wangework/nowork-sdk-go"
 )
 
 func main() {
-	base := strings.TrimRight(envOr("LOUNGE_BASE", "http://localhost:8081"), "/")
+	base := strings.TrimRight(envOr("NOWORK_BASE", "http://localhost:8081"), "/")
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	if len(os.Args) > 1 && os.Args[1] == "login" {
 		c := loginFromEnv(base)
 		if c.server == "" || c.clientID == "" {
-			log.Fatal("set LOUNGE_SERVER_CODE and LOUNGE_CLIENT_ID (admin console: 游戏服务 -> SDK 登录页)")
+			log.Fatal("set NOWORK_SERVER_CODE and NOWORK_CLIENT_ID (admin console: 游戏服务 -> SDK 登录页)")
 		}
 		if err := login(ctx, c); err != nil {
 			log.Fatal(err)
@@ -43,17 +43,17 @@ func main() {
 		return
 	}
 
-	key := os.Getenv("LOUNGE_SERVER_KEY")
+	key := os.Getenv("NOWORK_SERVER_KEY")
 	if key == "" {
-		log.Fatal("set LOUNGE_SERVER_KEY (admin console: 游戏服务 -> 服务器管理 -> 服务器密钥)")
+		log.Fatal("set NOWORK_SERVER_KEY (admin console: 游戏服务 -> 服务器管理 -> 服务器密钥)")
 	}
-	keys, err := loadKeys(os.Getenv("LOUNGE_DECRYPTION_KEYS"))
+	keys, err := loadKeys(os.Getenv("NOWORK_DECRYPTION_KEYS"))
 	if err != nil {
-		log.Fatalf("LOUNGE_DECRYPTION_KEYS: %v", err)
+		log.Fatalf("NOWORK_DECRYPTION_KEYS: %v", err)
 	}
-	api := lounge.New(base, lounge.WithServerKey(key))
+	api := nowork.New(base, nowork.WithServerKey(key))
 	w := newWorld(envInt("MAX_PLAYERS", 20), log.Printf)
-	g := &gate{api: api, code: os.Getenv("LOUNGE_SERVER_CODE"), keys: keys, outage: envOr("OUTAGE_POLICY", outageCache)}
+	g := &gate{api: api, code: os.Getenv("NOWORK_SERVER_CODE"), keys: keys, outage: envOr("OUTAGE_POLICY", outageCache)}
 	switch g.outage {
 	case outageCache, outageDeny, outageAllow:
 	default:
@@ -64,15 +64,15 @@ func main() {
 	s.syncWhitelist(ctx)
 	s.setupGM(ctx)
 
-	if secret := os.Getenv("LOUNGE_WEBHOOK_SECRET"); secret != "" {
+	if secret := os.Getenv("NOWORK_WEBHOOK_SECRET"); secret != "" {
 		h := &hooks{secret: secret, tolerance: 5 * time.Minute, keys: keys, world: w, logf: log.Printf,
 			seen: map[string]time.Time{}, resync: func() { go s.syncWhitelist(ctx) }}
 		mux := http.NewServeMux()
-		mux.Handle(envOr("WEBHOOK_PATH", "/lounge/webhook"), h)
+		mux.Handle(envOr("WEBHOOK_PATH", "/nowork/webhook"), h)
 		srv := &http.Server{Addr: envOr("WEBHOOK_ADDR", "127.0.0.1:8095"), Handler: mux,
 			ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second}
 		go func() {
-			log.Printf("webhooks on http://%s%s", srv.Addr, envOr("WEBHOOK_PATH", "/lounge/webhook"))
+			log.Printf("webhooks on http://%s%s", srv.Addr, envOr("WEBHOOK_PATH", "/nowork/webhook"))
 			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				log.Printf("webhook listener: %v", err)
 			}
@@ -89,7 +89,7 @@ func main() {
 
 // server ties the pieces together.
 type server struct {
-	api     *lounge.Client
+	api     *nowork.Client
 	world   *world
 	gate    *gate
 	version string
@@ -165,7 +165,7 @@ func (s *server) heartbeat(ctx context.Context, tps float64) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	// TPS 0 (no reading yet) is left out by the SDK, and so are NaN / Inf
-	hb := lounge.Heartbeat{Online: s.world.count(), Max: s.world.max, Version: s.version, TPS: tps, Players: s.world.players()}
+	hb := nowork.Heartbeat{Online: s.world.count(), Max: s.world.max, Version: s.version, TPS: tps, Players: s.world.players()}
 	if err := s.api.Heartbeat(ctx, hb); err != nil {
 		log.Printf("heartbeat: %v", err)
 		return
@@ -269,8 +269,8 @@ func (s *server) console(ctx context.Context) {
 
 // loadKeys reads private JWKs from a comma-separated list of files; during a key rotation list
 // the new and the old key (the JWE header's kid picks one, DELIVERY.md section 7).
-func loadKeys(paths string) ([]*lounge.DecryptionKey, error) {
-	var keys []*lounge.DecryptionKey
+func loadKeys(paths string) ([]*nowork.DecryptionKey, error) {
+	var keys []*nowork.DecryptionKey
 	for _, p := range strings.Split(paths, ",") {
 		if p = strings.TrimSpace(p); p == "" {
 			continue
@@ -279,7 +279,7 @@ func loadKeys(paths string) ([]*lounge.DecryptionKey, error) {
 		if err != nil {
 			return nil, err
 		}
-		k, err := lounge.ParseDecryptionKey(raw)
+		k, err := nowork.ParseDecryptionKey(raw)
 		if err != nil {
 			return nil, errors.New(p + ": " + err.Error())
 		}

@@ -1,6 +1,6 @@
-// Package lounge is the Go SDK for the Lounge Account user center:
+// Package nowork is the Go SDK for the NoWork Account user center:
 // game-server whitelist API and OpenID Connect helpers. Standard library only.
-package lounge
+package nowork
 
 import (
 	"bytes"
@@ -23,17 +23,17 @@ type ApiError struct {
 	Message string
 }
 
-func (e *ApiError) Error() string { return fmt.Sprintf("lounge: api error %d: %s", e.Code, e.Message) }
+func (e *ApiError) Error() string { return fmt.Sprintf("nowork: api error %d: %s", e.Code, e.Message) }
 
 // TransportError wraps network / decoding failures.
 type TransportError struct{ Err error }
 
-func (e *TransportError) Error() string { return "lounge: transport error: " + e.Err.Error() }
+func (e *TransportError) Error() string { return "nowork: transport error: " + e.Err.Error() }
 func (e *TransportError) Unwrap() error { return e.Err }
 
 // HeaderEncryption marks a Server API response whose data is the {"jwe": "..."} envelope
 // (SDK/docs/DELIVERY.md section 5).
-const HeaderEncryption = "X-Lounge-Encryption"
+const HeaderEncryption = "X-NoWork-Encryption"
 
 // EncryptionError means a Server API response was encrypted and could not be used: no
 // decryption key is configured, the JWE did not open, or its ctx names another route. The
@@ -46,7 +46,7 @@ type EncryptionError struct {
 }
 
 func (e *EncryptionError) Error() string {
-	msg := "lounge: encrypted response on " + e.Route + ": " + e.Reason
+	msg := "nowork: encrypted response on " + e.Route + ": " + e.Reason
 	if e.Err != nil {
 		msg += ": " + e.Err.Error()
 	}
@@ -141,7 +141,7 @@ type Response struct {
 }
 
 // Encrypted reports whether the reply is the {"jwe": "..."} envelope (DELIVERY.md section 5):
-// the X-Lounge-Encryption header is set or data is exactly {"jwe": "<string>"}.
+// the X-NoWork-Encryption header is set or data is exactly {"jwe": "<string>"}.
 func (r *Response) Encrypted() bool {
 	return r.Header.Get(HeaderEncryption) != "" || isJWEData(r.Data)
 }
@@ -286,7 +286,7 @@ func (h Heartbeat) MarshalJSON() ([]byte, error) {
 }
 
 // ErrNotConfigured is returned when the server key is missing.
-var ErrNotConfigured = errors.New("lounge: server key not configured")
+var ErrNotConfigured = errors.New("nowork: server key not configured")
 
 // ---- GM module (server-scoped feature module "server-gm") ----
 

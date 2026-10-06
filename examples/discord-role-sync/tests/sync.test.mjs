@@ -154,7 +154,7 @@ test('events for one account never interleave', async (t) => {
 });
 
 test('links survive a restart; a corrupt file stops the start', (t) => {
-  const dir = mkdtempSync(join(tmpdir(), 'lounge-discord-'));
+  const dir = mkdtempSync(join(tmpdir(), 'nowork-discord-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const file = join(dir, 'links.json');
   new LinkStore(file).set(1, { discordId: ALICE, level: 2, at: 1 });
@@ -166,11 +166,11 @@ test('links survive a restart; a corrupt file stops the start', (t) => {
 });
 
 test('configuration is checked at start', () => {
-  const base = { LOUNGE_WEBHOOK_SECRET: 'whsec_x', DISCORD_BOT_TOKEN: 'token', DISCORD_GUILD_ID: '300000000000000001', LINKED_ROLE_ID: LINKED };
+  const base = { NOWORK_WEBHOOK_SECRET: 'whsec_x', DISCORD_BOT_TOKEN: 'token', DISCORD_GUILD_ID: '300000000000000001', LINKED_ROLE_ID: LINKED };
   const cfg = loadConfig({ ...base, LEVEL_ROLES: `3:${VETERAN}, 2:${TRUSTED}` });
   assert.deepEqual(cfg.levelRoles, [{ level: 2, roleId: TRUSTED }, { level: 3, roleId: VETERAN }]);
   assert.equal(cfg.port, 8093);
-  assert.throws(() => loadConfig({ ...base, LOUNGE_WEBHOOK_SECRET: '' }), /LOUNGE_WEBHOOK_SECRET/);
+  assert.throws(() => loadConfig({ ...base, NOWORK_WEBHOOK_SECRET: '' }), /NOWORK_WEBHOOK_SECRET/);
   assert.throws(() => loadConfig({ ...base, DISCORD_BOT_TOKEN: '' }), /DISCORD_BOT_TOKEN/);
   assert.doesNotThrow(() => loadConfig({ ...base, DISCORD_BOT_TOKEN: '', DRY_RUN: '1' }));
   assert.throws(() => loadConfig({ ...base, DISCORD_GUILD_ID: 'my-server' }), /not a Discord id/);
@@ -191,7 +191,7 @@ test('Discord REST: success, not a member, rate limit, missing permission', asyn
   const reply = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
   replies.push(new Response(null, { status: 204 }));
-  await rest.addRole(ALICE, LINKED, 'Lounge account linked');
+  await rest.addRole(ALICE, LINKED, 'NoWork account linked');
   assert.equal(sent[0].url, `https://discord.com/api/v10/guilds/300000000000000001/members/${ALICE}/roles/${LINKED}`);
   assert.equal(sent[0].init.method, 'PUT');
   assert.equal(sent[0].init.headers.Authorization, 'Bot token');

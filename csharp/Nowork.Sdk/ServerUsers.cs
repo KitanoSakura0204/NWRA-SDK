@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Lounge.Sdk;
+namespace NoWork.Sdk;
 
 // Player data and per-server bans (module "server-users", SDK/docs/SERVER_USERS.md).
 
@@ -101,7 +101,7 @@ internal sealed record KickListEnvelope([property: JsonPropertyName("players")] 
 internal sealed record BanPlaced([property: JsonPropertyName("uid")] long Uid, [property: JsonPropertyName("ban")] ServerBan? Ban);
 internal sealed record BanLifted([property: JsonPropertyName("uid")] long Uid);
 
-public sealed partial class LoungeClient
+public sealed partial class NoworkClient
 {
     /// <summary>The data schema the server owner defined (needs the module on for this server).</summary>
     public Task<UserSchema> UserSchemaAsync(CancellationToken ct = default) =>
@@ -169,7 +169,7 @@ public sealed partial class LoungeClient
     }
 
     private static string UserPath(long uid) =>
-        uid > 0 ? $"/server/v1/users/{uid}/data" : throw new ArgumentOutOfRangeException(nameof(uid), uid, "lounge: uid must be positive");
+        uid > 0 ? $"/server/v1/users/{uid}/data" : throw new ArgumentOutOfRangeException(nameof(uid), uid, "nowork: uid must be positive");
 
     private static Dictionary<string, object?> WriteBody(IReadOnlyDictionary<string, object?> data, long? version)
     {

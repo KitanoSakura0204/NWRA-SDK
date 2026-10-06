@@ -5,6 +5,6 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o plugin.wasm .
-tool() { go run ../../tools/loungeplugin "$@"; }
+tool() { go run ../../tools/noworkplugin "$@"; }
 [ -f dev.key ] || tool keygen -out dev
 tool pack -dir . -key dev.key -out dist

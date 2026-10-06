@@ -3,9 +3,9 @@
     <TargetFramework>net6.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <PackageId>Lounge.Sdk</PackageId>
+    <PackageId>Nowork.Sdk</PackageId>
     <Version>1.1.0</Version>
-    <Description>Server API and OIDC client for the Lounge Account user center.</Description>
+    <Description>Server API and OIDC client for the NoWork Account user center.</Description>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 </Project>

@@ -22,19 +22,19 @@ webhook-receiver-python/
 
 ```bash
 cd SDK/examples/webhook-receiver-python
-export LOUNGE_WEBHOOK_SECRET=whsec_xxx   # 后台「开放平台 → Webhook」新建 Webhook 时显示（只显示一次，可「重置密钥」）
+export NOWORK_WEBHOOK_SECRET=whsec_xxx   # 后台「开放平台 → Webhook」新建 Webhook 时显示（只显示一次，可「重置密钥」）
 python server.py
-# ... INFO listening on http://0.0.0.0:8092/lounge/webhook (timestamp tolerance 300s, 0 decryption key(s))
+# ... INFO listening on http://0.0.0.0:8092/nowork/webhook (timestamp tolerance 300s, 0 decryption key(s))
 ```
 
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `LOUNGE_WEBHOOK_SECRET` | 必填 | 端点签名密钥 |
+| `NOWORK_WEBHOOK_SECRET` | 必填 | 端点签名密钥 |
 | `HOST` / `PORT` | `0.0.0.0` / `8092` | 监听地址 |
-| `WEBHOOK_PATH` | `/lounge/webhook` | 接收路径（后台端点 URL 需与之一致） |
+| `WEBHOOK_PATH` | `/nowork/webhook` | 接收路径（后台端点 URL 需与之一致） |
 | `WEBHOOK_TOLERANCE` | `300` | 允许的时间戳偏差（秒），`0` 关闭检查 |
 | `SEEN_CAPACITY` | `10000` | 幂等缓存保留的事件 id 数量 |
-| `LOUNGE_DECRYPTION_KEYS` | 空 | 私钥 JWK 文件路径，逗号分隔（轮换期间填新旧两把）；设置后需要 `pip install cryptography`，缺少时启动即报错 |
+| `NOWORK_DECRYPTION_KEYS` | 空 | 私钥 JWK 文件路径，逗号分隔（轮换期间填新旧两把）；设置后需要 `pip install cryptography`，缺少时启动即报错 |
 
 生产环境请放在 HTTPS 反向代理之后，用 `systemd` / `supervisor` 托管。
 
@@ -48,8 +48,8 @@ from receiver import Receiver
 
 rc = Receiver(secret, dispatch)
 
-@app.post("/lounge/webhook")
-def lounge_webhook():
+@app.post("/nowork/webhook")
+def nowork_webhook():
     status, body = rc.handle("POST", request.headers, request.get_data())  # 必须是原始字节
     return body, status
 ```
@@ -66,13 +66,13 @@ def lounge_webhook():
 | 签名正确但无法解密（缺私钥、密钥不符，或配置了私钥却收到明文） | `500` | 同上；补上私钥后重试即可成功 |
 | 没有 `Content-Length` / 超过 1 MiB | `411` / `413` | 同上 |
 
-- 签名覆盖 `<X-Lounge-Timestamp>.<原始请求体>`：一定要把原始字节交给 `verify_webhook`，不要先解析再序列化。
+- 签名覆盖 `<X-NoWork-Timestamp>.<原始请求体>`：一定要把原始字节交给 `verify_webhook`，不要先解析再序列化。
 - 处理逻辑必须在 10 秒内返回；耗时任务先入队再响应。
 - 幂等缓存是进程内 LRU；多实例部署时换成 Redis `SET NX EX` 或数据库唯一索引。同一 `id` 的两次投递几乎不会同时到达（只有失败或超时后才重试），如果业务不能容忍重复执行，请在 `dispatch` 内用数据库唯一约束兜底。
 
 ## 加密投递（JWE）与成对匿名标识（pairwise）
 
-Webhook 绑定的投递配置开启 `webhook.encrypt` 后（后台「开放平台 → 数据投递」，见 `SDK/docs/DELIVERY.md` 第 6 节），请求体变为 `{"id","event","timestamp","jwe"}` 并带 `X-Lounge-Encryption: JWE`。`receiver.py` 先对外层原始请求体验签，再用 SDK 的 `open_webhook` 解密（核对内层 `id` / `event` / `timestamp` 与外层一致、受保护头 `ctx` 为 `webhook:<端点 ID>`）；配置了私钥却收到明文时拒绝。私钥只放在接收端，后台只保存公钥 JWK；轮换时先把新私钥加进 `LOUNGE_DECRYPTION_KEYS=new.jwk,old.jwk`，再在后台启用新公钥，过渡期结束后删掉旧私钥。
+Webhook 绑定的投递配置开启 `webhook.encrypt` 后（后台「开放平台 → 数据投递」，见 `SDK/docs/DELIVERY.md` 第 6 节），请求体变为 `{"id","event","timestamp","jwe"}` 并带 `X-NoWork-Encryption: JWE`。`receiver.py` 先对外层原始请求体验签，再用 SDK 的 `open_webhook` 解密（核对内层 `id` / `event` / `timestamp` 与外层一致、受保护头 `ctx` 为 `webhook:<端点 ID>`）；配置了私钥却收到明文时拒绝。私钥只放在接收端，后台只保存公钥 JWK；轮换时先把新私钥加进 `NOWORK_DECRYPTION_KEYS=new.jwk,old.jwk`，再在后台启用新公钥，过渡期结束后删掉旧私钥。
 
 投递配置的 `subject` 为 `pairwise` 时，事件里不再有 `userId` / `uid` / `username` / `ip` / `externalId` / `externalName` / `email` / `phone`，改由 `data.user.sub` 标识账号。`events.py` 的 `who()` 两种都能打印；自己的业务按配置选一种作为本地主键。事件字段见 `../webhook-receiver-go/README.md` 与 `docs/PROTOCOL.md` 第 5 节。
 
@@ -100,11 +100,11 @@ Python 3.9+.
 
 ```bash
 cd SDK/examples/webhook-receiver-python
-export LOUNGE_WEBHOOK_SECRET=whsec_xxx   # shown once when you create the webhook in 开放平台 → Webhook (Open Platform → Webhooks)
+export NOWORK_WEBHOOK_SECRET=whsec_xxx   # shown once when you create the webhook in 开放平台 → Webhook (Open Platform → Webhooks)
 python server.py
 ```
 
-Variables: `LOUNGE_WEBHOOK_SECRET` (required), `HOST` / `PORT` (`0.0.0.0` / `8092`), `WEBHOOK_PATH` (`/lounge/webhook`, must match the URL in the console), `WEBHOOK_TOLERANCE` (`300` seconds, `0` turns the check off), `SEEN_CAPACITY` (`10000`), `LOUNGE_DECRYPTION_KEYS` (comma-separated private JWK files, new and old during a rotation; needs `pip install cryptography`, checked at start). Run it behind an HTTPS reverse proxy under `systemd` / `supervisor`.
+Variables: `NOWORK_WEBHOOK_SECRET` (required), `HOST` / `PORT` (`0.0.0.0` / `8092`), `WEBHOOK_PATH` (`/nowork/webhook`, must match the URL in the console), `WEBHOOK_TOLERANCE` (`300` seconds, `0` turns the check off), `SEEN_CAPACITY` (`10000`), `NOWORK_DECRYPTION_KEYS` (comma-separated private JWK files, new and old during a rotation; needs `pip install cryptography`, checked at start). Run it behind an HTTPS reverse proxy under `systemd` / `supervisor`.
 
 `Receiver.handle(method, headers, body)` returns `(status, dict)`, so it drops into any framework; the Chinese section above shows Flask. Always pass the raw request bytes.
 
@@ -114,7 +114,7 @@ Variables: `LOUNGE_WEBHOOK_SECRET` (required), `HOST` / `PORT` (`0.0.0.0` / `809
 
 ## Encrypted deliveries and pairwise subjects
 
-With `webhook.encrypt` on the delivery profile (开放平台 → 数据投递, `SDK/docs/DELIVERY.md` section 6) the body becomes `{"id","event","timestamp","jwe"}` with `X-Lounge-Encryption: JWE`. The receiver verifies the outer body, then opens it with `open_webhook`, which checks that the inner `id` / `event` / `timestamp` repeat the outer ones and that the header `ctx` is `webhook:<endpoint id>`; with keys configured a plaintext delivery is refused. To rotate, add the new private key first (`new.jwk,old.jwk`), activate the new public key in the console, then drop the old one. With `subject: pairwise`, `data.user.sub` replaces `userId` / `uid` / `username` / `externalId` and the other identifying fields; `who()` prints either.
+With `webhook.encrypt` on the delivery profile (开放平台 → 数据投递, `SDK/docs/DELIVERY.md` section 6) the body becomes `{"id","event","timestamp","jwe"}` with `X-NoWork-Encryption: JWE`. The receiver verifies the outer body, then opens it with `open_webhook`, which checks that the inner `id` / `event` / `timestamp` repeat the outer ones and that the header `ctx` is `webhook:<endpoint id>`; with keys configured a plaintext delivery is refused. To rotate, add the new private key first (`new.jwk,old.jwk`), activate the new public key in the console, then drop the old one. With `subject: pairwise`, `data.user.sub` replaces `userId` / `uid` / `username` / `externalId` and the other identifying fields; `who()` prints either.
 
 ## Test and check
 

@@ -2,7 +2,7 @@
   "id": "com.example.externalapp",
   "name": "External app example",
   "version": "1.0.0",
-  "author": "Lounge examples",
+  "author": "NoWork examples",
   "description": "An HTTP service that counts sign-ins through the plugin API and adds a greet GM action.",
   "kind": "external",
   "permissions": ["user.profile"],
@@ -15,5 +15,5 @@
       "params": [{ "name": "player", "type": "player", "required": true, "label": { "en": "Player", "zh_CN": "玩家" } }]
     }
   ],
-  "external": { "endpoint": "https://plugins.example.com/lounge" }
+  "external": { "endpoint": "https://plugins.example.com/nowork" }
 }

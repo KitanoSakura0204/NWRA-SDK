@@ -1,11 +1,11 @@
-package cyou.lounge.example.paper;
+package cyou.nowork.example.paper;
 
-import cyou.lounge.sdk.LoungeClient;
-import cyou.lounge.sdk.LoungeClient.GMAction;
-import cyou.lounge.sdk.LoungeClient.GMActionParam;
-import cyou.lounge.sdk.LoungeClient.GMOption;
-import cyou.lounge.sdk.LoungeClient.OnlinePlayer;
-import cyou.lounge.sdk.LoungeException;
+import cyou.nowork.sdk.NoworkClient;
+import cyou.nowork.sdk.NoworkClient.GMAction;
+import cyou.nowork.sdk.NoworkClient.GMActionParam;
+import cyou.nowork.sdk.NoworkClient.GMOption;
+import cyou.nowork.sdk.NoworkClient.OnlinePlayer;
+import cyou.nowork.sdk.NoWorkException;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
@@ -24,14 +24,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 /**
- * Lounge Account on a Paper server: join check on AsyncPlayerPreLoginEvent (off the main thread),
+ * NoWork Account on a Paper server: join check on AsyncPlayerPreLoginEvent (off the main thread),
  * heartbeat with TPS and the player list, and the GM channel (typed catalogue, polling, results).
  * Bukkit state is read and changed on the main thread only; HTTP runs on async tasks.
  */
-public final class LoungePaperPlugin extends JavaPlugin implements Listener {
+public final class NoWorkPaperPlugin extends JavaPlugin implements Listener {
     private static final long ADMIT_CACHE_MILLIS = Duration.ofHours(24).toMillis();
 
-    private LoungeClient lounge;
+    private NoworkClient nowork;
     private String outagePolicy;
     private volatile boolean gmEnabled;
     /** Players a live check admitted, with the time: the "cache" outage policy lets them in again. */
@@ -40,15 +40,15 @@ public final class LoungePaperPlugin extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         saveDefaultConfig();
-        String base = env("LOUNGE_BASE", getConfig().getString("base", ""));
-        String key = env("LOUNGE_SERVER_KEY", getConfig().getString("server-key", ""));
+        String base = env("NOWORK_BASE", getConfig().getString("base", ""));
+        String key = env("NOWORK_SERVER_KEY", getConfig().getString("server-key", ""));
         if (base.isEmpty() || key.isEmpty()) {
-            getLogger().severe("set base and server-key in config.yml (or LOUNGE_BASE / LOUNGE_SERVER_KEY); plugin disabled");
+            getLogger().severe("set base and server-key in config.yml (or NOWORK_BASE / NOWORK_SERVER_KEY); plugin disabled");
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
         outagePolicy = getConfig().getString("outage-policy", "cache");
-        lounge = new LoungeClient(base, key, Duration.ofSeconds(5));
+        nowork = new NoworkClient(base, key, Duration.ofSeconds(5));
         getServer().getPluginManager().registerEvents(this, this);
 
         long beat = 20L * Math.max(15, getConfig().getInt("heartbeat-seconds", 60));
@@ -65,27 +65,27 @@ public final class LoungePaperPlugin extends JavaPlugin implements Listener {
     public void onPreLogin(AsyncPlayerPreLoginEvent e) {
         UUID id = e.getUniqueId();
         try {
-            LoungeClient.CheckResult r = lounge.checkWhitelist(e.getName(), id.toString());
+            NoworkClient.CheckResult r = nowork.checkWhitelist(e.getName(), id.toString());
             if (r.allowed) {
                 admitted.put(id, System.currentTimeMillis());
                 return;
             }
             admitted.remove(id);
             refuse(e, "未通过白名单 / Not whitelisted: " + (r.reason == null || r.reason.isEmpty() ? "not bound" : r.reason));
-        } catch (LoungeException.Encryption ex) {
+        } catch (NoWorkException.Encryption ex) {
             // encrypted reply this plugin cannot open: never an outage, always refuse (fail closed)
             getLogger().severe("join check: " + ex.getMessage() + " (turn server encryption off or use the Go / TypeScript / Python / C# SDK)");
             refuse(e, "账号服务配置错误 / Account service misconfigured");
-        } catch (LoungeException.Api ex) {
+        } catch (NoWorkException.Api ex) {
             // 401 wrong key, 403 server disabled or not approved: a configuration problem, refuse
             getLogger().severe("join check refused by the user center: " + ex.getMessage());
             refuse(e, "账号服务拒绝了校验 / Account service refused the check");
-        } catch (LoungeException ex) {
+        } catch (NoWorkException ex) {
             onOutage(e, ex);
         }
     }
 
-    private void onOutage(AsyncPlayerPreLoginEvent e, LoungeException ex) {
+    private void onOutage(AsyncPlayerPreLoginEvent e, NoWorkException ex) {
         getLogger().log(Level.WARNING, "join check for " + e.getName() + " failed, outage policy " + outagePolicy, ex);
         switch (outagePolicy) {
             case "allow":
@@ -117,8 +117,8 @@ public final class LoungePaperPlugin extends JavaPlugin implements Listener {
         double tps = Math.min(20.0, Bukkit.getTPS()[0]); // Paper: 1-minute average
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             try {
-                lounge.heartbeat(online, max, version, tps, players);
-            } catch (LoungeException ex) {
+                nowork.heartbeat(online, max, version, tps, players);
+            } catch (NoWorkException ex) {
                 getLogger().warning("heartbeat: " + ex.getMessage());
             }
         });
@@ -128,7 +128,7 @@ public final class LoungePaperPlugin extends JavaPlugin implements Listener {
 
     private void setupGM() {
         try {
-            if (!lounge.modules().containsKey("server-gm")) {
+            if (!nowork.modules().containsKey("server-gm")) {
                 getLogger().info("server-gm module not enabled for this server: GM channel off");
                 return;
             }
@@ -146,11 +146,11 @@ public final class LoungePaperPlugin extends JavaPlugin implements Listener {
                     .param(new GMActionParam("world", "select").required().label("世界").source("worlds"))
                     .param(ticks);
             time.labels.put("en", "Set time");
-            LoungeClient.GMPublishResult r = lounge.publishGMCatalog(List.of(kick, broadcast, time), Map.of("worlds", worldOptions()));
+            NoworkClient.GMPublishResult r = nowork.publishGMCatalog(List.of(kick, broadcast, time), Map.of("worlds", worldOptions()));
             getLogger().info("GM catalogue published: " + r.count + " stored");
             for (Map<String, String> s : r.skipped) getLogger().warning("GM entry skipped: " + s);
             gmEnabled = true;
-        } catch (LoungeException ex) {
+        } catch (NoWorkException ex) {
             getLogger().warning("GM setup: " + ex.getMessage());
         }
     }
@@ -166,8 +166,8 @@ public final class LoungePaperPlugin extends JavaPlugin implements Listener {
         if (!gmEnabled) return;
         List<Map<String, Object>> cmds;
         try {
-            cmds = lounge.pollGMCommands();
-        } catch (LoungeException ex) {
+            cmds = nowork.pollGMCommands();
+        } catch (NoWorkException ex) {
             getLogger().warning("GM poll: " + ex.getMessage());
             return;
         }
@@ -190,8 +190,8 @@ public final class LoungePaperPlugin extends JavaPlugin implements Listener {
                 final boolean success = ok;
                 Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
                     try {
-                        lounge.reportGMResult(id, success, text);
-                    } catch (LoungeException ex) {
+                        nowork.reportGMResult(id, success, text);
+                    } catch (NoWorkException ex) {
                         getLogger().warning("GM #" + id + " result: " + ex.getMessage());
                     }
                 });

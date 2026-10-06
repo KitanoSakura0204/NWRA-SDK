@@ -1,11 +1,11 @@
-package cyou.lounge.sdk;
+package cyou.nowork.sdk;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Minimal JSON reader/writer sufficient for the Lounge API envelopes (no external deps). */
+/** Minimal JSON reader/writer sufficient for the NoWork API envelopes (no external deps). */
 final class Json {
     private final String s;
     private int i;

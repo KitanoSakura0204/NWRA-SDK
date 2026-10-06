@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LoungeClient, ApiError, isVersionConflict } from '../dist/index.js';
+import { NoworkClient, ApiError, isVersionConflict } from '../dist/index.js';
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
 const stored = { uid: 100001, data: { coins: 12, rank: null }, version: 2, updatedAt: '2026-09-29 10:00:00', updatedBy: 'plugin', size: 11 };
 
 function client(answer) {
   const calls = [];
-  const c = new LoungeClient('https://account.example', {
+  const c = new NoworkClient('https://account.example', {
     serverKey: 'k',
     fetch: async (url, init) => {
       calls.push([init.method, url.pathname + url.search, init.body ? JSON.parse(init.body) : undefined]);

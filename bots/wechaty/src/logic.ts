@@ -1,5 +1,5 @@
-import { BotApiError, BotClient } from "@lounge/bot-client";
-import { loungeMessageToText } from "./convert.js";
+import { BotApiError, BotClient } from "@nowork/bot-client";
+import { noworkMessageToText } from "./convert.js";
 
 /** The actual bind/unbind/me/passthrough behaviour, kept free of Wechaty's Message/Contact
  * so it is testable with a fake BotClient and no running Wechaty puppet. */
@@ -53,7 +53,7 @@ export async function doPassthrough(
   try {
     const result = await client.command({ platform, platformUserId: userId, platformName: name, chatType, chatId, text });
     if (!result.handled) return null;
-    return loungeMessageToText(result.reply) || null;
+    return noworkMessageToText(result.reply) || null;
   } catch (err) {
     if (err instanceof BotApiError) return null;
     throw err;

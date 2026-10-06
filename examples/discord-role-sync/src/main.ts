@@ -1,5 +1,5 @@
 /**
- * Discord role sync for Lounge Account: a webhook endpoint that keeps Discord roles in step with
+ * Discord role sync for NoWork Account: a webhook endpoint that keeps Discord roles in step with
  * the user center.
  *
  * - connection.bound (provider discord): the Discord account gets LINKED_ROLE_ID and the

@@ -1,7 +1,7 @@
 {
-  "name": "koishi-plugin-lounge",
+  "name": "koishi-plugin-nowork",
   "version": "0.1.0",
-  "description": "Lounge Account bind/unbind/me and command bridge for Koishi v4 (works on any Koishi adapter)",
+  "description": "NoWork Account bind/unbind/me and command bridge for Koishi v4 (works on any Koishi adapter)",
   "type": "module",
   "main": "lib/index.cjs",
   "module": "lib/index.mjs",
@@ -17,7 +17,7 @@
   "koishi": {
     "description": {
       "zh": "休息室账号绑定、查询，以及聊天指令转发到站点指令注册表",
-      "en": "Lounge Account binding, lookup, and a chat command bridge to the site's command registry"
+      "en": "NoWork Account binding, lookup, and a chat command bridge to the site's command registry"
     },
     "service": {
       "required": [],
@@ -32,7 +32,7 @@
     "koishi": "^4.17.0"
   },
   "dependencies": {
-    "@lounge/bot-client": "file:../ts-client"
+    "@nowork/bot-client": "file:../ts-client"
   },
   "devDependencies": {
     "koishi": "4.17.9",

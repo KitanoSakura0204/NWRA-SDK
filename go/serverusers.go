@@ -1,4 +1,4 @@
-package lounge
+package nowork
 
 import (
 	"context"
@@ -138,7 +138,7 @@ func writeBody(data map[string]any, version int64) map[string]any {
 
 func (c *Client) userData(ctx context.Context, method string, uid int64, body any) (*UserData, error) {
 	if uid <= 0 {
-		return nil, fmt.Errorf("lounge: uid must be positive, got %d", uid)
+		return nil, fmt.Errorf("nowork: uid must be positive, got %d", uid)
 	}
 	var d UserData
 	if err := c.do(ctx, method, "/server/v1/users/"+strconv.FormatInt(uid, 10)+"/data", nil, body, &d); err != nil {

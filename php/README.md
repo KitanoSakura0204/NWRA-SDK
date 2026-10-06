@@ -1,21 +1,21 @@
-# lounge/sdk (PHP)
+# nowork/sdk (PHP)
 
 PHP 8.1+，仅依赖 `ext-curl` 与 `ext-json`（PHP 自带扩展，无第三方包），可用于 Laravel / Symfony / ThinkPHP 或原生 PHP 项目。
 
 ```bash
-composer require lounge/sdk
+composer require nowork/sdk
 ```
 
 ## Server API（游戏服务器）
 
 ```php
-use Lounge\Sdk\LoungeClient;
-use Lounge\Sdk\OnlinePlayer;
-use Lounge\Sdk\Whitelist;
-use Lounge\Sdk\Exceptions\ApiError;
-use Lounge\Sdk\Exceptions\TransportError;
+use NoWork\Sdk\NoworkClient;
+use NoWork\Sdk\OnlinePlayer;
+use NoWork\Sdk\Whitelist;
+use NoWork\Sdk\Exceptions\ApiError;
+use NoWork\Sdk\Exceptions\TransportError;
 
-$client = new LoungeClient('https://account.example.com', 'lsk_xxx');   // 第三个参数为超时秒数，默认 10
+$client = new NoworkClient('https://account.example.com', 'lsk_xxx');   // 第三个参数为超时秒数，默认 10
 
 try {
     $r = $client->checkWhitelist(name: 'Steve', uuid: '069a79f4-...');
@@ -37,17 +37,17 @@ $client->heartbeat(12, 50, '1.21.1', tps: 19.8, players: [new OnlinePlayer('Stev
 
 ### 加密的 Server API 响应（DELIVERY.md §5）
 
-服务器开启加密后，`whitelist` / `whitelist/check` 的 `data` 变为 `{"jwe": "..."}`（响应头 `X-Lounge-Encryption`）。未配置私钥时 SDK 抛出 `EncryptionError`（fail closed，不是 `TransportError`，不会被“网络异常放行”策略吞掉）。配置私钥后自动解密并核对 `ctx`（`server:<服务器代码>:<路由>`），此时这两个接口若返回明文同样拒绝（防降级）。PHP 仅支持 EC P-256 与 X25519（需 ext-sodium）密钥。
+服务器开启加密后，`whitelist` / `whitelist/check` 的 `data` 变为 `{"jwe": "..."}`（响应头 `X-NoWork-Encryption`）。未配置私钥时 SDK 抛出 `EncryptionError`（fail closed，不是 `TransportError`，不会被“网络异常放行”策略吞掉）。配置私钥后自动解密并核对 `ctx`（`server:<服务器代码>:<路由>`），此时这两个接口若返回明文同样拒绝（防降级）。PHP 仅支持 EC P-256 与 X25519（需 ext-sodium）密钥。
 
 ```php
-$client = new LoungeClient($base, 'lsk_xxx', decryptionKeys: [file_get_contents('/etc/lounge/server-enc.jwk')]);
-$raw = $client->raw('GET', '/server/v1/whitelist');   // 不解码 data：$raw->encrypted / $raw->header('X-Lounge-Encryption') / $raw->body
+$client = new NoworkClient($base, 'lsk_xxx', decryptionKeys: [file_get_contents('/etc/nowork/server-enc.jwk')]);
+$raw = $client->raw('GET', '/server/v1/whitelist');   // 不解码 data：$raw->encrypted / $raw->header('X-NoWork-Encryption') / $raw->body
 ```
 
 ### GM 面板（PROTOCOL 2.4）
 
 ```php
-use Lounge\Sdk\{GmAction, GmActionParam, GmOption};
+use NoWork\Sdk\{GmAction, GmActionParam, GmOption};
 
 $r = $client->publishGmCatalog([
     new GmAction('kick', '踢出玩家', params: [
@@ -66,12 +66,12 @@ foreach ($client->pollGmCommands() as $cmd) {                  // id / action / 
 ## OIDC（网站 / 启动器登录）
 
 ```php
-use Lounge\Sdk\LoungeOidc;
+use NoWork\Sdk\NoworkOidc;
 
-$oidc = new LoungeOidc($issuer, $clientId, $clientSecret, $redirectUri);   // 公开客户端 $clientSecret 传 '' 并使用 PKCE
+$oidc = new NoworkOidc($issuer, $clientId, $clientSecret, $redirectUri);   // 公开客户端 $clientSecret 传 '' 并使用 PKCE
 
 // 1. 跳转授权页
-['verifier' => $verifier, 'challenge' => $challenge] = LoungeOidc::pkce();
+['verifier' => $verifier, 'challenge' => $challenge] = NoworkOidc::pkce();
 $_SESSION['oidc'] = ['state' => $state = bin2hex(random_bytes(16)), 'verifier' => $verifier];
 header('Location: ' . $oidc->authorizeUrl($state, $nonce, 'openid profile email game_roles', $challenge));
 
@@ -92,8 +92,8 @@ header('Location: ' . $oidc->logoutUrl($token['id_token'] ?? '', 'https://yourap
 ## Webhook 校验
 
 ```php
-use Lounge\Sdk\Webhook;
-use Lounge\Sdk\Exceptions\WebhookError;
+use NoWork\Sdk\Webhook;
+use NoWork\Sdk\Exceptions\WebhookError;
 
 try {
     // 原生 PHP: 直接读取 $_SERVER 与 php://input, 默认时间戳容差 300 秒
@@ -125,7 +125,7 @@ http_response_code(204);
 | `OAuthError` | OIDC 端点返回 RFC 6749 错误对象 | `getError()` / `getDescription()` / `getStatus()` |
 | `WebhookError` | 签名、时间戳或请求体校验失败 | 返回 400 |
 
-所有异常继承 `Lounge\Sdk\Exceptions\LoungeException`，可统一捕获。
+所有异常继承 `NoWork\Sdk\Exceptions\NoWorkException`，可统一捕获。
 
 ## 自定义 HTTP 传输
 
@@ -136,10 +136,10 @@ fn(string $method, string $url, array $headers, ?string $body, float $timeout): 
 ```
 
 ```php
-use Lounge\Sdk\CurlTransport;
+use NoWork\Sdk\CurlTransport;
 
 $transport = new CurlTransport([CURLOPT_PROXY => 'http://127.0.0.1:7890', CURLOPT_CAINFO => '/etc/ssl/certs/ca.pem']);
-$client = new LoungeClient($base, $key, timeout: 5.0, transport: $transport);
+$client = new NoworkClient($base, $key, timeout: 5.0, transport: $transport);
 ```
 
 ## 测试

@@ -4,10 +4,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
-namespace Lounge.Sdk;
+namespace NoWork.Sdk;
 
-/// <summary>Verifies webhook deliveries from the user center (X-Lounge-Signature / X-Lounge-Timestamp).</summary>
-public static class LoungeWebhook
+/// <summary>Verifies webhook deliveries from the user center (X-NoWork-Signature / X-NoWork-Timestamp).</summary>
+public static class NoWorkWebhook
 {
     /// <summary>A verified webhook envelope.</summary>
     public sealed record Event(string Id, string EventName, long Timestamp, JsonElement Data);
@@ -38,12 +38,12 @@ public static class LoungeWebhook
     /// <param name="tolerance">Replay window; <see cref="TimeSpan.Zero"/> disables.</param>
     public static Event Verify(string secret, Func<string, string?> header, byte[] body, TimeSpan tolerance)
     {
-        if (!long.TryParse((header("X-Lounge-Timestamp") ?? string.Empty).Trim(), out var ts))
-            throw new InvalidSignatureException("missing or invalid X-Lounge-Timestamp");
+        if (!long.TryParse((header("X-NoWork-Timestamp") ?? string.Empty).Trim(), out var ts))
+            throw new InvalidSignatureException("missing or invalid X-NoWork-Timestamp");
         if (tolerance > TimeSpan.Zero && Math.Abs(DateTimeOffset.UtcNow.ToUnixTimeSeconds() - ts) > tolerance.TotalSeconds)
             throw new InvalidSignatureException("webhook timestamp outside tolerance");
         var expected = Encoding.ASCII.GetBytes(Signature(secret, ts, body));
-        var given = Encoding.ASCII.GetBytes((header("X-Lounge-Signature") ?? string.Empty).Trim());
+        var given = Encoding.ASCII.GetBytes((header("X-NoWork-Signature") ?? string.Empty).Trim());
         if (!CryptographicOperations.FixedTimeEquals(expected, given))
             throw new InvalidSignatureException("invalid webhook signature");
         using var doc = JsonDocument.Parse(body);

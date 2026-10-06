@@ -1,10 +1,10 @@
-// Command external-app is an example Lounge external-app plugin (standard library only). The
+// Command external-app is an example NoWork external-app plugin (standard library only). The
 // user centre POSTs every event, filter, job, GM action and page call to one endpoint, signed
 // with the plugin's secret; the app answers and may call back with its scoped token.
 //
-//	LOUNGE_PLUGIN_SECRET=lps_...   signing secret shown once at install (verifies our requests)
-//	LOUNGE_PLUGIN_TOKEN=lpt_...    callback token shown once at install (calls the plugin API)
-//	LOUNGE_API=https://account.example.com/api/plugin/v1
+//	NOWORK_PLUGIN_SECRET=lps_...   signing secret shown once at install (verifies our requests)
+//	NOWORK_PLUGIN_TOKEN=lpt_...    callback token shown once at install (calls the plugin API)
+//	NOWORK_API=https://account.example.com/api/plugin/v1
 //	go run . -addr :8090
 //
 // Put it behind HTTPS and set external.endpoint in plugin.json to its public URL.
@@ -38,15 +38,15 @@ type envelope struct {
 }
 
 var (
-	secret = os.Getenv("LOUNGE_PLUGIN_SECRET")
-	token  = os.Getenv("LOUNGE_PLUGIN_TOKEN")
-	api    = os.Getenv("LOUNGE_API")
+	secret = os.Getenv("NOWORK_PLUGIN_SECRET")
+	token  = os.Getenv("NOWORK_PLUGIN_TOKEN")
+	api    = os.Getenv("NOWORK_API")
 )
 
-// verify checks X-Lounge-Signature = sha256=<hex HMAC-SHA256(secret, "<timestamp>.<body>")>
+// verify checks X-NoWork-Signature = sha256=<hex HMAC-SHA256(secret, "<timestamp>.<body>")>
 // and refuses timestamps older than five minutes (replays).
 func verify(r *http.Request, body []byte) bool {
-	ts, err := strconv.ParseInt(r.Header.Get("X-Lounge-Timestamp"), 10, 64)
+	ts, err := strconv.ParseInt(r.Header.Get("X-NoWork-Timestamp"), 10, 64)
 	if err != nil || time.Since(time.Unix(ts, 0)).Abs() > 5*time.Minute {
 		return false
 	}
@@ -54,7 +54,7 @@ func verify(r *http.Request, body []byte) bool {
 	fmt.Fprintf(mac, "%d.", ts)
 	mac.Write(body)
 	want := "sha256=" + hex.EncodeToString(mac.Sum(nil))
-	return hmac.Equal([]byte(want), []byte(r.Header.Get("X-Lounge-Signature")))
+	return hmac.Equal([]byte(want), []byte(r.Header.Get("X-NoWork-Signature")))
 }
 
 // call runs one host function through the plugin API (same functions as the wasm ABI).
@@ -137,9 +137,9 @@ func main() {
 	addr := flag.String("addr", ":8090", "listen address")
 	flag.Parse()
 	if secret == "" || token == "" || api == "" {
-		log.Fatal("set LOUNGE_PLUGIN_SECRET, LOUNGE_PLUGIN_TOKEN and LOUNGE_API")
+		log.Fatal("set NOWORK_PLUGIN_SECRET, NOWORK_PLUGIN_TOKEN and NOWORK_API")
 	}
-	http.HandleFunc("/lounge", handle)
-	log.Printf("listening on %s/lounge", *addr)
+	http.HandleFunc("/nowork", handle)
+	log.Printf("listening on %s/nowork", *addr)
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }

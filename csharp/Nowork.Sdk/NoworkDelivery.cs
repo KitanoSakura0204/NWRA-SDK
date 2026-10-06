@@ -4,14 +4,14 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
-namespace Lounge.Sdk;
+namespace NoWork.Sdk;
 
 /// <summary>
 /// Delivery helpers (SDK/docs/DELIVERY.md): decrypt what the user center sends when an app registered an
 /// encryption key. RSA-OAEP-256 or ECDH-ES+A256KW over P-256, enc A256GCM. X25519 keys are not supported
 /// (the .NET class library has no X25519); register an RSA or EC P-256 key for .NET apps.
 /// </summary>
-public static class LoungeDelivery
+public static class NoWorkDelivery
 {
     /// <summary>A JWE could not be opened, or a check on its content failed.</summary>
     public sealed class DecryptException : Exception
@@ -200,7 +200,7 @@ public static class LoungeDelivery
 
     /// <summary>
     /// Opens an encrypted webhook body ({"id","event","timestamp","jwe"}); verify the signature with
-    /// LoungeWebhook first. Returns the inner document JSON (it must repeat id, event and timestamp).
+    /// NoWorkWebhook first. Returns the inner document JSON (it must repeat id, event and timestamp).
     /// </summary>
     public static string OpenWebhook(string body, params string[] privateJwks)
     {

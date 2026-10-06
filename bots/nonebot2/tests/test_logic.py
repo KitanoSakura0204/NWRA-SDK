@@ -5,9 +5,9 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 import pytest
-from lounge_bot_client import BindResult, BotApiError, CommandResult, LookupResult, UnbindResult
+from nowork_bot_client import BindResult, BotApiError, CommandResult, LookupResult, UnbindResult
 
-from nonebot_plugin_lounge import logic
+from nonebot_plugin_nowork import logic
 
 
 class FakeClient:

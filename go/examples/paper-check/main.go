@@ -8,16 +8,16 @@ import (
 	"os"
 	"time"
 
-	lounge "github.com/wangework/lounge-sdk-go"
+	nowork "github.com/wangework/nowork-sdk-go"
 )
 
 func main() {
-	base := envOr("LOUNGE_BASE", "http://localhost:8081")
-	key := os.Getenv("LOUNGE_SERVER_KEY")
+	base := envOr("NOWORK_BASE", "http://localhost:8081")
+	key := os.Getenv("NOWORK_SERVER_KEY")
 	if key == "" {
-		log.Fatal("set LOUNGE_SERVER_KEY (from admin console → 服务器管理)")
+		log.Fatal("set NOWORK_SERVER_KEY (from admin console → 服务器管理)")
 	}
-	c := lounge.New(base, lounge.WithServerKey(key))
+	c := nowork.New(base, nowork.WithServerKey(key))
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -33,7 +33,7 @@ func main() {
 	}
 	fmt.Printf("Steve allowed=%v reason=%q\n", res.Allowed, res.Reason)
 
-	if err := c.Heartbeat(ctx, lounge.Heartbeat{Online: 1, Max: 20, Version: "example"}); err != nil {
+	if err := c.Heartbeat(ctx, nowork.Heartbeat{Online: 1, Max: 20, Version: "example"}); err != nil {
 		log.Fatalf("heartbeat: %v", err)
 	}
 	fmt.Println("heartbeat ok")

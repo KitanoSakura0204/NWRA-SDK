@@ -9,10 +9,10 @@ import json
 import time
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
-from .errors import LoungeError
+from .errors import NoWorkError
 
 
-class DecryptError(LoungeError):
+class DecryptError(NoWorkError):
     """A JWE could not be opened (wrong key, tampered, unsupported) or a check failed."""
 
 
@@ -136,7 +136,7 @@ def decrypt_id_token(token: str, keys: Keys, jwks: Union[str, Mapping[str, Any]]
 
 
 def open_server_data(response: Union[str, bytes, Mapping[str, Any]], keys: Keys, ctx: Optional[str] = None) -> Any:
-    """Open the plugin-API envelope: data {"jwe"} of a response with X-Lounge-Encryption: JWE (the
+    """Open the plugin-API envelope: data {"jwe"} of a response with X-NoWork-Encryption: JWE (the
     whole body is accepted too). ctx, when set, must equal the header ctx ("server:<code>:<route>").
     A plain body is refused: a server that turned encryption on must not accept plaintext."""
     obj = json.loads(response) if isinstance(response, (str, bytes)) else response

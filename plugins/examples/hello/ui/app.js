@@ -15,7 +15,7 @@
   }
 
   function refresh() {
-    lounge.invoke('stats').then(
+    nowork.invoke('stats').then(
       function (r) {
         document.getElementById('count').textContent = String(r.logins);
       },
@@ -25,13 +25,13 @@
     );
   }
 
-  lounge.on('context', apply);
-  lounge.ready().then(function (ctx) {
+  nowork.on('context', apply);
+  nowork.ready().then(function (ctx) {
     apply(ctx);
     refresh();
   });
   document.getElementById('refresh').addEventListener('click', refresh);
   new ResizeObserver(function () {
-    lounge.resize(document.documentElement.scrollHeight);
+    nowork.resize(document.documentElement.scrollHeight);
   }).observe(document.body);
 })();

@@ -1,13 +1,13 @@
-"""Lounge Account SDK: game-server whitelist API and OIDC helpers (standard library only)."""
-from .client import HEADER_ENCRYPTION, CheckResult, LoungeClient, OnlinePlayer, RawResponse, Whitelist, WhitelistEntry
-from .errors import ApiError, EncryptionError, LoungeError, OAuthError, TransportError
+"""NoWork Account SDK: game-server whitelist API and OIDC helpers (standard library only)."""
+from .client import HEADER_ENCRYPTION, CheckResult, NoworkClient, OnlinePlayer, RawResponse, Whitelist, WhitelistEntry
+from .errors import ApiError, EncryptionError, NoWorkError, OAuthError, TransportError
 from .gm import GMAction, GMActionParam, GMOption, GMPublishResult
-from .oidc import LoungeOIDC
+from .oidc import NoworkOIDC
 from .serverusers import CODE_ADMIN_BAN, CODE_NOT_ON_ROSTER, CODE_VERSION_CONFLICT, KickEntry, ServerBan, UserData, UserField, UserSchema, is_version_conflict
 from .webhook import WebhookError, WebhookEvent, verify_webhook, webhook_signature
 
 __all__ = [
-    "LoungeClient",
+    "NoworkClient",
     "Whitelist",
     "WhitelistEntry",
     "CheckResult",
@@ -18,12 +18,12 @@ __all__ = [
     "GMActionParam",
     "GMOption",
     "GMPublishResult",
-    "LoungeError",
+    "NoWorkError",
     "ApiError",
     "EncryptionError",
     "TransportError",
     "OAuthError",
-    "LoungeOIDC",
+    "NoworkOIDC",
     "UserSchema",
     "UserField",
     "UserData",

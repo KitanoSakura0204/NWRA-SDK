@@ -1,7 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 
-namespace Lounge.Sdk;
+namespace NoWork.Sdk;
 
 /// <summary>RFC 6749 error.</summary>
 public sealed class OAuthException : Exception
@@ -9,17 +9,17 @@ public sealed class OAuthException : Exception
     public string Error { get; }
     public string Description { get; }
     public int Status { get; }
-    public OAuthException(string error, string description, int status) : base($"lounge: oauth error {error}: {description}")
+    public OAuthException(string error, string description, int status) : base($"nowork: oauth error {error}: {description}")
     { Error = error; Description = description; Status = status; }
 }
 
 /// <summary>Minimal OIDC relying-party helper (authorization code + PKCE, refresh, userinfo, introspection).</summary>
-public sealed class LoungeOidc
+public sealed class NoworkOidc
 {
     private readonly HttpClient _http;
     private readonly string _issuer, _clientId, _clientSecret, _redirectUri;
 
-    public LoungeOidc(string issuer, string clientId, string clientSecret = "", string redirectUri = "", HttpClient? http = null)
+    public NoworkOidc(string issuer, string clientId, string clientSecret = "", string redirectUri = "", HttpClient? http = null)
     {
         _issuer = issuer.TrimEnd('/');
         _clientId = clientId; _clientSecret = clientSecret; _redirectUri = redirectUri;

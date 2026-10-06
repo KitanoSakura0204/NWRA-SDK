@@ -1,4 +1,4 @@
-package cyou.lounge.sdk;
+package cyou.nowork.sdk;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -8,8 +8,8 @@ import java.util.function.Function;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
-/** Verifies webhook deliveries from the user center (X-Lounge-Signature / X-Lounge-Timestamp). */
-public final class LoungeWebhook {
+/** Verifies webhook deliveries from the user center (X-NoWork-Signature / X-NoWork-Timestamp). */
+public final class NoWorkWebhook {
 
     /** A verified webhook envelope. */
     public static final class Event {
@@ -27,13 +27,13 @@ public final class LoungeWebhook {
     }
 
     /** Thrown when the signature or timestamp is invalid. */
-    public static final class InvalidSignature extends LoungeException {
+    public static final class InvalidSignature extends NoWorkException {
         public InvalidSignature(String message) {
             super(message);
         }
     }
 
-    private LoungeWebhook() {}
+    private NoWorkWebhook() {}
 
     /** sha256=HMAC_SHA256(secret, "&lt;ts&gt;.&lt;body&gt;") */
     public static String signature(String secret, long ts, byte[] body) {
@@ -59,18 +59,18 @@ public final class LoungeWebhook {
      * @param tolerance  replay window in seconds; 0 disables
      */
     @SuppressWarnings("unchecked")
-    public static Event verify(String secret, Function<String, String> header, byte[] body, long tolerance) throws LoungeException {
+    public static Event verify(String secret, Function<String, String> header, byte[] body, long tolerance) throws NoWorkException {
         long ts;
         try {
-            ts = Long.parseLong(Optional.ofNullable(header.apply("X-Lounge-Timestamp")).orElse("").trim());
+            ts = Long.parseLong(Optional.ofNullable(header.apply("X-NoWork-Timestamp")).orElse("").trim());
         } catch (NumberFormatException e) {
-            throw new InvalidSignature("missing or invalid X-Lounge-Timestamp");
+            throw new InvalidSignature("missing or invalid X-NoWork-Timestamp");
         }
         if (tolerance > 0 && Math.abs(System.currentTimeMillis() / 1000L - ts) > tolerance) {
             throw new InvalidSignature("webhook timestamp outside tolerance");
         }
         String expected = signature(secret, ts, body);
-        String given = Optional.ofNullable(header.apply("X-Lounge-Signature")).orElse("").trim();
+        String given = Optional.ofNullable(header.apply("X-NoWork-Signature")).orElse("").trim();
         if (!MessageDigest.isEqual(expected.getBytes(StandardCharsets.US_ASCII), given.getBytes(StandardCharsets.US_ASCII))) {
             throw new InvalidSignature("invalid webhook signature");
         }

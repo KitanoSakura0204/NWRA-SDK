@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Lounge\Sdk;
+namespace NoWork\Sdk;
 
 /** One entry of the heartbeat player list (PROTOCOL 2.3): name required, uuid optional. */
 final class OnlinePlayer implements \JsonSerializable

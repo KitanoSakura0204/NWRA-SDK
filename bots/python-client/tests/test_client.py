@@ -3,13 +3,13 @@ import json
 import httpx
 import pytest
 
-from lounge_bot_client import BotApiError, BotClient
+from nowork_bot_client import BotApiError, BotClient
 
 
 def make_client(handler):
     transport = httpx.MockTransport(handler)
     http = httpx.AsyncClient(transport=transport)
-    return BotClient("https://lounge.example.com", "tok123", client=http)
+    return BotClient("https://nowork.example.com", "tok123", client=http)
 
 
 @pytest.mark.asyncio

@@ -32,7 +32,7 @@ class FakeSocket extends EventEmitter {
 test("acks a delivered message and answers an application ping", async () => {
   const received: PluginEvent[] = [];
   const close = connectEvents({
-    baseUrl: "https://lounge.example.com",
+    baseUrl: "https://nowork.example.com",
     token: "tok",
     onEvent: (ev) => {
       received.push(ev);
@@ -58,7 +58,7 @@ test("acks a delivered message and answers an application ping", async () => {
 
 test("reconnects with backoff after a close", async () => {
   const close = connectEvents({
-    baseUrl: "https://lounge.example.com",
+    baseUrl: "https://nowork.example.com",
     token: "tok",
     onEvent: () => {},
     WebSocketImpl: FakeSocket as unknown as typeof WebSocket,

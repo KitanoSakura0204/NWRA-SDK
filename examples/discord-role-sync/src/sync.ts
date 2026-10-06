@@ -1,5 +1,5 @@
 /**
- * Role sync: turns Lounge Account events into Discord role changes. Every change converges on
+ * Role sync: turns NoWork Account events into Discord role changes. Every change converges on
  * the roles an account should hold, so a retried or duplicated delivery is harmless, and only the
  * roles configured here are ever touched.
  */
@@ -83,16 +83,16 @@ export class RoleSync {
         const level = typeof sl === 'number' ? sl : link?.level;
         if (link?.discordId && link.discordId !== discordId) {
           // the account switched Discord accounts: the old one loses its roles
-          await this.converge(link.discordId, false, undefined, 'Lounge account linked another Discord account');
+          await this.converge(link.discordId, false, undefined, 'NoWork account linked another Discord account');
         }
-        await this.converge(discordId, true, level, 'Lounge account linked');
+        await this.converge(discordId, true, level, 'NoWork account linked');
         store.set(userId, { discordId, level, at: ev.timestamp });
         console.info(`user ${userId} linked Discord ${discordId} (trust level ${level ?? 'unknown'})`);
         return;
       }
       case 'connection.unbound': {
         const discordId = SNOWFLAKE.test(d.externalId ?? '') ? (d.externalId as string) : (link?.discordId ?? '');
-        if (discordId) await this.converge(discordId, false, undefined, 'Lounge account unlinked Discord');
+        if (discordId) await this.converge(discordId, false, undefined, 'NoWork account unlinked Discord');
         store.set(userId, { discordId: '', level: link?.level, at: ev.timestamp });
         console.info(`user ${userId} unlinked Discord ${discordId || '(unknown)'}`);
         return;
@@ -108,7 +108,7 @@ export class RoleSync {
         return;
       }
       case 'user.deleted': {
-        if (link?.discordId) await this.converge(link.discordId, false, undefined, 'Lounge account deleted');
+        if (link?.discordId) await this.converge(link.discordId, false, undefined, 'NoWork account deleted');
         store.set(userId, { discordId: '', at: ev.timestamp });
         console.info(`user ${userId} deleted${link?.discordId ? `: Discord ${link.discordId} lost its roles` : ''}`);
         return;

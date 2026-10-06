@@ -13,13 +13,13 @@ import (
 	"testing"
 	"time"
 
-	lounge "github.com/wangework/lounge-sdk-go"
+	nowork "github.com/wangework/nowork-sdk-go"
 )
 
 func quiet(string, ...any) {}
 
 // fakeCenter answers the whitelist routes with fixed bodies (no network beyond loopback).
-func fakeCenter(t *testing.T, header string, bodies map[string]string) *lounge.Client {
+func fakeCenter(t *testing.T, header string, bodies map[string]string) *nowork.Client {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, ok := bodies[r.URL.Path]
@@ -28,13 +28,13 @@ func fakeCenter(t *testing.T, header string, bodies map[string]string) *lounge.C
 			return
 		}
 		if header != "" {
-			w.Header().Set(lounge.HeaderEncryption, header)
+			w.Header().Set(nowork.HeaderEncryption, header)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(srv.Close)
-	return lounge.New(srv.URL, lounge.WithServerKey("lsk_test"))
+	return nowork.New(srv.URL, nowork.WithServerKey("lsk_test"))
 }
 
 const plainList = `{"code":0,"data":{"server":"survival","mode":1,"count":1,"entries":[{"name":"Steve","uuid":"069a79f4-44e9-4726-a5be-fca90e38aaf5","uid":100001}]}}`
@@ -64,7 +64,7 @@ func TestEncryptedRepliesFailClosed(t *testing.T) {
 	api := fakeCenter(t, "JWE", map[string]string{"/server/v1/whitelist/check": sealed})
 	g := &gate{api: api, outage: outageAllow} // even the allow policy must not let this through
 	v, err := g.check(context.Background(), "Steve", "")
-	var enc *lounge.EncryptionError
+	var enc *nowork.EncryptionError
 	if !errors.As(err, &enc) || v.Allowed {
 		t.Fatalf("no keys: %+v %v", v, err)
 	}
@@ -105,9 +105,9 @@ func vector(t *testing.T, vf vectorFile, name string) (response, body, secret st
 	return "", "", "", nil
 }
 
-func key(t *testing.T, vf vectorFile, name string) *lounge.DecryptionKey {
+func key(t *testing.T, vf vectorFile, name string) *nowork.DecryptionKey {
 	t.Helper()
-	k, err := lounge.ParseDecryptionKey(vf.Keys[name])
+	k, err := nowork.ParseDecryptionKey(vf.Keys[name])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,27 +120,27 @@ func TestEncryptedWhitelistOpensWithTheVectorKey(t *testing.T) {
 	ec := key(t, vf, "ec")
 	api := fakeCenter(t, "JWE", map[string]string{"/server/v1/whitelist": response, "/server/v1/whitelist/check": response})
 
-	g := &gate{api: api, code: "survival", keys: []*lounge.DecryptionKey{ec}, outage: outageCache}
+	g := &gate{api: api, code: "survival", keys: []*nowork.DecryptionKey{ec}, outage: outageCache}
 	if n, err := g.refresh(context.Background()); err != nil || n != 1 {
 		t.Fatalf("refresh: %d %v", n, err)
 	}
-	var enc *lounge.EncryptionError
+	var enc *nowork.EncryptionError
 	// the same ciphertext served on the join check names another route
 	if v, err := g.check(context.Background(), "Steve", ""); !errors.As(err, &enc) || v.Allowed {
 		t.Fatalf("route swap: %+v %v", v, err)
 	}
 	// another server code
-	g2 := &gate{api: api, code: "creative", keys: []*lounge.DecryptionKey{ec}}
+	g2 := &gate{api: api, code: "creative", keys: []*nowork.DecryptionKey{ec}}
 	if _, err := g2.refresh(context.Background()); !errors.As(err, &enc) {
 		t.Fatalf("server swap: %v", err)
 	}
 	// wrong key
-	g3 := &gate{api: api, keys: []*lounge.DecryptionKey{key(t, vf, "x25519")}}
+	g3 := &gate{api: api, keys: []*nowork.DecryptionKey{key(t, vf, "x25519")}}
 	if _, err := g3.refresh(context.Background()); !errors.As(err, &enc) {
 		t.Fatalf("wrong key: %v", err)
 	}
 	// keys configured, plain reply: refused (no downgrade)
-	plain := &gate{api: fakeCenter(t, "", map[string]string{"/server/v1/whitelist": plainList}), keys: []*lounge.DecryptionKey{ec}}
+	plain := &gate{api: fakeCenter(t, "", map[string]string{"/server/v1/whitelist": plainList}), keys: []*nowork.DecryptionKey{ec}}
 	if _, err := plain.refresh(context.Background()); !errors.As(err, &enc) {
 		t.Fatalf("downgrade: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestGMCommands(t *testing.T) {
 	var said []string
 	say := func(m string) { said = append(said, m) }
 	run := func(action, params string) (string, error) {
-		return runGM(w, lounge.GMCommand{ID: 1, Action: action, Params: json.RawMessage(params)}, say)
+		return runGM(w, nowork.GMCommand{ID: 1, Action: action, Params: json.RawMessage(params)}, say)
 	}
 	if _, err := run("broadcast", `{"message":"hi","repeat":2}`); err != nil || len(said) != 2 {
 		t.Fatalf("broadcast: %v %v", err, said)
@@ -186,7 +186,7 @@ func TestGMCommands(t *testing.T) {
 }
 
 func post(h *hooks, body string, headers map[string]string) int {
-	req := httptest.NewRequest(http.MethodPost, "/lounge/webhook", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/nowork/webhook", strings.NewReader(body))
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
@@ -197,7 +197,7 @@ func post(h *hooks, body string, headers map[string]string) int {
 
 func signed(secret, body string) map[string]string {
 	ts := time.Now().Unix()
-	return map[string]string{"X-Lounge-Timestamp": strconv.FormatInt(ts, 10), "X-Lounge-Signature": lounge.WebhookSignature(secret, ts, []byte(body))}
+	return map[string]string{"X-NoWork-Timestamp": strconv.FormatInt(ts, 10), "X-NoWork-Signature": nowork.WebhookSignature(secret, ts, []byte(body))}
 }
 
 func TestWebhookKicksFrozenAccounts(t *testing.T) {
@@ -215,7 +215,7 @@ func TestWebhookKicksFrozenAccounts(t *testing.T) {
 	if code := post(h, freeze, signed(h.secret, freeze)); code != http.StatusOK || w.count() != 1 {
 		t.Fatalf("freeze: %d, %d online", code, w.count())
 	}
-	if code := post(h, freeze, map[string]string{"X-Lounge-Timestamp": "1", "X-Lounge-Signature": "sha256=00"}); code != http.StatusUnauthorized {
+	if code := post(h, freeze, map[string]string{"X-NoWork-Timestamp": "1", "X-NoWork-Signature": "sha256=00"}); code != http.StatusUnauthorized {
 		t.Fatalf("bad signature: %d", code)
 	}
 	review := `{"id":"e3","event":"game_role.reviewed","timestamp":3,"data":{"roleId":1,"status":1}}`
@@ -230,7 +230,7 @@ func TestEncryptedWebhook(t *testing.T) {
 	vf := vectors(t)
 	_, body, secret, headers := vector(t, vf, "webhook-envelope")
 	x := key(t, vf, "x25519")
-	mk := func(keys ...*lounge.DecryptionKey) *hooks {
+	mk := func(keys ...*nowork.DecryptionKey) *hooks {
 		// the vector's timestamp is fixed, so the replay window is off (tolerance 0)
 		return &hooks{secret: secret, keys: keys, world: newWorld(0, quiet), logf: quiet, seen: map[string]time.Time{}, resync: func() {}}
 	}

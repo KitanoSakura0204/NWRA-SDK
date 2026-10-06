@@ -45,7 +45,7 @@ export class DiscordRest implements RoleApi {
       method,
       headers: {
         Authorization: `Bot ${this.token}`,
-        'User-Agent': 'DiscordBot (https://github.com/wangework/lounge-sdk, 1.0)',
+        'User-Agent': 'DiscordBot (https://github.com/wangework/nowork-sdk, 1.0)',
         'X-Audit-Log-Reason': encodeURIComponent(reason),
       },
       signal: AbortSignal.timeout(8_000),

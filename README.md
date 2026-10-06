@@ -1,4 +1,4 @@
-# Lounge Account SDK
+# NoWork Account SDK
 
 游戏服务器 / 第三方应用接入「休息室账号」用户中心的官方 SDK，覆盖两类能力：
 
@@ -21,17 +21,17 @@
 ## 快速开始（以 Go 为例）
 
 ```go
-client := lounge.New("https://account.example.com", lounge.WithServerKey("lsk_xxx"))
+client := nowork.New("https://account.example.com", nowork.WithServerKey("lsk_xxx"))
 
 // 玩家进服校验
 res, err := client.CheckWhitelist(ctx, "Steve", "069a79f4-44e9-4726-a5be-fca90e38aaf5")
 if err == nil && res.Allowed { /* 放行 */ }
 
 // 定期心跳
-client.Heartbeat(ctx, lounge.Heartbeat{Online: 12, Max: 50, Version: "1.21.1"})
+client.Heartbeat(ctx, nowork.Heartbeat{Online: 12, Max: 50, Version: "1.21.1"})
 
 // OIDC（网站 / 启动器登录）
-oidc := lounge.NewOIDC("https://account.example.com", "lc_xxx", "secret", "https://yourapp.com/callback")
+oidc := nowork.NewOIDC("https://account.example.com", "lc_xxx", "secret", "https://yourapp.com/callback")
 url, _ := oidc.AuthorizeURL(state, nonce, "openid profile email game_roles")
 tok, _ := oidc.Exchange(ctx, code)
 user, _ := oidc.UserInfo(ctx, tok.AccessToken)
@@ -42,12 +42,12 @@ user, _ := oidc.UserInfo(ctx, tok.AccessToken)
 ```
 SDK/
 ├── docs/PROTOCOL.md      协议与字段说明（所有语言共同遵循）
-├── go/                   Go module: github.com/wangework/lounge-sdk-go
-├── java/                 Maven: cyou.lounge:lounge-sdk
-├── python/               PyPI: lounge-sdk
-├── typescript/           npm: @lounge/sdk
-├── csharp/               NuGet: Lounge.Sdk
-├── php/                  Composer: lounge/sdk
+├── go/                   Go module: github.com/wangework/nowork-sdk-go
+├── java/                 Maven: cyou.nowork:nowork-sdk
+├── python/               PyPI: nowork-sdk
+├── typescript/           npm: @nowork/sdk
+├── csharp/               NuGet: NoWork.Sdk
+├── php/                  Composer: nowork/sdk
 └── examples/             示例：游戏服务器、Paper 插件、Webhook 接收端、Discord 身份组同步、登录页模板（见 examples/README.md）
 ```
 

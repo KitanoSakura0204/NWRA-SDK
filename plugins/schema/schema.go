@@ -1,6 +1,6 @@
 // Package schema carries the JSON Schemas (2020-12) of the plugin standard 1.1, plugin.json
 // and the market index.json, and a small validator for the keyword subset they use, so the
-// loungeplugin tool and the tests check files without a third-party library.
+// noworkplugin tool and the tests check files without a third-party library.
 //
 // The schemas mirror the host's validator (Backend internal/modules/plugins/manifest.go and
 // internal/modules/pluginmarket/pluginstd); the host checks more than a schema can express

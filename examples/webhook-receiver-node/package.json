@@ -1,8 +1,8 @@
 {
-  "name": "lounge-webhook-receiver-node",
+  "name": "nowork-webhook-receiver-node",
   "private": true,
   "version": "1.0.0",
-  "description": "Lounge Account webhook receiver on plain node:http, verifying signatures with the TypeScript SDK",
+  "description": "NoWork Account webhook receiver on plain node:http, verifying signatures with the TypeScript SDK",
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",

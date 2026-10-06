@@ -55,15 +55,15 @@
 
 ```
 HTTP/1.1 200 OK
-X-Lounge-Encryption: JWE
+X-NoWork-Encryption: JWE
 
 { "code": 0, "message": "...", "data": { "jwe": "eyJhbGciOi..." } }
 ```
 
 - 解密得到的明文就是原本的 `data`（JSON，字段同 PROTOCOL §2.1 / §2.2，字段名与内容按配置的 `server` 规则）。
 - 受保护头带 `iat`（Unix 秒）与 `ctx: "server:<服务器代码>:<路由>"`（路由为 `whitelist` 或 `whitelist/check`），插件应核对 `ctx`，防止把一个接口的密文当成另一个接口的。
-- 轮换过渡期内，插件可在请求头 `X-Lounge-Encryption-Kid: <kid>` 指定用哪把公钥（生效的或过渡中的）；不带则用生效的那把。
-- 开启加密但没有可用公钥时返回业务错误（`code != 0`），**不会退回明文**。插件在收到 `X-Lounge-Encryption` 之外的明文时也应拒绝（SDK 的 `OpenServerData` 如此）。
+- 轮换过渡期内，插件可在请求头 `X-NoWork-Encryption-Kid: <kid>` 指定用哪把公钥（生效的或过渡中的）；不带则用生效的那把。
+- 开启加密但没有可用公钥时返回业务错误（`code != 0`），**不会退回明文**。插件在收到 `X-NoWork-Encryption` 之外的明文时也应拒绝（SDK 的 `OpenServerData` 如此）。
 
 ## 6. Webhook 加密信封
 
@@ -73,7 +73,7 @@ X-Lounge-Encryption: JWE
 { "id": "5c5b…", "event": "user.login", "timestamp": 1757800000, "jwe": "eyJhbGciOi..." }
 ```
 
-并带请求头 `X-Lounge-Encryption: JWE`。签名规则不变（PROTOCOL §5，对上面这个请求体签名），先验签再解密。JWE 明文是完整的原始文档 `{"id","event","timestamp","data"}`，其中 `id` / `event` / `timestamp` 必须与外层一致；受保护头 `ctx: "webhook:<端点 ID>"`。配置的 `webhook` 规则非空或为 pairwise 时，`data.user` 为按规则生成的用户对象。重试沿用首次加密的密文，过渡期（默认 7 天）远长于最长重试间隔（6 小时）。
+并带请求头 `X-NoWork-Encryption: JWE`。签名规则不变（PROTOCOL §5，对上面这个请求体签名），先验签再解密。JWE 明文是完整的原始文档 `{"id","event","timestamp","data"}`，其中 `id` / `event` / `timestamp` 必须与外层一致；受保护头 `ctx: "webhook:<端点 ID>"`。配置的 `webhook` 规则非空或为 pairwise 时，`data.user` 为按规则生成的用户对象。重试沿用首次加密的密文，过渡期（默认 7 天）远长于最长重试间隔（6 小时）。
 
 ## 7. 密钥轮换
 
@@ -81,7 +81,7 @@ X-Lounge-Encryption: JWE
 
 1. 应用生成新密钥对，**先在自己一侧同时部署新旧两把私钥**（按 JWE 头的 `kid` 选择，SDK 支持传入多把）。
 2. 后台上传新公钥（`pending`），可用"测试解密"核对。第一把公钥上传时若算法与配置相符会直接生效。
-3. 点"启用"并填过渡期（0–90 天，默认 7）：新钥立即生效，OIDC 与 Webhook 立刻改用新钥；旧钥进入 `retiring`，过渡期内插件仍可用 `X-Lounge-Encryption-Kid` 指定它。过渡中的旧钥可再次"启用"以回滚。
+3. 点"启用"并填过渡期（0–90 天，默认 7）：新钥立即生效，OIDC 与 Webhook 立刻改用新钥；旧钥进入 `retiring`，过渡期内插件仍可用 `X-NoWork-Encryption-Kid` 指定它。过渡中的旧钥可再次"启用"以回滚。
 4. 过渡期结束后系统自动置为 `retired`，应用即可删除旧私钥。
 
 防呆：开启加密的配置不能停用唯一生效的公钥；算法与 `id_token_encrypted_response_alg` 等不符的公钥不能启用；没有生效公钥时不能开启加密。
@@ -105,9 +105,9 @@ X-Lounge-Encryption: JWE
 | --- | --- | --- | --- |
 | Go | `ParseDecryptionKey` / `DecryptJWE` / `VerifyIDToken` / `DecryptIDToken` / `OpenServerData` / `OpenWebhook` | 全部 | `go test`（7/7 向量 + RFC 3394） |
 | TypeScript | `src/delivery.ts`：`decryptJwe` / `verifyIdToken` / `decryptIdToken` / `openServerData` / `openWebhook` | 全部（X25519 需 Node 20+ 或新版浏览器） | `node --test`（7/7） |
-| Python | `lounge_sdk.delivery`：`decrypt_jwe` / `verify_id_token` / `decrypt_id_token` / `open_server_data` / `open_webhook` | 全部；需 `pip install cryptography` | `unittest`（7/7，独立于后端实现的交叉核对） |
-| Java | `LoungeDelivery.decrypt` / `verifyIdToken` / `decryptIdToken` / `openServerData` / `openWebhook`，密钥 `PrivateJwk.parse(json)` | 全部（Java 17+） | 临时程序跑向量 7/7（仓库内无 JUnit） |
-| C# | `LoungeDelivery.Decrypt` / `VerifyIdToken` / `DecryptIdToken` / `OpenServerData` / `OpenWebhook` | RSA-OAEP-256、P-256；**不支持 X25519**（.NET 无此算法） | 临时程序在 .NET 10 上跑向量 5/7，2 个 X25519 向量按预期拒绝；net6.0 目标未单独编译 |
+| Python | `nowork_sdk.delivery`：`decrypt_jwe` / `verify_id_token` / `decrypt_id_token` / `open_server_data` / `open_webhook` | 全部；需 `pip install cryptography` | `unittest`（7/7，独立于后端实现的交叉核对） |
+| Java | `NoWorkDelivery.decrypt` / `verifyIdToken` / `decryptIdToken` / `openServerData` / `openWebhook`，密钥 `PrivateJwk.parse(json)` | 全部（Java 17+） | 临时程序跑向量 7/7（仓库内无 JUnit） |
+| C# | `NoWorkDelivery.Decrypt` / `VerifyIdToken` / `DecryptIdToken` / `OpenServerData` / `OpenWebhook` | RSA-OAEP-256、P-256；**不支持 X25519**（.NET 无此算法） | 临时程序在 .NET 10 上跑向量 5/7，2 个 X25519 向量按预期拒绝；net6.0 目标未单独编译 |
 | PHP | `Delivery::decrypt` / `verifyIdToken` / `decryptIdToken` / `openServerData` / `openWebhook` | P-256（ext-openssl）、X25519（ext-sodium）；**不支持 RSA-OAEP-256** | **未验证**（本机无 PHP） |
 
 ## 10. 示例
@@ -115,8 +115,8 @@ X-Lounge-Encryption: JWE
 Go 插件读取加密的白名单：
 
 ```go
-key, _ := lounge.ParseDecryptionKey(privateJWK)
-plain, err := lounge.OpenServerData(respBody, "server:survival:whitelist", key)
+key, _ := nowork.ParseDecryptionKey(privateJWK)
+plain, err := nowork.OpenServerData(respBody, "server:survival:whitelist", key)
 ```
 
 TypeScript 应用解密 ID Token：

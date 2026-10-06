@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LoungeClient, LoungeOIDC, ApiError, OAuthError, TransportError } from '../dist/index.js';
+import { NoworkClient, NoworkOIDC, ApiError, OAuthError, TransportError } from '../dist/index.js';
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
 
 test('Server API sends its key and encodes player names', async () => {
-  const client = new LoungeClient('https://account.example/', {
+  const client = new NoworkClient('https://account.example/', {
     serverKey: 'test-key',
     fetch: async (url, init) => {
       assert.equal(init.headers['X-Server-Key'], 'test-key');
@@ -21,15 +21,15 @@ test('Server API sends its key and encodes player names', async () => {
 
 test('Server API rejects missing envelopes and HTTP failures', async () => {
   for (const [body, status] of [[{}, 200], [{ code: 0 }, 200], [{ code: 0, data: { allowed: true } }, 503]]) {
-    const client = new LoungeClient('https://account.example', { serverKey: 'test-key', fetch: async () => json(body, status) });
+    const client = new NoworkClient('https://account.example', { serverKey: 'test-key', fetch: async () => json(body, status) });
     await assert.rejects(client.whitelist(), TransportError);
   }
-  const client = new LoungeClient('https://account.example', { serverKey: 'test-key', fetch: async () => json({ code: 401, message: 'invalid server key' }, 401) });
+  const client = new NoworkClient('https://account.example', { serverKey: 'test-key', fetch: async () => json({ code: 401, message: 'invalid server key' }, 401) });
   await assert.rejects(client.whitelist(), error => error instanceof ApiError && error.code === 401);
 });
 
 test('Server API timeout includes reading the response body', async () => {
-  const client = new LoungeClient('https://account.example', {
+  const client = new NoworkClient('https://account.example', {
     serverKey: 'test-key', timeoutMs: 10,
     fetch: async (_url, { signal }) => ({
       status: 200, ok: true,
@@ -40,7 +40,7 @@ test('Server API timeout includes reading the response body', async () => {
 });
 
 test('OIDC code exchange encodes client authentication and PKCE', async () => {
-  const oidc = new LoungeOIDC('https://account.example/', 'client', 'secret', 'https://app.example/callback', async (url, init) => {
+  const oidc = new NoworkOIDC('https://account.example/', 'client', 'secret', 'https://app.example/callback', async (url, init) => {
     assert.equal(url, 'https://account.example/oauth2/token');
     assert.equal(init.body.get('client_id'), 'client');
     assert.equal(init.body.get('client_secret'), 'secret');
@@ -56,20 +56,20 @@ test('OIDC code exchange encodes client authentication and PKCE', async () => {
 });
 
 test('OIDC accepts the backend empty revocation response', async () => {
-  const oidc = new LoungeOIDC('https://account.example', 'client', 'secret', '', async () => new Response('', { status: 200 }));
+  const oidc = new NoworkOIDC('https://account.example', 'client', 'secret', '', async () => new Response('', { status: 200 }));
   await oidc.revoke('access');
   await assert.rejects(oidc.exchange('code'), TransportError);
 });
 
 test('OIDC separates protocol errors from invalid gateway bodies', async () => {
-  const oauth = new LoungeOIDC('https://account.example', 'client', '', '', async () => json({ error: 'invalid_grant', error_description: 'expired' }, 400));
+  const oauth = new NoworkOIDC('https://account.example', 'client', '', '', async () => json({ error: 'invalid_grant', error_description: 'expired' }, 400));
   await assert.rejects(oauth.exchange('code'), error => error instanceof OAuthError && error.status === 400);
-  const gateway = new LoungeOIDC('https://account.example', 'client', '', '', async () => new Response('<html>unavailable</html>', { status: 502 }));
+  const gateway = new NoworkOIDC('https://account.example', 'client', '', '', async () => new Response('<html>unavailable</html>', { status: 502 }));
   await assert.rejects(gateway.exchange('code'), TransportError);
 });
 
 test('OIDC timeout aborts a pending request', async () => {
-  const oidc = new LoungeOIDC('https://account.example', 'client', '', '', async (_url, { signal }) => new Promise((_resolve, reject) => {
+  const oidc = new NoworkOIDC('https://account.example', 'client', '', '', async (_url, { signal }) => new Promise((_resolve, reject) => {
     signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
   }), 10);
   await assert.rejects(oidc.userInfo('access'), TransportError);
@@ -80,21 +80,21 @@ test('Webhook signature verification', async () => {
   const body = JSON.stringify({ id: 'e1', event: 'user.login', timestamp: 1, data: { userId: 7 } });
   const ts = Math.floor(Date.now() / 1000);
   const sig = await webhookSignature('whsec_test', ts, body);
-  const ev = await verifyWebhook('whsec_test', { 'x-lounge-timestamp': String(ts), 'X-Lounge-Signature': sig }, body);
+  const ev = await verifyWebhook('whsec_test', { 'x-nowork-timestamp': String(ts), 'X-NoWork-Signature': sig }, body);
   assert.equal(ev.event, 'user.login');
   assert.equal(ev.data.userId, 7);
-  await assert.rejects(verifyWebhook('wrong', { 'X-Lounge-Timestamp': String(ts), 'X-Lounge-Signature': sig }, body), WebhookError);
+  await assert.rejects(verifyWebhook('wrong', { 'X-NoWork-Timestamp': String(ts), 'X-NoWork-Signature': sig }, body), WebhookError);
   const old = ts - 3600;
   const oldSig = await webhookSignature('whsec_test', old, body);
-  await assert.rejects(verifyWebhook('whsec_test', new Headers({ 'X-Lounge-Timestamp': String(old), 'X-Lounge-Signature': oldSig }), body), WebhookError);
-  assert.equal((await verifyWebhook('whsec_test', { 'X-Lounge-Timestamp': String(old), 'X-Lounge-Signature': oldSig }, body, 0)).id, 'e1');
+  await assert.rejects(verifyWebhook('whsec_test', new Headers({ 'X-NoWork-Timestamp': String(old), 'X-NoWork-Signature': oldSig }), body), WebhookError);
+  assert.equal((await verifyWebhook('whsec_test', { 'X-NoWork-Timestamp': String(old), 'X-NoWork-Signature': oldSig }, body, 0)).id, 'e1');
 });
 
 test('Server API fails closed on an encrypted reply', async () => {
   const { EncryptionError, HEADER_ENCRYPTION } = await import('../dist/index.js');
   const sealed = { code: 0, message: 'ok', data: { jwe: 'aGVhZA.a2V5.aXY.Y2lwaGVy.dGFn' } };
   for (const header of ['JWE', '']) { // a proxy may drop the header: the body shape still counts
-    const client = new LoungeClient('https://account.example', {
+    const client = new NoworkClient('https://account.example', {
       serverKey: 'k',
       fetch: async () => new Response(JSON.stringify(sealed), { headers: header ? { [HEADER_ENCRYPTION]: header } : {} })
     });
@@ -105,13 +105,13 @@ test('Server API fails closed on an encrypted reply', async () => {
     assert.equal(raw.encrypted, true);
     assert.deepEqual(raw.envelope, sealed);
   }
-  const plain = new LoungeClient('https://account.example', { serverKey: 'k', fetch: async () => json({ code: 0, data: { jwe: 'x', mode: 1, count: 0, entries: [] } }) });
+  const plain = new NoworkClient('https://account.example', { serverKey: 'k', fetch: async () => json({ code: 0, data: { jwe: 'x', mode: 1, count: 0, entries: [] } }) });
   assert.equal((await plain.whitelist()).mode, 1);
 });
 
 test('Heartbeat sends tps and players only when valid', async () => {
   const bodies = [];
-  const client = new LoungeClient('https://account.example', {
+  const client = new NoworkClient('https://account.example', {
     serverKey: 'k',
     fetch: async (_url, init) => { bodies.push(JSON.parse(init.body)); return json({ code: 0, data: { status: 'ok' } }); }
   });
@@ -127,7 +127,7 @@ test('Heartbeat sends tps and players only when valid', async () => {
 
 test('GM catalogue publish sends the object form and lists skipped entries', async () => {
   const calls = [];
-  const client = new LoungeClient('https://account.example', {
+  const client = new NoworkClient('https://account.example', {
     serverKey: 'k',
     fetch: async (url, init) => {
       calls.push([init.method, url.pathname, JSON.parse(init.body)]);
