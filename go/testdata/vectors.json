@@ -53,21 +53,21 @@
       "kind": "jwe",
       "key": "rsa",
       "compact": "eyJhbGciOiJSU0EtT0FFUC0yNTYiLCJlbmMiOiJBMjU2R0NNIiwia2lkIjoidmVjLXJzYSJ9.EX7_fjlqTWtqVaJBt5f1GCkZ3x3onNj6ywmUmBjE8iWkuitK2O3BS4iVFiOjeVKrihZMOT3l6LDER2Xz38SuyqzcYyVfJuzHv0Lq48CfD-Jw9D6c_ftSzEvShZOEHTLr7dCwVrnqdI-veqWZbZXEGKqESOHr0k2W71MlsqUR5R3oIk1Co6krqVyYeGyXVibvLhcQKaeVdmVj7TAkYp9asyY2vjU5ntsjfg9SyuVnMCJSkJaedxXqE6fe1JVdiqyDOv_1CryrlGXVqnn1X2csYBnIvZE9U2dmODIwmmEtoiEaruT9Hbb3hQlI_cob9qq4EOpkmOSqc2olDFNnWwygmg.CANcl1TfeC1NM9YH.13yDTRSQEvgjZ2RW26Jg0e19Dh4ZmSFfQ200uyx_N2OdTPPVvPFgfpPgXbNeazqOXXUV8DZi_vI0SUrlt0usRLirm-I.W-KzfXCSVCVJCZLjDKcJtw",
-      "plaintext": "{\"message\":\"你好, NoWork ✓\",\"list\":[1,2,3],\"nested\":{\"ok\":true}}"
+      "plaintext": "{\"message\":\"你好, Lounge ✓\",\"list\":[1,2,3],\"nested\":{\"ok\":true}}"
     },
     {
       "name": "jwe-ec",
       "kind": "jwe",
       "key": "ec",
       "compact": "eyJhbGciOiJFQ0RILUVTK0EyNTZLVyIsImVuYyI6IkEyNTZHQ00iLCJlcGsiOnsia3R5IjoiRUMiLCJjcnYiOiJQLTI1NiIsIngiOiJ3UTFjQnA2N0xjYXZhdnR5Yl9jSkdZNXMtVkR3TDlLb3lMVDR5M25MWWlVIiwieSI6IjUxdHlXUXhWS0dzMG51Q1dBWVhBZWUyNGNEWDBkRTItc1d2a3Y2N2ZEODAifSwia2lkIjoidmVjLWVjIn0.RtAbgiNG3JU-4MbWuk7ui_IbZLgt_KxC04yfIZthFNY3xmbA2k_9qw.owN2seYmMtqTHbHu.1ltntdJwGq_z_alj4aOIt-eI4Q9C6HI7H0nFFQIDiW7ijoZF1ITxMJ_HrQ-jFIdMpMbNGckyHLxnCn8r9DPDLo3bzpk.rlc3UjEz0Zorpkr2KNDu9A",
-      "plaintext": "{\"message\":\"你好, NoWork ✓\",\"list\":[1,2,3],\"nested\":{\"ok\":true}}"
+      "plaintext": "{\"message\":\"你好, Lounge ✓\",\"list\":[1,2,3],\"nested\":{\"ok\":true}}"
     },
     {
       "name": "jwe-x25519",
       "kind": "jwe",
       "key": "x25519",
       "compact": "eyJhbGciOiJFQ0RILUVTK0EyNTZLVyIsImVuYyI6IkEyNTZHQ00iLCJlcGsiOnsiY3J2IjoiWDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6ImJKcjBvczhXR0E3LUlocXEtLXhIM2wtbWh3c2xoUXRZVVZkMUJoZ1VIbHcifSwia2lkIjoidmVjLXgyNTUxOSJ9.F6TakRB7oJ1U89CuCLpYpPCWUAVH-qoe5SvjMx60-t6oQeifoawiyA.hl_XC8_M7D6c0RV-.ldOnmKCoJEUmh55foRnT04fpet24Xabsre8dbbnQMoDBHyZy0oxOSn5-cNrj0-NChOokwleJq6YnFEcwyn1sIk6cyJo.-pNcxgb601BwGLY_EMzUIA",
-      "plaintext": "{\"message\":\"你好, NoWork ✓\",\"list\":[1,2,3],\"nested\":{\"ok\":true}}"
+      "plaintext": "{\"message\":\"你好, Lounge ✓\",\"list\":[1,2,3],\"nested\":{\"ok\":true}}"
     },
     {
       "name": "nested-id-token",
@@ -103,9 +103,9 @@
       "ctx": "webhook:7",
       "body": "{\"event\":\"user.login\",\"id\":\"evt-vector\",\"jwe\":\"eyJhbGciOiJFQ0RILUVTK0EyNTZLVyIsImN0eCI6IndlYmhvb2s6NyIsImVuYyI6IkEyNTZHQ00iLCJlcGsiOnsiY3J2IjoiWDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6IlpZS0kxb0lLTFFKbFg3bm5TOEtoRUJ2eEk5SHFWS05XVm5aUWNmM0tFMzAifSwiaWF0IjoxNzU3ODAwMDAwLCJraWQiOiJ2ZWMteDI1NTE5In0.5pG18ODbn4DX7cagt4SBHN29KGwo-iL3t3wozdHTsi5AhzU4sOaA8Q.hnACQyFYTUQb4TnO.Dr4C8uul4A7UFNA8JRuyfmra3eiUIXt5j-C3FUBWc9kQ9lYHIlLIErltvJmKNR2BbfmP9J2w22Qc8c6wZ68xozPn5dGOjB3q-Mn2HGllrlaPQym-qh7SCpyuje3VE2LsEPdhA70N7EfOf8McyNGntIBCnPEm3lXeY1swHLqh7btDRql1LWT0mVDieBZQI_t09KR9hTU.fekyp7Q5qk6BNR_Zv6-fPg\",\"timestamp\":1757800000}",
       "headers": {
-        "X-NoWork-Encryption": "JWE",
-        "X-NoWork-Signature": "sha256=a5cb44f8b10af352a9d7582b148d021062b2dc98b923b919b0554e1a5fdc4bd8",
-        "X-NoWork-Timestamp": "1757800001"
+        "X-Nowork-Encryption": "JWE",
+        "X-Nowork-Signature": "sha256=a5cb44f8b10af352a9d7582b148d021062b2dc98b923b919b0554e1a5fdc4bd8",
+        "X-Nowork-Timestamp": "1757800001"
       },
       "secret": "whsec_vector_secret"
     },
