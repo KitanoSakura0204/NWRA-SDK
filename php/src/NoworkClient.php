@@ -91,6 +91,39 @@ final class NoworkClient
 
     // ---- Feature modules / GM channel (PROTOCOL 2.4) ----
 
+    /** Backend-only character SSO exchange; check callback state against the GM session first.
+     * @return array{serverId:int,serverCode:string,subject:string,character:array,authenticatedAt:int,scope:string}
+     */
+    public function exchangeGmCode(string $code, string $codeVerifier, string $redirectUri): array
+    {
+        return $this->call('POST', '/server/v1/gm/sso/exchange', [], [
+            'code' => $code, 'codeVerifier' => $codeVerifier, 'redirectUri' => $redirectUri,
+        ]);
+    }
+
+    /** Input: exactly one of accessToken or uid; optional playerName/playerUuid/channels. */
+    public function issueChatTicket(array $input): array
+    {
+        return $this->call('POST', '/server/v1/chat/tickets', [], $input);
+    }
+
+    public function pollChatRelay(): array
+    {
+        return $this->call('GET', '/server/v1/chat/relay')['items'] ?? [];
+    }
+
+    /** Failed entries are permanent {id,error} failures. Leave transient failures pending. */
+    public function ackChatRelay(array $done, array $failed = []): int
+    {
+        return Json::int($this->call('POST', '/server/v1/chat/relay/ack', [], ['done' => array_values($done), 'failed' => array_values($failed)])['updated'] ?? 0);
+    }
+
+    /** Input: player/text plus optional playerUuid/uid/kind (chat or system). */
+    public function postChatMessage(array $input): array
+    {
+        return $this->call('POST', '/server/v1/chat/messages', [], $input);
+    }
+
     /**
      * Modules enabled for this server, keyed by module name, with their per-server config.
      *
