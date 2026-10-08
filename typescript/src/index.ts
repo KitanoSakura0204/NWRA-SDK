@@ -94,6 +94,27 @@ export interface CheckResult {
   player?: WhitelistEntry | null;
 }
 
+/** Character identity only: GM authorization remains the relying party's responsibility. */
+export interface GMSession {
+  serverId: number;
+  serverCode: string;
+  subject: string;
+  character: { id: number; roleName: string; roleUuid: string };
+  authenticatedAt: number;
+  scope: 'character:login';
+}
+
+export interface ChatTicketInput {
+  accessToken?: string; uid?: number; playerName?: string; playerUuid?: string; channels?: number[];
+}
+export interface ChatTicket {
+  ticket: string; expiresAt: string; channels: number[]; embedPath: string; wsPath: string;
+}
+export interface ChatRelayItem {
+  id: number; kind: string; channelId: number; payload: Record<string, unknown>; attempts: number;
+}
+export interface ChatPost { player: string; text: string; playerUuid?: string; uid?: number; kind?: 'chat' | 'system' }
+
 export interface NoworkClientOptions {
   serverKey: string;
   timeoutMs?: number;
@@ -196,6 +217,28 @@ export class NoworkClient {
     };
   }
 
+  /** Backend-only exchange; verify callback state against the GM browser session first. */
+  exchangeGMCode(code: string, codeVerifier: string, redirectUri: string): Promise<GMSession> {
+    return this.call('POST', '/server/v1/gm/sso/exchange', undefined, { code, codeVerifier, redirectUri });
+  }
+
+  /** Supply exactly one of accessToken or uid; UID mode requires server configuration. */
+  issueChatTicket(input: ChatTicketInput): Promise<ChatTicket> {
+    return this.call('POST', '/server/v1/chat/tickets', undefined, input);
+  }
+  async pollChatRelay(): Promise<ChatRelayItem[]> {
+    const out = await this.call<{ items: ChatRelayItem[] }>('GET', '/server/v1/chat/relay');
+    return out.items ?? [];
+  }
+  /** failed means permanent failure; leave transient failures pending for redelivery. */
+  async ackChatRelay(done: number[], failed: { id: number; error: string }[] = []): Promise<number> {
+    const out = await this.call<{ updated: number }>('POST', '/server/v1/chat/relay/ack', undefined, { done, failed });
+    return out.updated;
+  }
+  postChatMessage(input: ChatPost): Promise<Record<string, unknown>> {
+    return this.call('POST', '/server/v1/chat/messages', undefined, input);
+  }
+
   /** Full whitelist for this server. */
   whitelist(): Promise<Whitelist> {
     return this.call('GET', '/server/v1/whitelist');
@@ -235,11 +278,13 @@ export class NoworkClient {
 
   /**
    * Replace the actions and the named option lists (select / suggestion sources such as worlds or
-   * kits) in one call. Omitting options keeps the stored lists. Entries the server cannot accept
+   * kits) in one call. Null actions or omitted options keep the stored values; empty collections clear them. Entries the server cannot accept
    * are skipped and listed, never a failure for the whole call.
    */
-  publishGMCatalog(actions: GMAction[], options?: Record<string, GMOption[]>): Promise<GMPublishResult> {
-    return this.publish('/server/v1/gm/actions', options ? { actions, options } : { actions });
+  publishGMCatalog(actions: GMAction[] | null, options?: Record<string, GMOption[]>): Promise<GMPublishResult> {
+    return this.publish('/server/v1/gm/actions', {
+      ...(actions === null ? {} : { actions }), ...(options === undefined ? {} : { options }),
+    });
   }
 
   /** Replace only the named option lists (the published actions stay), e.g. when a world loads. */
@@ -655,3 +700,5 @@ export async function verifyWebhook<T = Record<string, unknown>>(
 export * from './sdklogin.js';
 export * from './delivery.js';
 export * from './serverusers.js';
+export * from './account.js';
+export * from './gamedata.js';

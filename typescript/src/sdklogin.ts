@@ -43,6 +43,8 @@ export interface LoginUrlParams {
   nonce?: string;
   /** zh-CN / zh-TW / en / ja */
   uiLocales?: string;
+  device?: 'pc' | 'mobile';
+  prompt?: 'consent';
 }
 
 /** The URL a game client opens. `frontend` is the user-centre web address (the SPA origin). */
@@ -55,7 +57,9 @@ export function buildLoginUrl(frontend: string, p: LoginUrlParams): string {
     ['state', p.state],
     ['scope', p.scope],
     ['nonce', p.nonce],
-    ['ui_locales', p.uiLocales]
+    ['ui_locales', p.uiLocales],
+    ['device', p.device],
+    ['prompt', p.prompt]
   ];
   q.forEach(([k, v]) => v && u.searchParams.set(k, v));
   u.searchParams.set('code_challenge', p.codeChallenge);
@@ -79,7 +83,7 @@ export interface SdkLoginResult {
 
 function check(get: (k: string) => string | null | undefined, wantState: string, wantIssuer?: string): SdkLoginResult {
   const state = get('state') ?? '';
-  if (state !== wantState) throw new SdkLoginError('state_mismatch');
+  if (!wantState || state !== wantState) throw new SdkLoginError('state_mismatch');
   const iss = get('iss') ?? undefined;
   if (wantIssuer && iss && iss !== wantIssuer) throw new SdkLoginError('issuer_mismatch');
   const error = get('error');
@@ -92,6 +96,9 @@ function check(get: (k: string) => string | null | undefined, wantState: string,
 /** Redirect mode: reads the callback URL (mygame://auth?code=…&state=…&iss=…). */
 export function parseLoginCallback(callbackUrl: string, wantState: string, wantIssuer?: string): SdkLoginResult {
   const q = new URL(callbackUrl).searchParams;
+  if (['code', 'state', 'iss', 'error', 'error_description'].some((key) => q.getAll(key).length > 1)) {
+    throw new SdkLoginError('duplicate_parameter');
+  }
   return check((k) => q.get(k), wantState, wantIssuer);
 }
 
