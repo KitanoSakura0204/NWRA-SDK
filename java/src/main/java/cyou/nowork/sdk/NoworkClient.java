@@ -44,6 +44,34 @@ public class NoworkClient {
         this.http = HttpClient.newBuilder().connectTimeout(timeout).build();
     }
 
+    /** Backend-only character SSO exchange. Validate callback state in the GM browser session first.
+     * Returns serverId/serverCode/subject/character/authenticatedAt/scope. This grants no admin role. */
+    public Map<String, Object> exchangeGMCode(String code, String codeVerifier, String redirectUri) throws NoWorkException {
+        return call("POST", "/server/v1/gm/sso/exchange", encode(Map.of(
+            "code", code, "codeVerifier", codeVerifier, "redirectUri", redirectUri)));
+    }
+
+    /** One-use chat ticket: input accessToken or uid (exactly one), playerName/playerUuid/channels optional. */
+    public Map<String, Object> issueChatTicket(Map<String, Object> input) throws NoWorkException {
+        return call("POST", "/server/v1/chat/tickets", encode(input));
+    }
+
+    public List<?> pollChatRelay() throws NoWorkException {
+        Object items = call("GET", "/server/v1/chat/relay", null).get("items");
+        return items instanceof List<?> ? (List<?>) items : List.of();
+    }
+
+    /** failed entries are permanent {id,error} failures; leave transient failures unacknowledged. */
+    public long ackChatRelay(List<Long> done, List<Map<String, Object>> failed) throws NoWorkException {
+        Map<String, Object> result = call("POST", "/server/v1/chat/relay/ack", encode(Map.of("done", done, "failed", failed)));
+        return Json.num(result.get("updated")).longValue();
+    }
+
+    /** input: player/text plus optional playerUuid/uid/kind (chat or system). */
+    public Map<String, Object> postChatMessage(Map<String, Object> input) throws NoWorkException {
+        return call("POST", "/server/v1/chat/messages", encode(input));
+    }
+
     /** Full whitelist for this server. */
     public Whitelist whitelist() throws NoWorkException {
         Map<String, Object> data = call("GET", "/server/v1/whitelist", null);
