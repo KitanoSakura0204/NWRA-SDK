@@ -199,6 +199,14 @@ class NoworkClient:
 
     # ---- Feature modules / GM channel (PROTOCOL 2.4) ----
 
+    def exchange_gm_code(self, code: str, code_verifier: str, redirect_uri: str) -> dict:
+        """Backend-only character SSO exchange, after checking callback state in the GM
+        browser session. Returns serverId/serverCode/subject/character/authenticatedAt/scope.
+        Expired, consumed or invalid codes raise ApiError 403; never retry a consumed code."""
+        return self._call("POST", "/server/v1/gm/sso/exchange", body={
+            "code": code, "codeVerifier": code_verifier, "redirectUri": redirect_uri,
+        })
+
     def modules(self) -> dict:
         """Modules enabled for this server, keyed by name, with their per-server config."""
         return dict(self._call("GET", "/server/v1/modules").get("modules") or {})
@@ -207,11 +215,13 @@ class NoworkClient:
         """Replace the GM action catalogue (GMAction or dicts: key/title/description/params); returns the count stored."""
         return int(self._call("PUT", "/server/v1/gm/actions", body=[_plain(a) for a in actions]).get("count", 0))
 
-    def publish_gm_catalog(self, actions: list, options: Optional[Mapping[str, list]] = None) -> GMPublishResult:
+    def publish_gm_catalog(self, actions: Optional[list], options: Optional[Mapping[str, list]] = None) -> GMPublishResult:
         """Replace the actions and the named option lists (select / suggestion sources such as worlds or
         kits) in one call; options=None keeps the stored lists. Entries the server cannot accept are
         skipped and listed in the result, never a failure for the whole call."""
-        body: Dict[str, Any] = {"actions": [_plain(a) for a in actions]}
+        body: Dict[str, Any] = {}
+        if actions is not None:
+            body["actions"] = [_plain(a) for a in actions]
         if options is not None:
             body["options"] = _option_lists(options)
         return GMPublishResult.from_dict(self._call("PUT", "/server/v1/gm/actions", body=body))
@@ -229,6 +239,25 @@ class NoworkClient:
         self._call("POST", f"/server/v1/gm/commands/{int(command_id)}/result", body={"ok": bool(ok), "result": result})
 
     # ---- Player data and per-server bans (SERVER_USERS.md) ----
+
+    def issue_chat_ticket(self, *, access_token: str = "", uid: int = 0, player_name: str = "",
+                          player_uuid: str = "", channels: Optional[List[int]] = None) -> dict:
+        """One-use chat login. Supply exactly one of access_token or uid (UID mode requires server permission)."""
+        body = {"accessToken": access_token, "uid": uid, "playerName": player_name,
+                "playerUuid": player_uuid, "channels": channels or []}
+        return self._call("POST", "/server/v1/chat/tickets", body=body)
+
+    def poll_chat_relay(self) -> list:
+        return self._call("GET", "/server/v1/chat/relay").get("items") or []
+
+    def ack_chat_relay(self, done: List[int], failed: Optional[List[dict]] = None) -> int:
+        """Failed entries are permanent {id,error} failures. Leave transient failures pending."""
+        return int(self._call("POST", "/server/v1/chat/relay/ack", body={"done": done, "failed": failed or []}).get("updated", 0))
+
+    def post_chat_message(self, player: str, text: str, *, player_uuid: str = "", uid: int = 0, kind: str = "chat") -> dict:
+        return self._call("POST", "/server/v1/chat/messages", body={
+            "player": player, "text": text, "playerUuid": player_uuid, "uid": uid, "kind": kind,
+        })
 
     def user_schema(self) -> UserSchema:
         """The data schema the server owner defined (needs the module on for this server)."""
