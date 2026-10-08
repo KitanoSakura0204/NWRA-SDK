@@ -50,6 +50,8 @@ type LoginURLParams struct {
 	Scope         string // optional; defaults to the server's configured scopes
 	Nonce         string // optional; copied into the ID token
 	UILocales     string // optional: zh-CN / zh-TW / en / ja
+	Device        string // optional: pc / mobile
+	Prompt        string // optional: consent
 }
 
 // BuildLoginURL returns the URL a game client opens to sign a player in. frontend is the
@@ -62,7 +64,7 @@ func BuildLoginURL(frontend string, p LoginURLParams) (string, error) {
 		return "", errors.New("nowork: CodeChallenge is required (PKCE S256)")
 	}
 	q := url.Values{}
-	for k, v := range map[string]string{"redirect_uri": p.RedirectURI, "state": p.State, "scope": p.Scope, "nonce": p.Nonce, "ui_locales": p.UILocales} {
+	for k, v := range map[string]string{"redirect_uri": p.RedirectURI, "state": p.State, "scope": p.Scope, "nonce": p.Nonce, "ui_locales": p.UILocales, "device": p.Device, "prompt": p.Prompt} {
 		if v != "" {
 			q.Set(k, v)
 		}
@@ -81,7 +83,12 @@ func ParseLoginCallback(callbackURL, wantState, wantIssuer string) (string, erro
 		return "", err
 	}
 	q := u.Query()
-	if q.Get("state") != wantState {
+	for _, key := range []string{"code", "state", "iss", "error", "error_description"} {
+		if len(q[key]) > 1 {
+			return "", errors.New("nowork: duplicate callback parameter")
+		}
+	}
+	if wantState == "" || q.Get("state") != wantState {
 		return "", errors.New("nowork: state mismatch")
 	}
 	if wantIssuer != "" && q.Get("iss") != "" && q.Get("iss") != wantIssuer {

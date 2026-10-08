@@ -59,6 +59,8 @@ type Client struct {
 	base      string
 	serverKey string
 	http      *http.Client
+	headers   http.Header // internal transport credentials for account clients
+	account   bool        // restrict account/chat credentials to their own API routes
 }
 
 // Option configures a Client.
@@ -164,7 +166,11 @@ func (c *Client) Raw(ctx context.Context, method, path string, query url.Values,
 // do decodes data into out. An encrypted reply is never decoded as plain data: it fails with
 // an *EncryptionError (fail closed), so an unreadable whitelist never reads as "mode 0".
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, body any, out any) error {
-	res, err := c.send(ctx, method, path, query, body)
+	return c.doWithResponseLimit(ctx, method, path, query, body, out, c.responseLimit(method, path))
+}
+
+func (c *Client) doWithResponseLimit(ctx context.Context, method, path string, query url.Values, body any, out any, responseLimit int64) error {
+	res, err := c.sendWithResponseLimit(ctx, method, path, query, body, responseLimit)
 	if err != nil || out == nil {
 		return err
 	}
@@ -181,8 +187,53 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 }
 
 func (c *Client) send(ctx context.Context, method, path string, query url.Values, body any) (*Response, error) {
-	if c.serverKey == "" {
-		return nil, ErrNotConfigured
+	return c.sendWithResponseLimit(ctx, method, path, query, body, c.responseLimit(method, path))
+}
+
+const (
+	defaultResponseLimit       int64 = 4 << 20
+	archiveExportResponseLimit int64 = 20 << 20 // 16 MiB of snapshots plus bounded metadata
+)
+
+// ErrResponseTooLarge identifies a response that exceeded the request's byte cap.
+// It is wrapped by TransportError and never includes any response content.
+var ErrResponseTooLarge = errors.New("nowork: response exceeds size limit")
+
+func (c *Client) authorizeRequest(method, path string) error {
+	if !c.account {
+		if strings.TrimSpace(c.serverKey) == "" {
+			return ErrNotConfigured
+		}
+		return nil
+	}
+	// Only NewAccount/NewChat transports can use these credentials. An Authorization
+	// header must never let the public Server API client bypass its server-key check.
+	authorization := c.headers.Get("Authorization")
+	hasToken := func(scheme string) bool {
+		return strings.HasPrefix(authorization, scheme) && strings.TrimSpace(strings.TrimPrefix(authorization, scheme)) != ""
+	}
+	switch {
+	case strings.HasPrefix(path, "/api/account/"):
+		if hasToken("Bearer ") {
+			return nil
+		}
+	case strings.HasPrefix(path, "/api/chat/"):
+		// Ticket redemption establishes a chat session and is the only anonymous call.
+		if method == http.MethodPost && path == "/api/chat/session" && authorization == "" {
+			return nil
+		}
+		if hasToken("Bearer ") || hasToken("Chat ") {
+			return nil
+		}
+	default:
+		return ErrNotConfigured
+	}
+	return errors.New("nowork: account or chat token not configured")
+}
+
+func (c *Client) sendWithResponseLimit(ctx context.Context, method, path string, query url.Values, body any, responseLimit int64) (*Response, error) {
+	if err := c.authorizeRequest(method, path); err != nil {
+		return nil, err
 	}
 	u := c.base + path
 	if len(query) > 0 {
@@ -207,14 +258,20 @@ func (c *Client) send(ctx context.Context, method, path string, query url.Values
 	if c.serverKey != "" {
 		req.Header.Set("X-Server-Key", c.serverKey)
 	}
+	for name, values := range c.headers {
+		req.Header[name] = append([]string(nil), values...)
+	}
 	res, err := c.http.Do(req)
 	if err != nil {
 		return nil, &TransportError{err}
 	}
 	defer res.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(res.Body, 4<<20))
+	raw, err := io.ReadAll(io.LimitReader(res.Body, responseLimit+1))
 	if err != nil {
 		return nil, &TransportError{err}
+	}
+	if int64(len(raw)) > responseLimit {
+		return nil, &TransportError{fmt.Errorf("%w (%d bytes)", ErrResponseTooLarge, responseLimit)}
 	}
 	var env envelope
 	if err := json.Unmarshal(raw, &env); err != nil {
@@ -365,10 +422,13 @@ func (c *Client) PublishGMActions(ctx context.Context, actions []GMAction) error
 }
 
 // PublishGMCatalog replaces the actions and the named option lists (select / suggestion
-// sources, e.g. worlds or kits) in one call and reports the skipped entries. A nil options
-// map keeps the stored lists.
+// sources, e.g. worlds or kits) in one call and reports the skipped entries. Nil actions
+// or options keep the stored value; a non-nil empty collection clears it.
 func (c *Client) PublishGMCatalog(ctx context.Context, actions []GMAction, options map[string][]GMOption) (*GMPublishResult, error) {
-	body := map[string]any{"actions": actions}
+	body := map[string]any{}
+	if actions != nil {
+		body["actions"] = actions
+	}
 	if options != nil {
 		body["options"] = options
 	}
