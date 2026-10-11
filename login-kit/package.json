@@ -1,0 +1,9 @@
+{
+  "name": "@nowork/login-kit",
+  "version": "1.2.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": { "types": "./index.d.ts", "default": "./index.js" }, "./button.css": "./button.css" },
+  "scripts": { "test": "node --test tests/*.test.mjs" },
+  "description": "Dependency-free browser OIDC authorization-code + PKCE login helpers"
+}
