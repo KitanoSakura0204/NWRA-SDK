@@ -70,6 +70,8 @@ export interface PluginEvent {
   type: "message";
   id: number;
   botId: number;
+  /** Owning site supplied by the server; older servers may omit it. */
+  siteId?: number;
   kind?: string;
   target: Target;
   message: Message;
