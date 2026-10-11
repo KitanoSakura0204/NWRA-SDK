@@ -1,6 +1,10 @@
 /** NoWork Account SDK — Server API (whitelist / heartbeat) and OIDC helpers. Requires global fetch (Node 18+). */
 
+/** SDK release this package implements (see CHANGELOG.md). */
+export const SDK_VERSION = '1.2.0';
+
 import type { BanOptions, BanTarget, KickEntry, ServerBan, UserData, UserSchema, WriteOptions } from './serverusers.js';
+import { decryptJwe, type PrivateJwk } from './delivery.js';
 
 export class TransportError extends Error {
   constructor(
@@ -37,14 +41,15 @@ export class OAuthError extends Error {
 export const HEADER_ENCRYPTION = 'X-NoWork-Encryption';
 
 /**
- * A Server API reply was encrypted and could not be used (no decryption key configured). The data
- * was never read: treat it as a configuration error, never fail open on it (an unreadable
- * whitelist is not a disabled whitelist).
+ * An encrypted Server API reply could not be authenticated/decoded, or a whitelist reply was
+ * plaintext while decryption keys were configured. Never fail open on this error: an unreadable
+ * whitelist is not a disabled whitelist.
  */
 export class EncryptionError extends Error {
   constructor(
     public route: string,
-    public reason: string
+    public reason: string,
+    public cause?: unknown
   ) {
     super(`nowork: encrypted response on ${route}: ${reason}`);
     this.name = 'EncryptionError';
@@ -59,14 +64,72 @@ export interface RawResponse {
   data: unknown;
   /** The whole parsed body {code, message, data}. */
   envelope: Record<string, unknown>;
-  /** X-NoWork-Encryption is set or data is exactly {"jwe": "<string>"}. */
+  /** X-NoWork-Encryption is present or data has only a jwe member (even if malformed). */
   encrypted: boolean;
 }
 
 function isJweData(data: unknown): boolean {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
   const keys = Object.keys(data);
-  return keys.length === 1 && typeof (data as Record<string, unknown>).jwe === 'string';
+  return keys.length === 1 && keys[0] === 'jwe';
+}
+
+const SERVER_RESPONSE_LIMIT = 8 * 1024 * 1024;
+const SEALED_ROUTES = new Set(['whitelist', 'whitelist/check']);
+
+function serverRoute(path: string): string {
+  return path.split(/[?#]/, 1)[0].replace(/^\/server\/v1\//, '');
+}
+
+function isServerCode(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && !/[:\s\u0000-\u001f\u007f]/.test(value);
+}
+
+/** Bound wire bytes before JSON/JWE decoding, including responses without Content-Length. */
+async function readServerEnvelope(response: Response, signal: AbortSignal): Promise<unknown> {
+  const tooLarge = () => new TransportError(`response exceeds ${SERVER_RESPONSE_LIMIT}-byte limit`);
+  const declared = response.headers?.get?.('Content-Length');
+  if (declared && /^\d+$/.test(declared) && Number(declared) > SERVER_RESPONSE_LIMIT) {
+    void response.body?.cancel().catch(() => {});
+    throw tooLarge();
+  }
+  if (signal.aborted) {
+    void response.body?.cancel(signal.reason).catch(() => {});
+    throw signal.reason;
+  }
+  if (!response.body) {
+    // Retain compatibility with custom fetch adapters that expose json() without a stream.
+    const value: unknown = await response.json();
+    const text = JSON.stringify(value);
+    if (text && (text.length > SERVER_RESPONSE_LIMIT || new TextEncoder().encode(text).length > SERVER_RESPONSE_LIMIT)) {
+      throw tooLarge();
+    }
+    return value;
+  }
+  const reader = response.body.getReader();
+  const cancel = () => { void reader.cancel(signal.reason).catch(() => {}); };
+  signal.addEventListener('abort', cancel, { once: true });
+  const decoder = new TextDecoder('utf-8', { fatal: true });
+  const chunks: string[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (signal.aborted) throw signal.reason;
+      if (done) break;
+      size += value.byteLength;
+      if (size > SERVER_RESPONSE_LIMIT) throw tooLarge();
+      chunks.push(decoder.decode(value, { stream: true }));
+    }
+    chunks.push(decoder.decode());
+    return JSON.parse(chunks.join(''));
+  } catch (error) {
+    void reader.cancel(error).catch(() => {});
+    throw error;
+  } finally {
+    signal.removeEventListener('abort', cancel);
+    reader.releaseLock();
+  }
 }
 
 export interface WhitelistEntry {
@@ -119,6 +182,10 @@ export interface NoworkClientOptions {
   serverKey: string;
   timeoutMs?: number;
   fetch?: typeof fetch;
+  /** Private JWK(s); nonempty keys require encrypted whitelist replies. Keep both keys during rotation. */
+  decryptionKeys?: PrivateJwk | readonly PrivateJwk[];
+  /** Expected server code in the authenticated ctx. Recommended when keys are shared by servers. */
+  serverCode?: string;
 }
 
 interface Envelope<T> {
@@ -133,23 +200,39 @@ export class NoworkClient {
   private readonly key: string;
   private readonly timeout: number;
   private readonly f: typeof fetch;
+  private readonly decryptionKeys: PrivateJwk[];
+  private readonly serverCode?: string;
 
   constructor(base: string, opts: NoworkClientOptions) {
     this.base = base.replace(/\/+$/, '');
     this.key = opts.serverKey;
     this.timeout = opts.timeoutMs ?? 10_000;
     this.f = opts.fetch ?? fetch;
+    if (!Number.isSafeInteger(this.timeout) || this.timeout <= 0 || this.timeout > 2_147_483_647) {
+      throw new RangeError('timeoutMs must be a positive 32-bit integer');
+    }
+    if (opts.serverCode !== undefined && !isServerCode(opts.serverCode)) throw new TypeError('invalid serverCode');
+    this.serverCode = opts.serverCode;
+    const keys: readonly PrivateJwk[] = opts.decryptionKeys === undefined ? []
+      : Array.isArray(opts.decryptionKeys) ? opts.decryptionKeys : [opts.decryptionKeys as PrivateJwk];
+    this.decryptionKeys = keys.map(key => {
+      if (!key || typeof key !== 'object' || Array.isArray(key) || !['RSA', 'EC', 'OKP'].includes(key.kty)
+        || typeof key.d !== 'string' || !key.d) throw new TypeError('decryptionKeys must contain private JWK objects');
+      // Later mutation of the caller's key list must not disable the downgrade guard.
+      return Object.freeze({ ...key });
+    });
   }
 
   /**
    * Call a Server API route (e.g. '/server/v1/whitelist') and return the reply without decoding
-   * data. Transport failures and business errors (code != 0) still throw.
+   * data. Transport failures and business errors (code != 0) still throw. This low-level accessor
+   * skips automatic decryption and the plaintext guard; use openServerData with an expected ctx.
    */
   raw(method: string, path: string, query?: Record<string, string | undefined>, body?: unknown): Promise<RawResponse> {
     return this.send(method, path, query, body);
   }
 
-  /** Decodes data; an encrypted reply throws EncryptionError instead (fail closed). */
+  /** Decodes data, opening encrypted replies with the configured keys or failing closed. */
   private async call<T>(
     method: string,
     path: string,
@@ -157,11 +240,49 @@ export class NoworkClient {
     body?: unknown
   ): Promise<T> {
     const res = await this.send(method, path, query, body);
-    if (res.encrypted) throw new EncryptionError(path.replace(/^\/server\/v1\//, ''), 'no decryption key configured');
-    if (res.data === undefined || res.data === null) {
+    const route = serverRoute(path);
+    let data = res.data;
+    if (res.encrypted) {
+      if (!this.decryptionKeys.length) throw new EncryptionError(route, 'no decryption key configured');
+      data = await this.open(data, route);
+    } else if (this.decryptionKeys.length && SEALED_ROUTES.has(route)) {
+      throw new EncryptionError(route, 'plain reply while decryption keys are configured');
+    }
+    if (data === undefined || data === null) {
       throw new TransportError(`invalid response (${res.status}): missing data`);
     }
-    return res.data as T;
+    return data as T;
+  }
+
+  private async open(data: unknown, route: string): Promise<unknown> {
+    const jwe = isJweData(data)
+      ? (data as Record<string, unknown>).jwe : undefined;
+    if (typeof jwe !== 'string' || !jwe) throw new EncryptionError(route, 'encrypted reply without a JWE');
+    try {
+      const opened = await decryptJwe(jwe, this.decryptionKeys);
+      const ctx = typeof opened.header.ctx === 'string' ? opened.header.ctx.split(':') : [];
+      if (ctx.length !== 3 || ctx[0] !== 'server' || !isServerCode(ctx[1]) || ctx[2] !== route
+        || (this.serverCode !== undefined && ctx[1] !== this.serverCode)) {
+        throw new EncryptionError(route, 'envelope ctx mismatch');
+      }
+      const plain: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(opened.bytes));
+      if (!plain || typeof plain !== 'object' || Array.isArray(plain) !== (route === 'gm/commands')) {
+        throw new EncryptionError(route, 'decrypted data has an invalid shape');
+      }
+      const fields = plain as Record<string, unknown>;
+      if (route === 'whitelist' && (!Object.prototype.hasOwnProperty.call(fields, 'mode')
+        || (fields.mode !== 0 && fields.mode !== 1 && fields.mode !== 2))) {
+        throw new EncryptionError(route, 'decrypted whitelist mode is missing or invalid');
+      }
+      if (route === 'whitelist/check' && (!Object.prototype.hasOwnProperty.call(fields, 'allowed')
+        || typeof fields.allowed !== 'boolean')) {
+        throw new EncryptionError(route, 'decrypted whitelist allowed flag is missing or invalid');
+      }
+      return plain;
+    } catch (error) {
+      if (error instanceof EncryptionError) throw error;
+      throw new EncryptionError(route, 'the JWE did not open as valid JSON data', error);
+    }
   }
 
   private async send(
@@ -180,6 +301,8 @@ export class NoworkClient {
     try {
       res = await this.f(url, {
         method,
+        redirect: 'error',
+        credentials: 'omit',
         headers: {
           Accept: 'application/json',
           'X-Server-Key': this.key,
@@ -195,25 +318,28 @@ export class NoworkClient {
     let env: Envelope<unknown>;
     try {
       // The timeout covers reading the body as well, so the timer is only cleared afterwards.
-      env = (await res.json()) as Envelope<unknown>;
+      env = (await readServerEnvelope(res, ctrl.signal)) as Envelope<unknown>;
+      if (ctrl.signal.aborted) throw new TransportError('request timed out', ctrl.signal.reason);
     } catch (e) {
-      throw new TransportError(`invalid json (${res.status})`, e);
+      if (e instanceof TransportError) throw e;
+      throw new TransportError(ctrl.signal.aborted ? 'request timed out' : `invalid json (${res.status})`, e);
     } finally {
       clearTimeout(timer);
     }
-    if (!env || typeof env !== 'object' || typeof env.code !== 'number') {
+    if (!env || typeof env !== 'object' || Array.isArray(env) || !Number.isSafeInteger(env.code)) {
       throw new TransportError(`invalid response (${res.status}): missing code`);
     }
-    if (env.code !== 0) throw new ApiError(env.code, env.message ?? '');
+    const message = typeof env.message === 'string' ? env.message : '';
+    if (env.code !== 0) throw new ApiError(env.code, message);
     if (res.status >= 400) throw new TransportError(`http ${res.status}`);
     const headers: Headers | undefined = res.headers;
     return {
       status: res.status,
       headers,
-      message: env.message ?? '',
+      message,
       data: env.data,
       envelope: env as unknown as Record<string, unknown>,
-      encrypted: !!headers?.get?.(HEADER_ENCRYPTION) || isJweData(env.data)
+      encrypted: headers?.get?.(HEADER_ENCRYPTION) != null || isJweData(env.data)
     };
   }
 
