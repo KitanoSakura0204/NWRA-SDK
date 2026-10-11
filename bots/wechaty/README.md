@@ -30,7 +30,7 @@ await bot.start();
 
 - `baseUrl`（必填）
 - `botToken`（必填）
-- `platform`（可选，默认 `"wechaty"`）：发给站点的 `platform` 字段。
+- `platform`（可选，默认 `"wechat"`）：发给站点的 `platform` 字段，与后端 framework 平台名一致。
 - `prefixes`（可选，默认 `["/"]`）：本插件自带指令识别的前缀列表。
 - `allowedChats`（可选）：允许使用 `/bind` 的会话 id（群聊 room id 或联系人 contact id）白名单。
 - `lang`（可选）：发给站点的 `Accept-Language`。
@@ -49,11 +49,11 @@ npm install
 npm test
 ```
 
-测试针对 `logic.ts`（纯函数，用一个假的 `BotClient` 驱动）和 `convert.ts`，不依赖真实的 Wechaty 实例或 puppet，不发任何网络请求。
+测试覆盖 `logic.ts` / `convert.ts` 及实际通知回调，使用假的 `BotClient` 和公开的 `find({id})` / `say()` / `emitError()` 接口，检查成功、目标缺失和投递失败；不启动 Wechaty 实例或 puppet，不发任何网络请求。
 
 ## 已知限制 / 待验证
 
-- 通知推送用 `bot.Room.load(id)` / `bot.Contact.load(id)` 按 `Target.chatId` 直接加载实体后 `sync()` 再 `say()`；`Contact.load` 的用法已在官方文档的示例中确认，`Room.load` 按 Wechaty 的一致约定推断但未在文档里直接找到签名，标注为 `unverified`，实测时请优先验证群聊通知。
+- 通知使用 Wechaty 1.20.2 的公开接口 `bot.Room.find({id})` / `bot.Contact.find({id})` 按不透明 ID 查询就绪实体后 `say()`；私聊优先 `Target.userId`，群聊必须提供 `Target.chatId`。查询不到、查询或发送异常时回调拒绝，保持未确认，并通过公开的 `emitError()` 报告错误。真实 puppet 的群聊、联系人投递和平台权限仍需实测。
 - 没有使用 Wechaty 的 `wechaty-plugin-contrib` 规范（该规范建议单文件 ≤100 行、不依赖重量级包）；本插件依赖 `@nowork/bot-client`，如需严格遵循该规范需要内联客户端代码。
 
 ---
@@ -76,7 +76,7 @@ Not published to npm; see the Chinese section above for a full usage example wit
 
 ## Config
 
-`baseUrl`, `botToken` (required); `platform` (default `"wechaty"`), `prefixes` (default
+`baseUrl`, `botToken` (required); `platform` (default `"wechat"`), `prefixes` (default
 `["/"]`), `allowedChats`, `lang` (optional).
 
 ## Tests
@@ -86,15 +86,17 @@ npm install
 npm test
 ```
 
-Tests exercise `logic.ts` against a fake `BotClient` and `convert.ts` directly; no real
-Wechaty instance or puppet, no network calls.
+Tests exercise `logic.ts`, `convert.ts`, and the actual notification callbacks using a fake
+`BotClient` and public `find({id})` / `say()` / `emitError()` methods. Success, missing targets,
+and delivery errors are covered without starting a Wechaty instance, puppet, or network call.
 
 ## Known limitations / to verify
 
-- Notification delivery uses `bot.Room.load(id)` / `bot.Contact.load(id)` on
-  `Target.chatId`, then `sync()` and `say()`. `Contact.load` matches the official docs'
-  example; `Room.load` is inferred from Wechaty's own naming convention and marked
-  `unverified` in the code - verify group notifications first against a real platform.
+- Notification delivery uses Wechaty 1.20.2's public `bot.Room.find({id})` /
+  `bot.Contact.find({id})`, which ready the exact target before `say()`. Private chats prefer
+  `Target.userId`; groups require `Target.chatId`. Missing targets, lookup errors, and send
+  errors reject the callback and stay unacknowledged; public `emitError()` reports failures.
+  Room/contact delivery and permissions still require verification with a real puppet.
 - Does not follow the `wechaty-plugin-contrib` convention (single file, <=100 SLOC, no
   heavy dependencies); this plugin depends on `@nowork/bot-client`, so adopting that
   convention would mean inlining the client.
