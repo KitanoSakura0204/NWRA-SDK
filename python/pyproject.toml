@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nowork-sdk"
-version = "1.1.0"
+version = "1.2.0"
 description = "Server API and OIDC client for the NoWork Account user center"
 requires-python = ">=3.9"
 readme = "README.md"
