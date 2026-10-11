@@ -84,6 +84,9 @@ public sealed record CheckResult(
 /// <summary>Server API client authenticated with X-Server-Key (player data and bans: ServerUsers.cs).</summary>
 public sealed partial class NoworkClient
 {
+    /// <summary>SDK release this client implements (see CHANGELOG.md).</summary>
+    public const string Version = "1.2.0";
+
     private readonly HttpClient _http;
     private readonly string _base;
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
