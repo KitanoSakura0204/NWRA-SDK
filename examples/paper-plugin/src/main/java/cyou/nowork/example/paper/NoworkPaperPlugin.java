@@ -28,7 +28,7 @@ import java.util.logging.Level;
  * heartbeat with TPS and the player list, and the GM channel (typed catalogue, polling, results).
  * Bukkit state is read and changed on the main thread only; HTTP runs on async tasks.
  */
-public final class NoWorkPaperPlugin extends JavaPlugin implements Listener {
+public final class NoworkPaperPlugin extends JavaPlugin implements Listener {
     private static final long ADMIT_CACHE_MILLIS = Duration.ofHours(24).toMillis();
 
     private NoworkClient nowork;
@@ -55,7 +55,8 @@ public final class NoWorkPaperPlugin extends JavaPlugin implements Listener {
         long poll = 20L * Math.max(5, getConfig().getInt("gm-poll-seconds", 15));
         // snapshot on the main thread, send off it
         Bukkit.getScheduler().runTaskTimer(this, this::heartbeat, 20L, beat);
-        Bukkit.getScheduler().runTaskAsynchronously(this, this::setupGM);
+        List<GMOption> worlds = List.copyOf(worldOptions());
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> setupGM(worlds));
         Bukkit.getScheduler().runTaskTimerAsynchronously(this, this::pollGM, poll, poll);
     }
 
@@ -74,7 +75,7 @@ public final class NoWorkPaperPlugin extends JavaPlugin implements Listener {
             refuse(e, "未通过白名单 / Not whitelisted: " + (r.reason == null || r.reason.isEmpty() ? "not bound" : r.reason));
         } catch (NoWorkException.Encryption ex) {
             // encrypted reply this plugin cannot open: never an outage, always refuse (fail closed)
-            getLogger().severe("join check: " + ex.getMessage() + " (turn server encryption off or use the Go / TypeScript / Python / C# SDK)");
+            getLogger().severe("join check: " + ex.getMessage() + " (configure Java SDK decryption keys; see this example's README)");
             refuse(e, "账号服务配置错误 / Account service misconfigured");
         } catch (NoWorkException.Api ex) {
             // 401 wrong key, 403 server disabled or not approved: a configuration problem, refuse
@@ -126,7 +127,7 @@ public final class NoWorkPaperPlugin extends JavaPlugin implements Listener {
 
     // ---- GM channel (PROTOCOL 2.4) ----
 
-    private void setupGM() {
+    private void setupGM(List<GMOption> worlds) {
         try {
             if (!nowork.modules().containsKey("server-gm")) {
                 getLogger().info("server-gm module not enabled for this server: GM channel off");
@@ -146,7 +147,7 @@ public final class NoWorkPaperPlugin extends JavaPlugin implements Listener {
                     .param(new GMActionParam("world", "select").required().label("世界").source("worlds"))
                     .param(ticks);
             time.labels.put("en", "Set time");
-            NoworkClient.GMPublishResult r = nowork.publishGMCatalog(List.of(kick, broadcast, time), Map.of("worlds", worldOptions()));
+            NoworkClient.GMPublishResult r = nowork.publishGMCatalog(List.of(kick, broadcast, time), Map.of("worlds", worlds));
             getLogger().info("GM catalogue published: " + r.count + " stored");
             for (Map<String, String> s : r.skipped) getLogger().warning("GM entry skipped: " + s);
             gmEnabled = true;

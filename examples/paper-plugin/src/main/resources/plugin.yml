@@ -1,5 +1,5 @@
 name: NoWorkAccount
 version: "${version}"
-main: cyou.nowork.example.paper.NoWorkPaperPlugin
+main: cyou.nowork.example.paper.NoworkPaperPlugin
 api-version: "1.21"
 description: NoWork Account whitelist, heartbeat and GM channel
