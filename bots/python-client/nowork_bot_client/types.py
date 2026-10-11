@@ -120,6 +120,8 @@ class PluginEvent:
     message: Message
     time: int
     kind: Optional[str] = None
+    # Owning site supplied by the server; older servers may omit it.
+    site_id: Optional[int] = None
 
     @classmethod
     def from_data(cls, data: Dict[str, Any]) -> "PluginEvent":
@@ -130,4 +132,5 @@ class PluginEvent:
             target=data.get("target") or {},
             message=data.get("message") or [],
             time=data.get("time", 0),
+            site_id=data.get("siteId"),
         )
