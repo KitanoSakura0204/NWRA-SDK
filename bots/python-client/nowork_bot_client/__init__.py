@@ -5,7 +5,8 @@ platform.go; commit df7b675 / d52a936), read on 2026-09-29. No public spec exist
 SDK/docs/BOTS_SDK.md for the full field table.
 """
 from .client import BotClient
-from .errors import BotApiError
+from .errors import BotApiError, BotTransportError
+from .push import BotPushError, verify_push
 from .types import (
     BindResult,
     CommandInfo,
@@ -24,6 +25,9 @@ from .ws import connect_events
 __all__ = [
     "BotClient",
     "BotApiError",
+    "BotTransportError",
+    "BotPushError",
+    "verify_push",
     "BindResult",
     "CommandInfo",
     "CommandResult",
