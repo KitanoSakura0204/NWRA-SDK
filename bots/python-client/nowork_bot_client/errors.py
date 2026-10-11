@@ -8,3 +8,11 @@ class BotApiError(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+
+
+class BotTransportError(BotApiError):
+    """Network, timeout, malformed envelope or HTTP failure (local code -1).
+    Remains catchable by existing adapter BotApiError handlers."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(-1, message)

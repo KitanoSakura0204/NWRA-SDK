@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from nowork_bot_client import BotApiError, BotClient
+from nowork_bot_client import BotTransportError
 
 
 def make_client(handler):
@@ -27,6 +28,30 @@ async def test_bind_sends_token_header_and_parses_data():
     assert seen["request"].headers["authorization"] == "Bot tok123"
     assert seen["body"] == {"platform": "qq", "platformUserId": "10001", "platformName": "Ada", "code": "ABC123"}
     await client.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body,status", [(None, 200), ([], 200), ({"code": False, "data": {}}, 200),
+                                          ({"code": 0}, 200), ({"code": 0, "data": {}}, 503)])
+async def test_malformed_and_gateway_responses_are_transport_failures(body, status):
+    client = make_client(lambda request: httpx.Response(status, json=body))
+    try:
+        with pytest.raises(BotTransportError):
+            await client.lookup("qq", "1")
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_network_timeout_is_classified():
+    def handler(request):
+        raise httpx.ReadTimeout("slow", request=request)
+    client = make_client(handler)
+    try:
+        with pytest.raises(BotTransportError):
+            await client.commands()
+    finally:
+        await client.aclose()
 
 
 @pytest.mark.asyncio
@@ -88,3 +113,26 @@ async def test_poll_and_ack_events():
     acked = await client.ack_events([7])
     assert acked == 1
     await client.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("site_id", [None, 0, 42])
+async def test_poll_preserves_optional_site_metadata(site_id):
+    event = {"type": "message", "id": 7, "botId": 2, "target": {"chatType": "private", "userId": "member"}, "message": [], "time": 0}
+    if site_id is not None:
+        event["siteId"] = site_id
+
+    def handler(request):
+        assert request.headers["authorization"] == "Bot tok123"
+        if request.url.path.endswith("/events"):
+            return httpx.Response(200, json={"code": 0, "data": {"events": [event]}})
+        assert json.loads(request.content) == {"ids": [7]}
+        return httpx.Response(200, json={"code": 0, "data": {"acked": 1}})
+
+    client = make_client(handler)
+    try:
+        events = await client.poll_events()
+        assert events[0].site_id == site_id
+        assert await client.ack_events([events[0].id]) == 1
+    finally:
+        await client.aclose()
