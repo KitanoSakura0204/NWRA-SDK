@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BotClient, BotApiError } from "../src/index.js";
+import { BotClient, BotApiError, BotTransportError } from "../src/index.js";
 
 interface FakeCall {
   url: string;
@@ -8,6 +8,22 @@ interface FakeCall {
   headers: Record<string, string>;
   body: unknown;
 }
+
+test("malformed and HTTP-failed envelopes are transport failures", async () => {
+  for (const [body, status] of [[[], 200], [{ code: false, data: {} }, 200], [{ code: 0 }, 200], [{ code: 0, data: {} }, 503]] as const) {
+    const client = new BotClient({ baseUrl: "https://account.example", token: "t",
+      fetch: async () => new Response(JSON.stringify(body), { status }) });
+    await assert.rejects(client.commands(), BotTransportError);
+  }
+});
+
+test("deadline includes reading the response body", async () => {
+  const client = new BotClient({ baseUrl: "https://account.example", token: "t", timeoutMs: 5,
+    fetch: (async (_url, init) => ({ status: 200, ok: true,
+      json: () => new Promise((_resolve, reject) => init!.signal!.addEventListener("abort", () => reject(new Error("aborted")), { once: true })),
+    })) as typeof fetch });
+  await assert.rejects(client.commands(), BotTransportError);
+});
 
 function fakeFetch(responses: Record<string, { code: number; message?: string; data?: unknown }>, calls: FakeCall[]) {
   return (async (input: string | URL, init?: RequestInit) => {
@@ -87,4 +103,22 @@ test("pollEvents and ackEvents hit the right paths", async () => {
   const acked = await client.ackEvents([7]);
   assert.equal(acked.acked, 1);
   assert.deepEqual(calls[1].body, { ids: [7] });
+});
+
+test("polling preserves optional owning-site metadata without changing acknowledgements", async () => {
+  for (const siteId of [undefined, 0, 42]) {
+    const calls: FakeCall[] = [];
+    const client = new BotClient({ baseUrl: "https://account.example", token: "site-bot-token",
+      fetch: fakeFetch({
+        "/api/bot/v1/events": { code: 0, data: { events: [
+          { type: "message", id: 7, botId: 2, siteId, target: { chatType: "private", userId: "member" }, message: [], time: 0 },
+        ] } },
+        "/api/bot/v1/events/ack": { code: 0, data: { acked: 1 } },
+      }, calls) });
+    const events = await client.pollEvents();
+    assert.equal(events.events[0].siteId, siteId);
+    await client.ackEvents([events.events[0].id]);
+    assert.equal(calls[0].headers.Authorization, "Bot site-bot-token");
+    assert.deepEqual(calls[1].body, { ids: [7] });
+  }
 });
