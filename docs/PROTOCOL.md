@@ -116,7 +116,7 @@ Server API 与 SPA API 使用同一信封：
 - 命令对象带 `source`：`admin`（后台管理员下发）、`owner`（服主在用户中心控制台下发，见 §2.5）或 `grant`（服主 / 管理员授权的游戏工作人员在用户中心「GM 面板」下发，`operator` 为其登录名；授权可限定操作、最低信任等级与到期时间）。预设（宏）会按顺序下发多条命令。有服主的服务器上，`source=admin` 的命令 `operator` 固定为 `"staff"`，不暴露管理员登录名；站点自有服务器照旧给出登录名。
 - 每台服务器同时未完成（待拉取 + 已拉取未回执）的命令最多 50 条，超出时后台与服主控制台的下发会被拒绝，直到插件处理掉积压。
 
-后台侧：管理员在「游戏服务 → GM 面板」选择服务器、填参数、点执行（权限 `gm:execute`，模块配置 `requireLevel` 限制操作者的信任等级），每次执行写入操作日志。SDK：Go `Modules` / `PublishGMActions` / `PublishGMCatalog`（对象形式，含具名列表，返回跳过的条目）/ `PublishGMOptions` / `PollGMCommands` / `ReportGMResult`（其他语言的 publish 方法仍上报数组形式），TypeScript `modules` / `publishGMActions` / `pollGMCommands` / `reportGMResult`，Python `modules` / `publish_gm_actions` / `poll_gm_commands` / `report_gm_result`，Java `modules` / `publishGMActions` / `pollGMCommands` / `reportGMResult`，C# `ModulesAsync` / `PublishGMActionsAsync` / `PollGMCommandsAsync` / `ReportGMResultAsync`，PHP `modules` / `publishGmActions` / `pollGmCommands` / `reportGmResult`（PHP 本机无解释器，仅静态核对）。
+后台侧：管理员在「游戏服务 → GM 面板」选择服务器、填参数、点执行（权限 `gm:execute`，模块配置 `requireLevel` 限制操作者的信任等级），每次执行写入操作日志。六种 SDK 均支持动作数组、`{actions,options}` 对象发布和单独选项发布。Go 使用 `PublishGMCatalog` / `PublishGMOptions`，TypeScript / Java 使用 `publishGMCatalog` / `publishGMOptions`，Python 使用 `publish_gm_catalog` / `publish_gm_options`，C# 使用 `PublishGMCatalogAsync` / `PublishGMOptionsAsync`，PHP 使用 `publishGmCatalog` / `publishGmOptions`；catalog 的 null/nil actions 表示保留已有动作，空数组表示清空。拉取命令与回执方法保持不变。
 
 ### 2.5 服务器审核与服主（2026-09-28）
 
@@ -242,3 +242,12 @@ SDK：Go `NewPKCE` / `S256Challenge` / `NewState` / `BuildLoginURL` / `ParseLogi
 ## 7. 数据投递与加密（2026-09-28）
 
 按应用 / 服务器 / Webhook 定制下发的属性、成对匿名标识（pairwise sub）与 JWE 加密（ID Token、userinfo、Server API 信封、Webhook 信封、密钥轮换、自定义属性接口），以及退出登录后的跳转规则，见 [DELIVERY.md](DELIVERY.md)。
+
+## 8. 角色 GM、用户门户与聊天（2026-10-08）
+
+- [GM_SSO.md](GM_SSO.md)：角色选择、浏览器 PKCE/state 会话、`POST /server/v1/gm/sso/exchange`；六种语言均有服务端兑换方法。
+- [ACCOUNT_API.md](ACCOUNT_API.md)：Python / TypeScript / Go 的站内 JWT 客户端，玩家服务器列表、白名单申请、开放服角色绑定及 GM 发起。它与 X-Server-Key 客户端独立。
+- [CHAT.md](CHAT.md)：六种语言的聊天票据、游戏中继拉取/确认、游戏消息发送；浏览器/native WebSocket 鉴权及恢复协议。
+- [BOTS_SDK.md](BOTS_SDK.md)：Bot API 与 NoneBot2 / Koishi / Wechaty 适配，签名 HTTP 推送、超时和失败不确认。
+
+Python 已增加 `create_pkce_pair` / `s256_challenge` / `create_state` / `build_login_url` / `parse_login_callback` / `normalize_login_code`，与 Go / TypeScript 对齐。三者的 redirect 回调读取现在拒绝空的预期 state 与重复的敏感参数。Go / TypeScript / Python 的登录链接都支持 `device` 与 `prompt=consent`。这些更严格的回调检查不影响 code-display 直接兑换登录码。
