@@ -2,7 +2,7 @@
 
 休息室账号（NoWork Account）的 Koishi v4 插件：`bind` / `unbind` / `me` 指令，以及把其余聊天内容转发给站点的指令注册表（`/api/bot/v1/command`），同时通过 WebSocket 接收站点推送的通知并发送到对应会话。
 
-适配器无关：只使用 Koishi `Session` 的通用字段（`userId` / `channelId` / `guildId` / `platform` / `isDirect` / `content`），理论上适用于任意已安装的 Koishi 适配器（OneBot、Discord、Telegram、Lark/飞书……）；发送通知时用 `ctx.bots` 里第一个在线的机器人和 Koishi 统一的 `bot.sendMessage()`，这是 Koishi 自身的跨适配器发送 API，不需要按平台分支。
+适配器无关：使用 Koishi `Session` 的通用字段（`userId` / `channelId` / `guildId` / `platform` / `isDirect` / `content`）及统一的 `sendMessage` / `sendPrivateMessage`。多个机器人在线时用 `notificationBotId` 明确选择通知连接。
 
 ## 安装
 
@@ -41,7 +41,7 @@ npm test
 ## 已知限制 / 待验证
 
 - 群聊 / 频道 / 私聊的判定（`chatType`）用 `session.isDirect` 和 `session.guildId` 推断；已核对 OneBot 和参考实现（见 `src/index.ts` 的 `unverified:` 注释），其他适配器未实测。
-- 通知推送要求至少有一个 `ctx.bots` 中状态为 online 的机器人；多机器人实例时总是用第一个在线的，不区分平台（因为通知的 `Target.chatId` 本身就已经隐含了目标会话所在的平台连接，发送到错的 bot 实例会由适配器自身报错，这里暂不做机器人到会话的归属校验）。
+- 通知需要一个明确的在线机器人。多个实例设置 `notificationBotId` 为 selfId；离线、选择有歧义或发送失败时不确认，等待后端重投。
 
 ---
 
@@ -81,5 +81,9 @@ Koishi `Context`, no network calls.
 - `chatType` (private/group/channel) is inferred from `isDirect` / `guildId`; checked
   against OneBot semantics (see the `unverified:` comment in `src/index.ts`), not yet
   tested against other adapters.
-- Notification delivery picks the first online bot in `ctx.bots` without checking which
-  platform the target chat belongs to; a mismatch surfaces as the adapter's own send error.
+- Configure `notificationBotId` when multiple bots are online; delivery remains pending if the bot is offline or a send fails.
+# 通知选择（2026-10-08）
+
+多个机器人在线时配置 `notificationBotId` 为目标机器人的 selfId；只有一个在线机器人时可省略。私聊使用 `sendPrivateMessage`，群聊使用 `sendMessage`；发送失败保留后端待投递状态，不会 ACK。
+
+When multiple bots are online, set `notificationBotId` to the selected bot's selfId. Failed sends remain pending for retry; private notifications use the adapter's private-message method.
