@@ -1,6 +1,6 @@
 # 自定义 SDK 登录模板（LOGIN_TEMPLATES）
 
-SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL.md)）内置一套**标准模板**：PC 端是品牌背景上的居中卡片，手机端是整屏面板。管理员可以按服务器、按设备（PC / 手机）改用**自定义模板**。自定义模板由 HTML、CSS 与可选的 JS 组成，只能通过本文的 `window.NoWorkLogin` 接口与用户中心交互。
+SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL.md)）内置一套**标准模板**：PC 端是品牌背景上的居中卡片，手机端是整屏面板。管理员可以按服务器、按设备（PC / 手机）改用**自定义模板**。自定义模板由 HTML、CSS 与可选的 JS 组成，只能通过本文的 `window.NoworkLogin` 接口与用户中心交互。
 
 后台入口：「游戏服务 → SDK 登录页」→ 选择服务器 →「登录模板」。保存、发布、回滚、切换需要按钮权限 `sdklogin:template`（默认只有超级管理员有），每次改动都写入操作日志。
 
@@ -9,7 +9,7 @@ SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL
 ```
 游戏客户端 ──打开──▶ /sdk/login/{serverCode}?…&device=pc|mobile   （用户中心页面，宿主）
                          │  会话、人机验证、通行密钥、授权确认、结果页、交回游戏都在这里
-                         │  MessageChannel（NoWorkLogin 桥，协议 v1）
+                         │  MessageChannel（NoworkLogin 桥，协议 v1）
                          ▼
                GET /api/sdk-login/{serverCode}/template?device=…   （沙箱文档：你的模板）
                          不透明源、不能联网、不能读写本站存储
@@ -18,7 +18,7 @@ SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL
 - 模板文档带 `Content-Security-Policy: … sandbox allow-scripts allow-forms`，即使被直接打开也是不透明源：拿不到用户中心的 Cookie、localStorage 与令牌。
 - 模板**只负责登录与「以 X 继续」两步**。登录成功后，授权确认、登录码 / 成功 / 取消的结果页与交回游戏都由用户中心显示，模板拿不到授权码、令牌、回调地址或两步验证的 challenge。
 - 模板不能选择回调地址、不能跳过 PKCE 或授权确认：这些参数来自游戏客户端的原始 URL，由宿主原样转交后端校验（PROTOCOL §6.1）。
-- 出错即回退：模板文档没有加载、8 秒内没有握手、握手后 10 秒内没有调用 `ready()`、`ready()` 之前抛出未捕获的错误、框架被导航到别的文档、或模板调用 `NoWorkLogin.fallback()`，页面都会换回标准模板（已经登录的玩家看到「以 X 继续」）。
+- 出错即回退：模板文档没有加载、8 秒内没有握手、握手后 10 秒内没有调用 `ready()`、`ready()` 之前抛出未捕获的错误、框架被导航到别的文档、或模板调用 `NoworkLogin.fallback()`，页面都会换回标准模板（已经登录的玩家看到「以 X 继续」）。
 
 ## 2. 模板的组成
 
@@ -26,8 +26,8 @@ SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL
 | --- | --- | --- |
 | HTML | `<body>` 里的片段，不含 `<html>` `<head>` `<body>` | 64 KB |
 | CSS | 放进 `<head>` 的 `<style>` | 64 KB |
-| JS | 片段之后以 nonce 运行的经典脚本（`NoWorkLogin` 已就绪） | 128 KB |
-| 脚本来源 | 允许 `NoWorkLogin.loadScript()` 加载的 https 源 | 10 个 |
+| JS | 片段之后以 nonce 运行的经典脚本（`NoworkLogin` 已就绪） | 128 KB |
+| 脚本来源 | 允许 `NoworkLogin.loadScript()` 加载的 https 源 | 10 个 |
 | 资源来源 | 允许加载图片 / 字体 / 样式 / 媒体的 https 源 | 10 个 |
 
 三部分合计不超过 192 KB。用户中心生成的文档大致是：
@@ -35,7 +35,7 @@ SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL
 ```html
 <!doctype html>
 <html lang="zh-CN" data-device="pc" data-theme="light">
-<head> …charset / viewport / referrer… <style>你的 CSS</style> <script nonce>NoWorkLogin 运行时</script> </head>
+<head> …charset / viewport / referrer… <style>你的 CSS</style> <script nonce>NoworkLogin 运行时</script> </head>
 <body> 你的 HTML <script nonce>你的 JS</script> </body>
 </html>
 ```
@@ -53,14 +53,14 @@ SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL
 ## 4. 生命周期
 
 1. 运行时（在你的脚本之前）向宿主发送 `hello`，宿主回复 `init` 并移交 `MessagePort`。
-2. 你的脚本调用 `await NoWorkLogin.ready()`，得到配置对象（§6）与文案。**其他方法都必须在 `ready()` 之后调用**，否则返回 `not_ready`。
+2. 你的脚本调用 `await NoworkLogin.ready()`，得到配置对象（§6）与文案。**其他方法都必须在 `ready()` 之后调用**，否则返回 `not_ready`。
 3. 按 `config.viewer` 显示「以 X 继续」或登录表单；调用登录方法（§5），按返回的 `status` 更新界面。
 4. 某次调用返回 `{ status: 'done' }`：宿主接管（授权确认、结果页、交回游戏），模板保持「处理中」即可。之后桥只接受 `openLink`，直到宿主发出 `reset` 事件。
 5. 宿主发出 `reset`（会话过期、授权被拒、换账号后）：回到登录或「以 X 继续」，`data.viewer` 是当前登录的玩家（或 `null`），`data.message` 是要显示的原因（可能为空）。
 
-## 5. NoWorkLogin 接口（协议 v1）
+## 5. NoworkLogin 接口（协议 v1）
 
-`window.NoWorkLogin` 是冻结的只读对象，`NoWorkLogin.version === 1`。除 `t` / `on` / `fallback` / `loadScript` 外，方法都返回 Promise。
+`window.NoworkLogin` 是冻结的只读对象，`NoworkLogin.version === 1`。除 `t` / `on` / `fallback` / `loadScript` 外，方法都返回 Promise。
 
 | 方法 | 参数 | 说明 |
 | --- | --- | --- |
@@ -73,7 +73,7 @@ SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL
 | `signInWithPasskey(p)` | `{ remember }` | 通行密钥登录（由宿主调用 WebAuthn） |
 | `verifyTwoFactor(p)` | `{ code, rememberDevice }` | 提交两步验证的动态码或恢复码 |
 | `twoFactorWithPasskey(p)` | `{ rememberDevice }` | 用通行密钥完成两步验证 |
-| `signInWithProvider(p)` | `{ provider }` | 第三方登录：整页跳转，回来后宿主自动继续 |
+| `signInWithProvider(p)` | 普通登录 `{ provider }`；显式首次注册 `{ provider, registration: true, region, legal? }` | 第三方登录/明确注册：整页跳转，回来后宿主自动继续；国家/地区与法律同意见 §5.1 |
 | `continueAsViewer()` | — | 以当前登录的玩家继续 |
 | `switchAccount()` | — | 退出当前玩家，回到登录（返回 `signin`） |
 | `cancel()` | — | 取消登录，按回传方式交回 `access_denied`（仅当 `config.cancellable`） |
@@ -92,6 +92,31 @@ SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL
 | `error` | 失败，可重试 | `message`（可直接显示给玩家的文案） |
 
 **拒绝**：只有违反接口约定时才 reject，`Error.code` 为以下之一：`not_ready`（未先调用 `ready()`）、`unknown_method`、`method_disabled`（该服务器 / 站点 / 浏览器不提供这种登录方式）、`provider_not_allowed`、`bad_state`（例如没有待完成的两步验证、没有已登录的玩家、流程已结束）、`busy`（上一次调用还没结束：同一时间只处理一个调用）、`bad_params`、`failed`。
+
+## 5.1. Provider 首次注册与国家/地区
+
+`window.NoworkLogin` 的大小写就是 `NoworkLogin`，不是 `NoWorkLogin`。协议版本仍为1；host与runtime保持原有MessageChannel，不增加网络/存储访问。
+
+普通已有账户登录调用 `L.signInWithProvider({ provider: p.code })`。不要附带地区、legal或注册字段，不得因为上游账号尚未关联而悄悄创建账号。
+
+需要首次注册时，模板先让用户**显式选择注册**，并选择 `config.registrationRegions` 给出的一个国家/地区。值仅 `cn/hk/mo/tw/intl`，初始为空；它与 `config.locale` 的四种UI语言无关。内置starter显示独立未勾选的注册选项，勾选后展示区域选择；没有选择时显示 `signup.regionRequired` 并聚焦输入，不调用host。
+
+```js
+// 用户明确选择“用该提供方注册”并选好地区后才调用：
+const result = await L.signInWithProvider({
+  provider: selectedProvider,
+  registration: true,
+  region: selectedRegion
+});
+// legal 省略：宿主打开当前政策/年龄/非必要采集同意UI。
+// 用户取消返回 error；确认且后端允许时才发起provider跳转。
+```
+
+`legal` 是可选对象 `{ locale, versionIds: number[], ageConfirmed: boolean, telemetryConsent?: boolean }`。只在模板已通过经审查的流程展示**实际当前版本**并得到明确同意时提交；不得硬编码版本ID、空数组冒充同意、默认勾选或把访问页面等同接受。推荐省略legal，由宿主自己的LegalRegistrationConsent取得版本和真实同意。模板仍拿不到token/挑战ID/回调地址。
+
+host校验registration开关、provider允许列表、region枚举与legal形状，服务端再次校验当前法律版本、年龄/地区策略与账户状态；非法参数不会触发provider操作。站点不开放注册、无social方式或旧host没有registrationRegions时starter不显示这个signup选择，已有普通provider登录继续可用。跨域游戏iframe的provider整页跳转仍遵守原有禁用规则。
+
+“普通注册”链接 `openLink({name:'register'})` 继续打开宿主管理的注册页并保留SDK返回上下文；密码/验证码登录方法没有被改造成自动注册。普通provider登录遇到服务端要求先选地区/同意时交回宿主恢复页，由用户明确完成注册后才重新发起。
 
 ## 6. 配置对象（`ready()` 的结果）
 
@@ -112,6 +137,7 @@ SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL
   handoff: 'redirect' | 'postMessage' | 'code-display',
   cancellable: true,
   registration: true,                                           // 站点是否开放注册
+  registrationRegions: [{ value: 'cn', label: '🇨🇳 中国大陆' }],  // 实际为 host 提供的五个本地化选项，无默认选中
   texts: { … }                                                  // t() 使用的文案
 }
 ```
@@ -120,12 +146,15 @@ SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL
 
 ## 7. 文案
 
-`NoWorkLogin.t(key, params)` 返回用户中心在玩家语言下的文案，`{name}` 形式的占位由 `params` 填入。可用的键：
+`NoworkLogin.t(key, params)` 返回用户中心在玩家语言下的文案，`{name}` 形式的占位由 `params` 填入。可用的键：
 
 `loading` `secured`（`{site}`）`returnsTo`（`{host}`）`cancel` `maintenance` `working`、
 `signin.title` `signin.password` `signin.code` `signin.username` `signin.passwordPh` `signin.target` `signin.codePh` `signin.remember` `signin.forget` `signin.register` `signin.submit` `signin.passkey` `signin.others` `signin.noMethods` `signin.required`（`{name}`）、
 `challenge.title` `challenge.subtitle` `challenge.code` `challenge.remember`（`{days}`）`challenge.verify` `challenge.passkey` `challenge.back`、
-`cont.title` `cont.as`（`{name}`）`cont.switch`、`code.send` `code.resend`（`{s}`）。
+`cont.title` `cont.as`（`{name}`）`cont.switch`、`code.send` `code.resend`（`{s}`）、
+`signup.provider` `signup.region` `signup.regionPlaceholder` `signup.regionRequired` `signup.regionHint` `signup.complete`。
+
+六个 `signup.*` 文案和 `registrationRegions[].label` 都由宿主按 `zh_CN/zh_TW/en/ja` 提供；模板不从 IP、浏览器语言或电话区号选择账户地区。
 
 未知的键原样返回。模板也可以自带文案，按 `config.locale` 选择。
 
@@ -147,7 +176,7 @@ sandbox allow-scripts allow-forms
 
 由此可知：
 
-- 模板**不能联网**（fetch / XHR / WebSocket / EventSource / sendBeacon 都被拦下），也不能提交表单：表单要监听 `submit` 并 `preventDefault()`，再调用 `NoWorkLogin`。
+- 模板**不能联网**（fetch / XHR / WebSocket / EventSource / sendBeacon 都被拦下），也不能提交表单：表单要监听 `submit` 并 `preventDefault()`，再调用 `NoworkLogin`。
 - **内联事件不会执行**（`onclick="…"`、`javascript:` 链接），请用 `addEventListener`。
 - 图片、字体、样式只能来自本站、服务器的品牌图片与「资源来源」；外部脚本只能来自「脚本来源」且要用 `loadScript()` 加载。
 - 沙箱里没有 `localStorage` / `sessionStorage` / Cookie（访问会抛异常），也不能弹窗、不能导航顶层页面；框架一旦导航到别的文档，页面立即回退到标准模板。
@@ -199,7 +228,7 @@ JS：
 
 ```js
 (async () => {
-  const L = window.NoWorkLogin;
+  const L = window.NoworkLogin;
   const cfg = await L.ready();
   const $ = (id) => document.getElementById(id);
   $('title').textContent = cfg.branding.title || cfg.server.name;
