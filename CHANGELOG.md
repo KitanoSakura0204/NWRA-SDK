@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0 — 2026-10-09
+
+- Go / Python：新增权益查询（`entitlements`），含测试。
+- 传输加密：Go / Java / TypeScript 新增加密传输回归测试。
+- 机器人客户端（Python / TypeScript）新增推送（`push`）模块；NoneBot2 新增投递（`delivery`）；Koishi / Wechaty 插件补测试。
+- 新增文档：`docs/ACCOUNT_API.md`、`docs/CHAT.md`、`docs/GM_SSO.md`，以及 GM 一键登录 Python 示例（`examples/gm-sso-python/`）与 `login-kit/`。
+- 版本号统一升到 1.2.0。
+
 ## 1.1.0 — 2026-09-14
 
 - 五语言新增 Webhook 签名校验助手（`X-NoWork-Signature` = sha256=HMAC-SHA256(secret, `<ts>.<body>`)，含时间戳容差与常量时间比较）；Go / Python / TypeScript 附测试。
