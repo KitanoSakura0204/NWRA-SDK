@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import base64
 import json
 import urllib.error
 import urllib.parse
 import urllib.request
+from typing import Any, Dict, Optional
 
-from .errors import OAuthError, TransportError
+from .entitlements import Entitlement, EntitlementValues, entitlement_body, entitlement_query
+from .errors import ApiError, OAuthError, TransportError
 
 
 class NoworkOIDC:
@@ -104,6 +107,71 @@ class NoworkOIDC:
         req.add_header("Authorization", "Bearer " + access_token)
         req.add_header("Accept", "application/json")
         return self._send(req)
+
+    # ---- Custom per-app values (DELIVERY.md section 8, confidential clients only) ----
+
+    def entitlements(self, uid: int = 0, sub: str = "") -> EntitlementValues:
+        """Every custom value this OAuth client stored for a user (HTTP Basic credentials)."""
+        return EntitlementValues.from_dict(self._delivery("GET", entitlement_query(uid, sub), None))
+
+    def put_entitlement(self, uid: int = 0, sub: str = "", key: str = "", value: Any = None) -> Entitlement:
+        """Store one key for a user; the key/value limits are those of the server route."""
+        return Entitlement.from_dict(self._delivery("PUT", None, entitlement_body(uid, sub, key, value)))
+
+    def delete_entitlement(self, uid: int = 0, sub: str = "", key: str = "") -> Entitlement:
+        """Remove one key (removing a key that was never written is not an error)."""
+        q = entitlement_query(uid, sub)
+        q["key"] = (key or "").strip()
+        if not q["key"]:
+            raise ValueError("entitlement key is required")
+        return Entitlement.from_dict(self._delivery("DELETE", q, None))
+
+    def _delivery(self, method: str, query: Optional[Dict[str, Any]], body: Any) -> Dict[str, Any]:
+        """Talk to /oauth2/delivery/entitlements with HTTP Basic client credentials.
+
+        Uses the same envelope split as the Server API: code != 0 is an ApiError (a 401 invalid
+        client credentials stays one), transport trouble a TransportError.
+        """
+        url = self.issuer + "/oauth2/delivery/entitlements"
+        if query:
+            url += "?" + urllib.parse.urlencode({k: v for k, v in query.items() if v not in (None, "")})
+        try:
+            data = json.dumps(body, allow_nan=False).encode() if body is not None else None
+        except (TypeError, ValueError) as e:
+            raise TransportError(f"cannot encode the request body: {e}") from e
+        req = urllib.request.Request(url, data=data, method=method)
+        req.add_header("Accept", "application/json")
+        req.add_header("Authorization", "Basic " + base64.b64encode(
+            f"{self.client_id}:{self.client_secret}".encode()).decode())
+        if data is not None:
+            req.add_header("Content-Type", "application/json")
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as res:
+                raw, status = res.read(), int(getattr(res, "status", 200) or 200)
+        except urllib.error.HTTPError as e:
+            try:
+                raw, status = e.read(), e.code
+            finally:
+                e.close()
+        except (urllib.error.URLError, OSError) as e:
+            raise TransportError(str(e)) from e
+        try:
+            env = json.loads(raw.decode("utf-8")) if raw else {}
+        except ValueError as e:
+            raise TransportError(f"invalid json (http {status}): {e}") from e
+        if not isinstance(env, dict):
+            raise TransportError(f"invalid response (http {status}): not an object")
+        code = env.get("code")
+        if isinstance(code, bool) or not isinstance(code, int):
+            raise TransportError(f"invalid response (http {status}): missing code")
+        if code != 0:
+            raise ApiError(code, str(env.get("message", "")))
+        if status >= 400:
+            raise TransportError(f"http {status}")
+        data = env.get("data")
+        if not isinstance(data, dict):
+            raise TransportError(f"invalid response (http {status}): missing data")
+        return data
 
     def logout_url(self, id_token: str = "", post_logout_redirect_uri: str = "", state: str = "") -> str:
         q = {"client_id": self.client_id}
