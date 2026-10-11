@@ -1,6 +1,6 @@
 {
   "name": "@nowork/bot-client",
-  "version": "0.1.0",
+  "version": "1.2.0",
   "description": "Minimal client for the NoWork Bot API (/api/bot/v1), used by framework plugins (Koishi, Wechaty)",
   "type": "module",
   "main": "./dist/index.js",
