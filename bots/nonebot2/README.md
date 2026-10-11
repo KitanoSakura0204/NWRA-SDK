@@ -6,10 +6,10 @@
 
 ## 安装
 
-本仓库内尚未发布到 PyPI。开发期在你的 NoneBot2 项目里以本地路径安装：
+本仓库内尚未发布到 PyPI。开发期使用你的 NoneBot2 项目虚拟环境，从 `SDK/bots/nonebot2` 目录同时安装本插件和相邻的共享客户端：
 
 ```sh
-pip install -e "D:/Project/Admin/SDK/bots/nonebot2"
+python -m pip install -e "../python-client" -e "."
 ```
 
 然后在 `pyproject.toml` 或 `bot.py` 里加载 `nonebot_plugin_nowork`。
@@ -34,20 +34,21 @@ NOWORK_LANG=                # 发给站点的 Accept-Language（zh-CN / en / ja 
 
 ## 通知推送
 
-启动时建立到 `/api/bot/v1/events` 的 WebSocket 连接（断线自动重连，退避重试），每条通知按 `Target.userId` / `Target.chatId` 发送给第一个在线的机器人连接；目前的发送调用假定了类似 OneBot v11 的 `send_msg(user_id=, group_id=, message=)` 接口（见「未完成 / 已知限制」）。
+启动时建立到 `/api/bot/v1/events` 的 WebSocket 连接（断线自动重连，退避重试），按 `Target.chatType` / `userId` / `chatId` 调用对应适配器发送 API；多机器人用 `NOWORK_NOTIFICATION_BOT_ID` 选择连接。只有发送成功才确认，失败保留待重投。
 
 ## 测试
 
 ```sh
-pip install -e ".[test]"
-pytest
+python -m pip install -e "../python-client" -e ".[test]"
+python -m pytest
 ```
 
 测试针对 `logic.py`（纯函数，用一个假的 `BotClient` 驱动）和 `convert.py` / `platform.py`（消息渲染、适配器名到平台名的映射），不依赖真实的 NoneBot driver，不发任何网络请求。
 
 ## 已知限制
 
-- 通知转发 (`bot.send_msg`) 写死了 OneBot v11 的调用形状；在非 OneBot 适配器上会在该机器人连接上失败并尝试下一个在线机器人，若没有 OneBot 连接则通知会丢失（已在日志中警告）。要支持更多适配器需要按 `bot.adapter.get_name()` 分支调用各自的发送 API。
+- 通知已按 OneBot v11/v12、Telegram、Feishu、QQ 分别调用发送 API。多个机器人连接时设置 `NOWORK_NOTIFICATION_BOT_ID` 指定 self ID；未指定且存在歧义时保持未确认，避免误发到其他平台。其他适配器需在 `delivery.py` 增加发送分支；QQ 主动消息取决于平台权限和配额。
+- `NOWORK_COMMAND_PREFIX` 控制本插件 bind/unbind/me 指令前缀，不修改 NoneBot 全局配置。发送失败不会确认通知，等待后端重投。
 - 群聊中默认仅在 @机器人 时触发指令转发（`passthrough` 用了 `to_me()` 规则），避免误吞群内其他对话；如需对所有消息生效可在站点侧调整或改规则。
 
 ---
@@ -66,10 +67,11 @@ a real platform.
 
 ## Install
 
-Not published to PyPI yet; install from the local path during development:
+Not published to PyPI yet. In your NoneBot2 project's virtual environment, run from
+`SDK/bots/nonebot2` to install this plugin and its sibling shared client together:
 
 ```sh
-pip install -e "D:/Project/Admin/SDK/bots/nonebot2"
+python -m pip install -e "../python-client" -e "."
 ```
 
 Then load `nonebot_plugin_nowork` from your `pyproject.toml` or `bot.py`.
@@ -85,16 +87,13 @@ site's command registry; unhandled text is silently ignored so other plugins can
 
 ## Notifications
 
-On startup it connects to `/api/bot/v1/events` over WebSocket (auto-reconnect with backoff)
-and forwards each notification to the first connected bot, using an OneBot-v11-shaped
-`send_msg` call — see "Known limitations" above (Chinese section) for what this does not yet
-cover on non-OneBot adapters.
+On startup it connects to `/api/bot/v1/events` with reconnect backoff and acknowledges only successful deliveries. OneBot v11/v12, Telegram, Feishu and QQ have explicit send branches. Set `NOWORK_NOTIFICATION_BOT_ID` when several bots connect; unsupported adapters or failed sends remain unacknowledged for retry. Real provider permissions and quotas still apply.
 
 ## Tests
 
 ```sh
-pip install -e ".[test]"
-pytest
+python -m pip install -e "../python-client" -e ".[test]"
+python -m pytest
 ```
 
 Tests exercise `logic.py` against a fake `BotClient` and `convert.py` / `platform.py`
