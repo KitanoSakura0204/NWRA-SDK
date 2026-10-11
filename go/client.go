@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // ApiError is a business error returned by the user center (code != 0).
@@ -31,14 +32,17 @@ type TransportError struct{ Err error }
 func (e *TransportError) Error() string { return "nowork: transport error: " + e.Err.Error() }
 func (e *TransportError) Unwrap() error { return e.Err }
 
+// Version is the SDK release this package implements (see CHANGELOG.md).
+const Version = "1.2.0"
+
 // HeaderEncryption marks a Server API response whose data is the {"jwe": "..."} envelope
 // (SDK/docs/DELIVERY.md section 5).
 const HeaderEncryption = "X-NoWork-Encryption"
 
 // EncryptionError means a Server API response was encrypted and could not be used: no
-// decryption key is configured, the JWE did not open, or its ctx names another route. The
-// data was never read, so treat it as a configuration error, never as a transient failure
-// to fail open on (a whitelist that cannot be read is not a disabled whitelist).
+// decryption key is configured, the JWE did not open, or its ctx names another route/server.
+// It also reports plaintext whitelist replies while keys are configured. No usable data is
+// returned; never fail open on this error (an unreadable whitelist is not a disabled one).
 type EncryptionError struct {
 	Route  string // e.g. "whitelist"
 	Reason string
@@ -56,11 +60,13 @@ func (e *EncryptionError) Unwrap() error { return e.Err }
 
 // Client talks to the Server API with a server key.
 type Client struct {
-	base      string
-	serverKey string
-	http      *http.Client
-	headers   http.Header // internal transport credentials for account clients
-	account   bool        // restrict account/chat credentials to their own API routes
+	base           string
+	serverKey      string
+	http           *http.Client
+	headers        http.Header // internal transport credentials for account clients
+	account        bool        // restrict account/chat credentials to their own API routes
+	decryptionKeys []*DecryptionKey
+	serverCode     string // optional binding to the authenticated delivery ctx
 }
 
 // Option configures a Client.
@@ -71,6 +77,26 @@ func WithServerKey(key string) Option { return func(c *Client) { c.serverKey = k
 
 // WithHTTPClient replaces the default http.Client (10s timeout).
 func WithHTTPClient(h *http.Client) Option { return func(c *Client) { c.http = h } }
+
+// WithDecryptionKeys opens encrypted Server API replies using keys from ParseDecryptionKey.
+// Several keys support a rotation overlap. A nonempty list also requires encrypted replies
+// on whitelist and whitelist/check; other routes may still reply in plaintext. The option
+// snapshots the key list and IDs. An empty list keeps the default no-key refusal.
+func WithDecryptionKeys(keys ...*DecryptionKey) Option {
+	snapshot := make([]*DecryptionKey, len(keys))
+	for i, key := range keys {
+		if key != nil {
+			copy := *key
+			snapshot[i] = &copy
+		}
+	}
+	return func(c *Client) { c.decryptionKeys = append([]*DecryptionKey(nil), snapshot...) }
+}
+
+// WithServerCode binds encrypted responses to this exact server code as well as the route.
+// Without it, the authenticated ctx must still name a nonempty server and the requested
+// route. This code does not replace WithServerKey or enable decryption by itself.
+func WithServerCode(code string) Option { return func(c *Client) { c.serverCode = code } }
 
 // New creates a Server API client for the given base URL (the user-center backend / issuer).
 func New(base string, opts ...Option) *Client {
@@ -143,7 +169,8 @@ type Response struct {
 }
 
 // Encrypted reports whether the reply is the {"jwe": "..."} envelope (DELIVERY.md section 5):
-// the X-NoWork-Encryption header is set or data is exactly {"jwe": "<string>"}.
+// the X-NoWork-Encryption header is set or data has only a jwe field. Malformed singleton
+// envelopes also count, so an invalid JWE value cannot become a zero-value whitelist.
 func (r *Response) Encrypted() bool {
 	return r.Header.Get(HeaderEncryption) != "" || isJWEData(r.Data)
 }
@@ -153,8 +180,8 @@ func isJWEData(data json.RawMessage) bool {
 	if json.Unmarshal(data, &m) != nil || len(m) != 1 {
 		return false
 	}
-	var s string
-	return m["jwe"] != nil && json.Unmarshal(m["jwe"], &s) == nil
+	_, exists := m["jwe"]
+	return exists
 }
 
 // Raw calls a Server API route (path such as "/server/v1/whitelist") and returns the reply
@@ -163,27 +190,94 @@ func (c *Client) Raw(ctx context.Context, method, path string, query url.Values,
 	return c.send(ctx, method, path, query, body)
 }
 
-// do decodes data into out. An encrypted reply is never decoded as plain data: it fails with
-// an *EncryptionError (fail closed), so an unreadable whitelist never reads as "mode 0".
+// do decodes data into out after authenticating any encrypted reply. Unreadable encrypted
+// data and plaintext whitelist downgrades fail with *EncryptionError, never "mode 0".
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, body any, out any) error {
 	return c.doWithResponseLimit(ctx, method, path, query, body, out, c.responseLimit(method, path))
 }
 
 func (c *Client) doWithResponseLimit(ctx context.Context, method, path string, query url.Values, body any, out any, responseLimit int64) error {
 	res, err := c.sendWithResponseLimit(ctx, method, path, query, body, responseLimit)
-	if err != nil || out == nil {
+	if err != nil {
 		return err
 	}
-	if res.Encrypted() {
-		return &EncryptionError{Route: strings.TrimPrefix(path, "/server/v1/"), Reason: "no decryption key configured"}
+	pathOnly, _, _ := strings.Cut(path, "?")
+	route := strings.TrimPrefix(pathOnly, "/server/v1/")
+	data, encrypted := res.Data, res.Encrypted()
+	if encrypted {
+		if len(c.decryptionKeys) == 0 {
+			return &EncryptionError{Route: route, Reason: "no decryption key configured"}
+		}
+		data, err = c.openServerResponse(data, route)
+		if err != nil {
+			return err
+		}
+	} else if len(c.decryptionKeys) > 0 && strings.HasPrefix(pathOnly, "/server/v1/") && (route == "whitelist" || route == "whitelist/check") {
+		return &EncryptionError{Route: route, Reason: "plain reply while decryption keys are configured"}
 	}
-	if len(res.Data) == 0 || string(res.Data) == "null" {
+	// Write-only methods must authenticate encrypted replies too.
+	if out == nil {
+		return nil
+	}
+	if len(data) == 0 || string(data) == "null" {
 		return &TransportError{fmt.Errorf("invalid response (%d): missing data", res.Status)}
 	}
-	if err := json.Unmarshal(res.Data, out); err != nil {
+	if err := json.Unmarshal(data, out); err != nil {
+		if encrypted {
+			return &EncryptionError{Route: route, Reason: "decrypted data is invalid", Err: err}
+		}
 		return &TransportError{err}
 	}
 	return nil
+}
+
+func (c *Client) openServerResponse(data json.RawMessage, route string) (json.RawMessage, error) {
+	var env struct {
+		JWE string `json:"jwe"`
+	}
+	if !isJWEData(data) || json.Unmarshal(data, &env) != nil || env.JWE == "" {
+		return nil, &EncryptionError{Route: route, Reason: "encrypted reply without a JWE"}
+	}
+	plain, hdr, err := DecryptJWE(env.JWE, c.decryptionKeys...)
+	if err != nil {
+		return nil, &EncryptionError{Route: route, Reason: "the JWE did not open", Err: err}
+	}
+	envelopeContext, _ := hdr["ctx"].(string)
+	if !serverResponseContextMatches(envelopeContext, c.serverCode, route) {
+		return nil, &EncryptionError{Route: route, Reason: "envelope ctx mismatch"}
+	}
+	if !validDecryptedServerData(plain, route) {
+		return nil, &EncryptionError{Route: route, Reason: "decrypted data is missing or invalid"}
+	}
+	return plain, nil
+}
+
+func serverResponseContextMatches(envelopeContext, serverCode, route string) bool {
+	parts := strings.SplitN(envelopeContext, ":", 3)
+	return len(parts) == 3 && parts[0] == "server" && strings.TrimSpace(parts[1]) != "" &&
+		route != "" && parts[2] == route && (serverCode == "" || parts[1] == serverCode)
+}
+
+func validDecryptedServerData(data []byte, route string) bool {
+	if !utf8.Valid(data) || !json.Valid(data) || bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		return false
+	}
+	// These fields determine whether a player may join. Missing/null discriminators
+	// must not acquire Go's zero values after a successful decryption.
+	switch route {
+	case "whitelist", "whitelist/check":
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(data, &fields) != nil {
+			return false
+		}
+		if route == "whitelist" {
+			var mode *int
+			return json.Unmarshal(fields["mode"], &mode) == nil && mode != nil && *mode >= 0 && *mode <= 2
+		}
+		var allowed *bool
+		return json.Unmarshal(fields["allowed"], &allowed) == nil && allowed != nil
+	}
+	return true
 }
 
 func (c *Client) send(ctx context.Context, method, path string, query url.Values, body any) (*Response, error) {
