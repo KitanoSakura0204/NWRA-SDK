@@ -1,4 +1,4 @@
-import { BotApiError } from "./errors.js";
+import { BotApiError, BotTransportError } from "./errors.js";
 import type {
   BindResult,
   CommandResult,
@@ -19,6 +19,8 @@ export interface BotClientOptions {
   fetch?: typeof fetch;
   /** Accept-Language sent on every request; omit to let the server use its default. */
   lang?: string;
+  /** Total request timeout, including response body consumption. Defaults to 10 seconds. */
+  timeoutMs?: number;
 }
 
 /**
@@ -34,12 +36,15 @@ export class BotClient {
   readonly token: string;
   private readonly fetchImpl: typeof fetch;
   private readonly lang?: string;
+  private readonly timeoutMs: number;
 
   constructor(opts: BotClientOptions) {
     this.baseUrl = opts.baseUrl.replace(/\/+$/, "");
     this.token = opts.token;
     this.fetchImpl = opts.fetch ?? fetch;
     this.lang = opts.lang;
+    this.timeoutMs = opts.timeoutMs ?? 10_000;
+    if (!Number.isFinite(this.timeoutMs) || this.timeoutMs <= 0) throw new RangeError("timeoutMs must be positive");
   }
 
   private headers(extra?: Record<string, string>): Record<string, string> {
@@ -58,21 +63,28 @@ export class BotClient {
       const qs = new URLSearchParams(query).toString();
       if (qs) url += `?${qs}`;
     }
-    const res = await this.fetchImpl(url, {
-      method,
-      headers: this.headers(),
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    let env: Envelope<T>;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      env = (await res.json()) as Envelope<T>;
-    } catch {
-      throw new BotApiError(res.status, `bot api: non-JSON response (HTTP ${res.status})`);
+      const res = await this.fetchImpl(url, {
+        method, headers: this.headers(), redirect: "error", signal: controller.signal,
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      const env = (await res.json()) as Envelope<T>;
+      if (!env || typeof env !== "object" || !Number.isInteger(env.code)) {
+        throw new BotTransportError(`bot api: invalid envelope (HTTP ${res.status})`);
+      }
+      if (env.code !== 0) throw new BotApiError(env.code, env.message || `bot api error ${env.code}`);
+      if (!res.ok || !env.data || typeof env.data !== "object") {
+        throw new BotTransportError(`bot api: invalid data or HTTP failure (${res.status})`);
+      }
+      return env.data;
+    } catch (err) {
+      if (err instanceof BotApiError) throw err;
+      throw new BotTransportError(controller.signal.aborted ? "bot api: request timed out" : "bot api: request or response failed", err);
+    } finally {
+      clearTimeout(timer);
     }
-    if (env.code !== 0) {
-      throw new BotApiError(env.code, env.message || `bot api error ${env.code}`);
-    }
-    return env.data as T;
   }
 
   /** POST /api/bot/v1/bind: the user sent "/bind CODE" in chat. */

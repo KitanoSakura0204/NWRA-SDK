@@ -7,3 +7,12 @@ export class BotApiError extends Error {
     this.code = code;
   }
 }
+
+/** Network, timeout, malformed envelope or HTTP failure without a business error.
+ * Extends BotApiError for existing adapter catch blocks; code -1 is local, never a server code. */
+export class BotTransportError extends BotApiError {
+  constructor(message: string, public cause?: unknown) {
+    super(-1, message);
+    this.name = "BotTransportError";
+  }
+}
