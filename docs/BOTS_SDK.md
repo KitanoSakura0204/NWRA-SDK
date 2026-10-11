@@ -63,26 +63,40 @@ type Message = Segment[]
 
 `GET /api/bot/v1/events`：
 
-- **带 WebSocket 升级**：服务端先发 `{"type":"hello","botId","heartbeat"}`，随后每条待投递通知发 `{"type":"message","id","botId","kind?","target","message","time"}`；客户端用 `{"type":"ack","ids":[id]}`（也接受 `{"id":n}`）确认，`{"type":"ping"}` 要回 `{"type":"pong"}`。未确认的通知按退避重试，最长 24 小时后放弃。
+- **带 WebSocket 升级**：服务端先发 `{"type":"hello","botId","heartbeat"}`，随后每条待投递通知发 `{"type":"message","id","botId","kind?","target","message","time"}`；客户端用 `{"type":"ack","ids":[id]}`（也接受 `{"id":n}`）确认。客户端按 `heartbeat` 指定的秒数主动发送 JSON `{"type":"ping"}`，服务端回复 `{"type":"pong"}`；如收到对端 ping，客户端也回复 pong。两个共享客户端将间隔限制在 5–60 秒，缺省或无效值回退到 60 秒，并在关闭、停止或重连时清理旧连接的心跳；WebSocket 控制帧 ping 不能替代此应用层心跳。未确认的通知按退避重试，最长 24 小时后放弃。
 - **不带升级（轮询）**：返回 `{"events": [...]}`（当前到期的，最多 50 条），处理后调用 `POST /api/bot/v1/events/ack`。
 
-`target: {chatType, chatId?, userId?}` 指出该发到哪个会话；三个插件都在收到后立即发送并确认，不做排队。
+`target: {chatType, chatId?, userId?}` 指出目的会话。三个插件只在发送成功后确认；机器人离线、目标缺失、适配器发送失败时保留待投递，服务端会重试。多机器人实例必须明确选择通知机器人，避免同一个 ID 被误发到另一个平台。
 
-**没有面向插件的 HMAC 签名 HTTP 推送**——那是网关对原生平台（Feishu/DingTalk/WeCom 等 webhook）入站请求的鉴权方式，与本 SDK 的插件鉴权（Bot 令牌 + WebSocket/轮询）是两条不同的路径，不要混用。
+**签名 HTTP 推送已支持**：framework 模式配置 `pushUrl` 与 `pushSecret`，无 WebSocket 连接时后端向插件 POST 一个与 WebSocket 相同的 `PluginEvent`。请求头为 `X-Nowork-Event: bot.message`、`X-Nowork-Delivery: <event.id>`、`X-Nowork-Timestamp: <Unix秒>`、`X-Nowork-Signature: sha256=<hex HMAC-SHA256(pushSecret, timestamp + "." + 原始body)>`。
+
+Python `verify_push(secret, headers, bodyBytes)` 与 TypeScript `verifyPush(secret, headers, rawBytes)` 校验原始字节、签名、默认 300 秒时间窗、事件名和投递 ID 后返回事件；不能先解析并重新序列化 JSON。接收方以事件 ID 幂等处理，投递成功才返回 2xx；失败返回非 2xx 触发重试。这是 framework Bot 推送协议，与普通站点 Webhook 信封和原生平台回调不同。签名助手不自动启动 HTTP 监听，宿主框架自行挂载路由。
+
+```python
+from nowork_bot_client import verify_push
+event = verify_push(push_secret, request_headers, raw_body_bytes)
+# Deliver through the selected adapter, persist event.id, then return HTTP 204.
+```
+
+Python 与 TypeScript Bot HTTP 客户端默认总超时 10 秒（Python `timeout`，TypeScript `timeoutMs`），覆盖响应体读取。非零服务器 code 为 `BotApiError`；网络/超时/坏信封/异常 HTTP 为 `BotTransportError`，该类型继承 `BotApiError`（本地 code=-1）以兼容现有适配器错误处理。
 
 ## 7. 兼容表
 
 | 框架 | 适配器/环境 | 测试方式 | 实测状态 |
 | --- | --- | --- | --- |
 | NoneBot2 | OneBot v11 (go-cqhttp/NapCat/LLOneBot/Lagrange.OneBot) | pytest + 假 BotClient | 未对真实平台实测（见下「实测清单」） |
-| NoneBot2 | QQ 官方机器人、Feishu、Telegram 等 | 同上（`convert.py` 通用适配） | 未实测；通知推送假定 OneBot 风格 `send_msg`，其他适配器需要补充分支（见插件 README「已知限制」） |
+| NoneBot2 | OneBot v12、QQ 官方机器人、Feishu、Telegram | `delivery.py` 适配器发送分支 + 假 Bot 测试 | 已实现各自发送 API；未对真实平台实测，QQ 主动消息仍受平台配额/权限约束 |
 | Koishi v4 | 任意已安装的 Koishi 适配器 | node:test + 假 BotClient | 未实测；`chatType` 推断已核对 OneBot，其他适配器未核对 |
-| Wechaty | 任意 puppet（padlocal、wechat4u 等） | node:test + 假 BotClient | 未实测；通知投递的 `Room.load(id)` 路径标记 `unverified`（见插件 README） |
+| Wechaty | 任意 puppet（padlocal、wechat4u 等） | node:test + 假 BotClient / 通知 API | 使用 1.20.2 公开的 Room/Contact `find({id})`、`say()` 和 `emitError()`；真实 puppet 投递及权限未实测 |
 
 ## 8. 实测清单（需要用户对真实平台验证）
 
 1. NoneBot2 + 真实 OneBot v11 实现：`/bind` 绑定码流程、`/unbind`、`/me`、未命中指令的穿透、以及站点推送通知能否正常收到并在群/私聊里显示。
-2. NoneBot2 + 非 OneBot 适配器（Feishu/Telegram/QQ 官方机器人任一）：通知推送目前假定 `bot.send_msg(user_id=,group_id=,message=)`，在这些适配器上会调用失败；需要确认失败后的回退（遍历其他已连接的 bot）是否足够，或需要按适配器分支实现发送。
-3. Koishi + 至少两种不同协议族的适配器（如 OneBot 和 Discord 或 Telegram）：`chatType` 判定（私聊/群聊/频道）、`bind`/`unbind`/`me` 指令、中间件穿透、通知投递（`ctx.bots` 选第一个在线实例）。
-4. Wechaty + 真实 puppet：群聊通知投递的 `Room.load(id)` 路径（标记为 unverified，最值得优先验证）、联系人通知投递、指令前缀解析在实际微信消息格式下的表现（@提及、引用消息等 Wechaty 的 `message.text()` 返回值是否符合预期）。
+2. NoneBot2 + 非 OneBot 适配器（Feishu/Telegram/QQ 官方机器人任一）：核对配置的通知 bot ID、目标 ID 类型和平台发送权限；发送失败必须保持未确认。多机器人设置 `nowork_notification_bot_id`。
+3. Koishi + 至少两种不同协议族的适配器：核对私聊 `sendPrivateMessage` 和群聊 `sendMessage`、通知 `notificationBotId`、指令和未命中透传。
+4. Wechaty + 真实 puppet：通过公开的 Room/Contact `find({id})` 按不透明 ID 投递到群聊和联系人；目标不存在或发送失败时保持未确认。验证指令前缀在实际微信消息格式下的表现（@提及、引用消息等 `message.text()` 返回值是否符合预期）。
 5. 三个插件通用：绑定码过期/重复使用的报错文案是否清晰；机器人令牌撤销后插件的报错与重连行为；WebSocket 断线重连（拔网线/重启网关）后退避是否生效、通知是否补发且不重复。
+
+## 9. English update (2026-10-08)
+
+Framework bots support signed HTTP pushes while no WebSocket is connected. Verify the exact raw body with `verify_push` / `verifyPush`, persist the delivery ID, and return 2xx only after successful delivery. HTTP clients now enforce a configurable 10-second total deadline and distinguish `BotTransportError` from server business errors. Failed adapter delivery is not acknowledged. NoneBot provides explicit OneBot v11/v12, Telegram, Feishu and QQ send branches; select a notification bot explicitly when several connect. Real-platform verification remains required.
