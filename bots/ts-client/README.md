@@ -41,6 +41,8 @@ const stop = connectEvents({
 
 没有 WebSocket 的环境可改用轮询：`client.pollEvents()` 取回当前到期的通知，处理后调用 `client.ackEvents([id, ...])`。
 
+事件中的可选 `siteId` 表示服务器确定的机器人所属站点；旧服务器未返回该字段时仍可正常接收。WebSocket、轮询和 `verifyPush` 都保留此字段。API 继续使用机器人令牌鉴权，请求无需提供站点 ID，确认通知仍只发送事件 ID。
+
 ## 协议来源
 
 字段名和返回结构来自后端已落地代码 `Backend/internal/modules/bots/{api.go,ws.go,hub.go,platform.go}`（commit df7b675 / d52a936），阅读日期 2026-09-29；目前没有对外发布的协议文档。完整字段表见 `SDK/docs/BOTS_SDK.md`。
@@ -74,6 +76,8 @@ own `package.json`.
 See the Chinese section above for a full example; the API is `BotClient` (bind / unbind /
 lookup / command / commands / pollEvents / ackEvents) and `connectEvents` for the WebSocket
 notification stream with automatic reconnect and per-message ack.
+
+Events preserve optional `siteId` metadata in WebSocket, polling and verified HTTP pushes. Older servers may omit it. The server derives the owning site from the bot token; requests need no site selector, and acknowledgements still contain only event IDs.
 
 ## Where the protocol comes from
 
