@@ -1,6 +1,7 @@
 """NoWork Account SDK: game-server whitelist API and OIDC helpers (standard library only)."""
 from .client import HEADER_ENCRYPTION, CheckResult, NoworkClient, OnlinePlayer, RawResponse, Whitelist, WhitelistEntry
 from .errors import ApiError, EncryptionError, NoWorkError, OAuthError, TransportError
+from .entitlements import Entitlement, EntitlementValues
 from .gm import GMAction, GMActionParam, GMOption, GMPublishResult
 from .oidc import NoworkOIDC
 from .account import AccountClient
@@ -56,10 +57,12 @@ __all__ = [
     "is_version_conflict",
     "CODE_NOT_ON_ROSTER",
     "CODE_VERSION_CONFLICT",
+    "Entitlement",
+    "EntitlementValues",
     "CODE_ADMIN_BAN",
     "WebhookEvent",
     "WebhookError",
     "verify_webhook",
     "webhook_signature",
 ]
-__version__ = "1.1.0"
+__version__ = "1.2.0"
