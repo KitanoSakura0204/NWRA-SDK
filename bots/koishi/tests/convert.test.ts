@@ -17,6 +17,15 @@ test("noworkMessageToText handles empty input", () => {
   assert.equal(noworkMessageToText([]), "");
 });
 
+test("canonical server keys and Markdown keep their readable content", () => {
+  assert.equal(noworkMessageToText([
+    { type: "markdown", data: { text: "**Security alert** " } },
+    { type: "mention", data: { user_id: "42", userId: "legacy" } },
+    { type: "text", data: { text: " " } },
+    { type: "link", data: { title: "Support", label: "legacy", url: "https://account.example/help" } },
+  ]), "**Security alert** @42 Support (https://account.example/help)");
+});
+
 test("platformOf maps known Koishi platform names", () => {
   assert.equal(platformOf("onebot"), "onebot11");
   assert.equal(platformOf("qq"), "qq_bot");
