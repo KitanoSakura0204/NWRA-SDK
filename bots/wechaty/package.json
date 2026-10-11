@@ -1,6 +1,6 @@
 {
   "name": "wechaty-plugin-nowork",
-  "version": "0.1.0",
+  "version": "1.2.0",
   "description": "NoWork Account bind/unbind/me and command bridge for Wechaty (personal WeChat, any puppet)",
   "type": "module",
   "main": "./dist/index.js",
