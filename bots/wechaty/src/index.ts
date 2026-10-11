@@ -8,7 +8,7 @@ export interface NoWorkPluginConfig {
   baseUrl: string;
   /** This bot's token (issued in the admin: 开放平台 -> 机器人). */
   botToken: string;
-  /** Platform name sent to the Bot API (default "wechaty": a generic/bridge bot kind). */
+  /** Platform name sent to the Bot API (default "wechat": framework personal WeChat). */
   platform?: string;
   /** Command prefixes this plugin answers to (default ["/"]) . */
   prefixes?: string[];
@@ -16,6 +16,45 @@ export interface NoWorkPluginConfig {
   allowedChats?: string[];
   /** Accept-Language sent to the Bot API. */
   lang?: string;
+}
+
+/** Only the public Wechaty methods used by the notification callbacks. */
+interface NotificationTarget {
+  say(text: string): Promise<unknown>;
+}
+
+interface NotificationBot {
+  Room: { find(query: { id: string }): Promise<NotificationTarget | undefined> };
+  Contact: { find(query: { id: string }): Promise<NotificationTarget | undefined> };
+  emitError(error: unknown): void;
+}
+
+export function notificationHandlers(bot: NotificationBot): {
+  onEvent(event: PluginEvent): Promise<void>;
+  onError(error: unknown): void;
+} {
+  return {
+    async onEvent(ev) {
+      const text = noworkMessageToText(ev.message);
+      if (!text) return;
+      // Public find({id}) resolves the exact opaque ID and readies the entity.
+      // It can return undefined after lookup failure; that must remain unacked.
+      if (ev.target.chatType === "private") {
+        const contactId = ev.target.userId ?? ev.target.chatId;
+        if (!contactId) throw new Error("nowork: notification destination is missing");
+        const contact = await bot.Contact.find({ id: contactId });
+        if (!contact) throw new Error("nowork: notification contact is unavailable");
+        await contact.say(text);
+        return;
+      }
+      const roomId = ev.target.chatId;
+      if (!roomId) throw new Error("nowork: group notification requires chatId");
+      const room = await bot.Room.find({ id: roomId });
+      if (!room) throw new Error("nowork: notification room is unavailable");
+      await room.say(text);
+    },
+    onError(error) { bot.emitError(error); },
+  };
 }
 
 /**
@@ -29,7 +68,7 @@ export interface NoWorkPluginConfig {
  * Backend/internal/modules/bots, commit df7b675 / d52a936, 2026-09-29).
  */
 export function NoWorkPlugin(config: NoWorkPluginConfig) {
-  const platform = config.platform ?? "wechaty";
+  const platform = config.platform ?? "wechat";
   const prefixes = config.prefixes ?? ["/"];
   const allowedChats = config.allowedChats ?? [];
   const client = new BotClient({ baseUrl: config.baseUrl, token: config.botToken, lang: config.lang });
@@ -41,39 +80,7 @@ export function NoWorkPlugin(config: NoWorkPluginConfig) {
       stopEvents = connectEvents({
         baseUrl: config.baseUrl,
         token: config.botToken,
-        onEvent: async (ev: PluginEvent) => {
-          const text = noworkMessageToText(ev.message);
-          if (!text) return;
-          // Target.chatId is an opaque WeChat room/contact id (not a topic or display
-          // name), so Room.find({topic}) / Contact.find({name}) do not apply here;
-          // load(id) resolves an entity directly from a known id (bot.Contact.load:
-          // https://wechaty.js.org/docs/api/contact, read 2026-09-29). The room id is
-          // tried first since group notifications are the common case.
-          const targetId = ev.target.chatId ?? ev.target.userId;
-          if (!targetId) return;
-          // load(id) is synchronous (returns the entity right away, from cache or a bare
-          // id; https://wechaty.js.org/docs/api/contact shows it called without await) -
-          // sync() afterwards fetches its data before say() is safe to call.
-          try {
-            if (ev.target.chatId) {
-              // unverified: Room.load(id) mirrors Contact.load(id) by Wechaty's own
-              // convention, but was not directly confirmed in the fetched docs.
-              const room = bot.Room.load(ev.target.chatId);
-              await room.sync();
-              await room.say(text);
-              return;
-            }
-          } catch (err) {
-            bot.emit("error", err as Error); // fall through to the contact attempt below
-          }
-          try {
-            const contact = bot.Contact.load(targetId);
-            await contact.sync();
-            await contact.say(text);
-          } catch (err) {
-            bot.emit("error", err as Error);
-          }
-        },
+        ...notificationHandlers(bot),
       });
     });
 
