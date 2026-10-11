@@ -4,7 +4,7 @@
 
 ## 安装
 
-本包未发布到 PyPI；`../nonebot2` 以本地路径依赖的方式引用它（见其 `pyproject.toml`）。
+本包未发布到 PyPI；`../nonebot2` 依赖本包的 `1.2.0` 版本。开发期从 `SDK/bots/nonebot2` 目录运行 `python -m pip install -e "../python-client" -e "."`，同时安装两个本地项目。
 
 ## 用法
 
@@ -31,6 +31,8 @@ await connect_events("https://nowork.example.com", "<bot token>", on_event)
 
 没有 WebSocket 的环境可改用轮询：`await client.poll_events()` 取回当前到期的通知，处理后调用 `await client.ack_events([id, ...])`。
 
+事件中的 `siteId` 映射为 `PluginEvent.site_id`，表示服务器确定的机器人所属站点。旧服务器未返回该字段时为 `None`；WebSocket、轮询和 `verify_push` 均保留该信息。API 继续使用机器人令牌鉴权，请求无需提供站点 ID，确认通知仍只发送事件 ID。
+
 ## 协议来源
 
 字段名和返回结构来自后端已落地代码 `Backend/internal/modules/bots/{api.go,ws.go,hub.go,platform.go}`（commit df7b675 / d52a936），阅读日期 2026-09-29；完整字段表见 `SDK/docs/BOTS_SDK.md`。
@@ -54,14 +56,17 @@ reconnect logic.
 
 ## Install
 
-Not published to PyPI; `../nonebot2` depends on it via a local path (see its
-`pyproject.toml`).
+Not published to PyPI; `../nonebot2` depends on version `1.2.0` of this package.
+From `SDK/bots/nonebot2`, run `python -m pip install -e "../python-client" -e "."`
+to install both local projects during development.
 
 ## Usage
 
 See the Chinese section above for a full example; the API is `BotClient` (bind / unbind /
 lookup / command / commands / poll_events / ack_events) and `connect_events` for the
 WebSocket notification stream with automatic reconnect and per-message ack.
+
+`PluginEvent.site_id` preserves the server's optional `siteId` in WebSocket, polling and verified HTTP pushes; it is `None` for older events. The server derives the owning site from the bot token, so requests need no site selector and acknowledgements still contain only event IDs. The new optional field is appended to preserve existing positional constructors.
 
 ## Where the protocol comes from
 
