@@ -1,17 +1,16 @@
 {
   "name": "koishi-plugin-nowork",
-  "version": "0.1.0",
+  "version": "1.2.0",
   "description": "NoWork Account bind/unbind/me and command bridge for Koishi v4 (works on any Koishi adapter)",
   "type": "module",
-  "main": "lib/index.cjs",
-  "module": "lib/index.mjs",
-  "types": "lib/index.d.ts",
+  "main": "./lib/index.js",
+  "module": "./lib/index.js",
+  "types": "./lib/index.d.ts",
   "files": ["lib", "README.md"],
   "exports": {
     ".": {
       "types": "./lib/index.d.ts",
-      "import": "./lib/index.mjs",
-      "require": "./lib/index.cjs"
+      "import": "./lib/index.js"
     }
   },
   "koishi": {
@@ -32,6 +31,7 @@
     "koishi": "^4.17.0"
   },
   "dependencies": {
+    "@koishijs/core": "4.17.9",
     "@nowork/bot-client": "file:../ts-client"
   },
   "devDependencies": {
