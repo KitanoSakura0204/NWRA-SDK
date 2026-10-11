@@ -9,16 +9,17 @@ export function noworkMessageToText(message: Message | undefined | null): string
     const data = seg.data ?? {};
     switch (seg.type) {
       case "text":
+      case "markdown":
         parts.push(data.text ?? "");
         break;
       case "mention":
-        parts.push(`@${data.userId ?? data.name ?? ""}`);
+        parts.push(`@${data.user_id ?? data.userId ?? data.name ?? ""}`);
         break;
       case "mention_all":
         parts.push("@all");
         break;
       case "link": {
-        const label = data.label || data.url || "";
+        const label = data.title || data.label || data.url || "";
         parts.push(label !== data.url ? `${label} (${data.url ?? ""})` : data.url ?? "");
         break;
       }
