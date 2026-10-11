@@ -64,14 +64,14 @@ def nowork_message_to_text(message: Optional[NoworkMessage]) -> str:
     for seg in message:
         seg_type = seg.get("type", "text")
         data = seg.get("data") or {}
-        if seg_type == "text":
+        if seg_type in ("text", "markdown"):
             parts.append(data.get("text", ""))
         elif seg_type == "mention":
-            parts.append(f"@{data.get('userId', data.get('name', ''))}")
+            parts.append(f"@{data.get('user_id', data.get('userId', data.get('name', '')))}")
         elif seg_type == "mention_all":
             parts.append("@all")
         elif seg_type == "link":
-            label = data.get("label") or data.get("url", "")
+            label = data.get("title") or data.get("label") or data.get("url", "")
             parts.append(f"{label} ({data.get('url', '')})" if label != data.get("url") else data.get("url", ""))
         elif seg_type == "image":
             parts.append(f"[image: {data.get('url', '')}]")

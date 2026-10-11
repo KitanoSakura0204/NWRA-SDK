@@ -18,6 +18,16 @@ def test_nowork_message_to_text_empty():
     assert nowork_message_to_text([]) == ""
 
 
+def test_canonical_server_keys_and_markdown_keep_readable_content():
+    message = [
+        {"type": "markdown", "data": {"text": "**Security alert** "}},
+        {"type": "mention", "data": {"user_id": "42", "userId": "legacy"}},
+        {"type": "text", "data": {"text": " "}},
+        {"type": "link", "data": {"title": "Support", "label": "legacy", "url": "https://account.example/help"}},
+    ]
+    assert nowork_message_to_text(message) == "**Security alert** @42 Support (https://account.example/help)"
+
+
 def test_platform_of_known_adapter():
     assert platform_of("OneBot V11", None) == "onebot11"
     assert platform_of("Telegram", None) == "telegram"
