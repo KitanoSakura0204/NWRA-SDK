@@ -22,16 +22,20 @@ public class NoWorkException extends Exception {
     }
 
     /**
-     * A Server API reply was encrypted and could not be used (no decryption key configured). Not a
-     * Transport error on purpose: the data was never read, so never fail open on it (an unreadable
-     * whitelist is not a disabled whitelist).
+     * A Server API reply could not be opened or its protected context did not match, or a whitelist
+     * reply arrived plain with decryption keys configured. Not a Transport error: never use outage
+     * admission for an unreadable or downgraded whitelist.
      */
     public static class Encryption extends NoWorkException {
         public final String route;
         public final String reason;
 
         public Encryption(String route, String reason) {
-            super("nowork: encrypted response on " + route + ": " + reason);
+            this(route, reason, null);
+        }
+
+        public Encryption(String route, String reason, Throwable cause) {
+            super("nowork: encrypted response on " + route + ": " + reason, cause);
             this.route = route;
             this.reason = reason;
         }

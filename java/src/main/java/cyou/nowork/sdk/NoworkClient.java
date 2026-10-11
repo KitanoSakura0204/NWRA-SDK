@@ -1,6 +1,7 @@
 package cyou.nowork.sdk;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -25,6 +26,9 @@ import java.util.Objects;
  * }</pre>
  */
 public class NoworkClient {
+    /** SDK release this client implements (see CHANGELOG.md). */
+    public static final String VERSION = "1.2.0";
+
     /** Marks a Server API reply whose data is the {"jwe": "..."} envelope (DELIVERY.md section 5). */
     public static final String HEADER_ENCRYPTION = "X-NoWork-Encryption";
 
@@ -32,12 +36,38 @@ public class NoworkClient {
     private final String serverKey;
     private final HttpClient http;
     private final Duration timeout;
+    private final String encryptionServerCode;
+    private final NoWorkDelivery.PrivateJwk[] decryptionKeys;
 
     public NoworkClient(String base, String serverKey) {
         this(base, serverKey, Duration.ofSeconds(10));
     }
 
     public NoworkClient(String base, String serverKey, Duration timeout) {
+        this(base, serverKey, timeout, null);
+    }
+
+    /**
+     * Opens encrypted Server API replies with the supplied private JWKs. Supply the server code from
+     * server management (not its numeric ID), and both old and new keys during rotation. The protected
+     * ctx must equal "server:" + serverCode + ":" + the requested route. With keys configured,
+     * whitelist and whitelist/check must be encrypted; normal plaintext heartbeat/GM replies remain
+     * valid. The original constructors keep refusing encrypted replies without attempting decryption.
+     */
+    public NoworkClient(String base, String serverKey, Duration timeout, String serverCode,
+                        NoWorkDelivery.PrivateJwk... decryptionKeys) {
+        if (decryptionKeys == null) throw new IllegalArgumentException("decryptionKeys must not be null");
+        if (decryptionKeys.length > 0 && (serverCode == null || serverCode.isBlank())) {
+            throw new IllegalArgumentException("serverCode is required with decryption keys");
+        }
+        if (serverCode != null && decryptionKeys.length == 0) {
+            throw new IllegalArgumentException("at least one decryption key is required with serverCode");
+        }
+        this.decryptionKeys = decryptionKeys.clone();
+        for (NoWorkDelivery.PrivateJwk key : this.decryptionKeys) {
+            if (key == null) throw new IllegalArgumentException("decryptionKeys must not contain null");
+        }
+        this.encryptionServerCode = serverCode;
         this.base = base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
         this.serverKey = Objects.requireNonNull(serverKey, "serverKey");
         this.timeout = timeout;
@@ -307,18 +337,65 @@ public class NoworkClient {
         return data instanceof Map<?, ?> ? (Map<String, Object>) data : Map.of();
     }
 
-    /** Decoded data; an encrypted reply throws {@link NoWorkException.Encryption} instead (fail closed). */
+    /** Decoded data; unreadable encrypted replies and protected-route downgrades fail closed. */
     private Object callRaw(String method, String path, String body) throws NoWorkException {
         RawResponse res = raw(method, path, body);
-        if (res.encrypted) throw new NoWorkException.Encryption(route(path), "no decryption key configured");
+        String route = route(path);
+        if (res.encrypted) {
+            if (decryptionKeys.length == 0) throw new NoWorkException.Encryption(route, "no decryption key configured");
+            return openServerData(res, route);
+        }
+        if (decryptionKeys.length > 0 && sealedRoute(route)) {
+            throw new NoWorkException.Encryption(route, "plain reply while decryption keys are configured");
+        }
         if (res.data == null) throw new NoWorkException.Transport("invalid response (" + res.status + "): missing data");
         return res.data;
     }
 
+    private Object openServerData(RawResponse res, String route) throws NoWorkException.Encryption {
+        try {
+            if (!(res.data instanceof Map<?, ?> envelope) || envelope.size() != 1
+                    || !(envelope.get("jwe") instanceof String jwe) || jwe.isEmpty()) {
+                throw new IllegalArgumentException("encrypted reply must contain one nonempty JWE");
+            }
+            String plain = NoWorkDelivery.openServerData(encode(res.data),
+                    "server:" + encryptionServerCode + ":" + route, decryptionKeys);
+            // Reuse the SDK's strict bounded JSON reader: authenticated but malformed JSON must not
+            // turn into an empty, disabled whitelist through the legacy reader's permissive defaults.
+            Object data = GameDataModels.parse(plain);
+            if (!(data instanceof Map<?, ?>) && !(data instanceof List<?>)) {
+                throw new IllegalArgumentException("decrypted data must be an object or array");
+            }
+            if (sealedRoute(route)) {
+                if (!(data instanceof Map<?, ?> fields)) {
+                    throw new IllegalArgumentException("decrypted whitelist data must be an object");
+                }
+                if ("whitelist".equals(route)) {
+                    Object mode = fields.get("mode");
+                    if (!(mode instanceof Number)) {
+                        throw new IllegalArgumentException("decrypted whitelist has no valid mode");
+                    }
+                    int value = new BigDecimal(mode.toString()).intValueExact();
+                    if (value < 0 || value > 2) throw new IllegalArgumentException("decrypted whitelist has no valid mode");
+                } else if (!(fields.get("allowed") instanceof Boolean)) {
+                    throw new IllegalArgumentException("decrypted join check has no allowed flag");
+                }
+            }
+            return data;
+        } catch (RuntimeException e) {
+            throw new NoWorkException.Encryption(route, "encrypted data could not be opened or validated", e);
+        }
+    }
+
+    private static boolean sealedRoute(String route) {
+        return "whitelist".equals(route) || "whitelist/check".equals(route);
+    }
+
     /**
      * Call a Server API route (e.g. "/server/v1/whitelist", query included) and return the reply
-     * without decoding data, e.g. to hand {@code body} to NoWorkDelivery.openServerData. Transport
-     * failures and business errors (code != 0) still throw.
+     * without decoding data, even when keys are configured, e.g. to hand {@code body} to
+     * NoWorkDelivery.openServerData. Transport failures and business errors (code != 0) still throw;
+     * an invalid envelope marked as encrypted is an Encryption error, never an outage fallback.
      */
     @SuppressWarnings("unchecked")
     public RawResponse raw(String method, String path, String body) throws NoWorkException {
@@ -338,28 +415,34 @@ public class NoworkClient {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             throw new NoWorkException.Transport(e);
         }
+        boolean encryptedHeader = res.headers().firstValue(HEADER_ENCRYPTION).filter(v -> !v.isEmpty()).isPresent();
         Object parsed;
         try {
             parsed = Json.parse(res.body());
         } catch (RuntimeException e) { // an HTML error page or a cut-off body must not escape unchecked
-            throw new NoWorkException.Transport("invalid json (" + res.statusCode() + ")");
+            throw responseFailure(path, "invalid json (" + res.statusCode() + ")", encryptedHeader);
         }
-        if (!(parsed instanceof Map<?, ?>)) throw new NoWorkException.Transport("invalid response (" + res.statusCode() + ")");
+        if (!(parsed instanceof Map<?, ?>)) throw responseFailure(path, "invalid response (" + res.statusCode() + ")", encryptedHeader);
         Map<String, Object> env = (Map<String, Object>) parsed;
+        boolean encrypted = encryptedHeader || isJweData(env.get("data"));
         if (!(env.get("code") instanceof Number)) {
-            throw new NoWorkException.Transport("invalid response (" + res.statusCode() + "): missing code");
+            throw responseFailure(path, "invalid response (" + res.statusCode() + "): missing code", encrypted);
         }
         int code = ((Number) env.get("code")).intValue();
         if (code != 0) throw new NoWorkException.Api(code, Json.str(env.get("message")));
-        if (res.statusCode() >= 400) throw new NoWorkException.Transport("http " + res.statusCode());
+        if (res.statusCode() >= 400) throw responseFailure(path, "http " + res.statusCode(), encrypted);
         RawResponse out = new RawResponse();
         out.status = res.statusCode();
         out.headers = res.headers().map();
         out.message = Json.str(env.get("message"));
         out.data = env.get("data");
         out.body = res.body();
-        out.encrypted = res.headers().firstValue(HEADER_ENCRYPTION).filter(v -> !v.isEmpty()).isPresent() || isJweData(out.data);
+        out.encrypted = encrypted;
         return out;
+    }
+
+    private static NoWorkException responseFailure(String path, String reason, boolean encrypted) {
+        return encrypted ? new NoWorkException.Encryption(route(path), reason) : new NoWorkException.Transport(reason);
     }
 
     /** "whitelist/check" for "/server/v1/whitelist/check?name=..." */
@@ -370,7 +453,7 @@ public class NoworkClient {
     }
 
     private static boolean isJweData(Object data) {
-        return data instanceof Map<?, ?> && ((Map<?, ?>) data).size() == 1 && ((Map<?, ?>) data).get("jwe") instanceof String;
+        return data instanceof Map<?, ?> && ((Map<?, ?>) data).size() == 1 && ((Map<?, ?>) data).containsKey("jwe");
     }
 
     private static String enc(String s) {
@@ -424,7 +507,7 @@ public class NoworkClient {
         public Object data;
         /** The whole response body. */
         public String body;
-        /** X-NoWork-Encryption is set or data is exactly {"jwe": "<string>"}. */
+        /** X-NoWork-Encryption is set or data is a singleton jwe envelope (including a malformed one). */
         public boolean encrypted;
     }
 
