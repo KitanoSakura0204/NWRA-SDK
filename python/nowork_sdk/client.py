@@ -8,12 +8,17 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
+from .delivery import DecryptError, Keys, decrypt_jwe
+from .entitlements import Entitlement, EntitlementValues, entitlement_body, entitlement_query
 from .errors import ApiError, EncryptionError, TransportError
 from .gm import GMPublishResult, _plain
 from .serverusers import KickEntry, ServerBan, UserData, UserSchema, target
 
 # Marks a Server API reply whose data is the {"jwe": "..."} envelope (DELIVERY.md section 5).
 HEADER_ENCRYPTION = "X-NoWork-Encryption"
+# This transport is separate from the game-data transport and its larger archive-export limit.
+MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+_SEALED_ROUTES = frozenset(("whitelist", "whitelist/check"))
 
 
 @dataclass
@@ -72,11 +77,11 @@ class RawResponse:
     data: Any
     envelope: Dict[str, Any]  # the whole parsed body {code, message, data}
     body: bytes
-    encrypted: bool  # X-NoWork-Encryption is set or data is exactly {"jwe": "<string>"}
+    encrypted: bool  # X-NoWork-Encryption is set or data has only the reserved "jwe" field
 
 
 def _is_jwe_data(data: Any) -> bool:
-    return isinstance(data, dict) and len(data) == 1 and isinstance(data.get("jwe"), str)
+    return isinstance(data, dict) and len(data) == 1 and "jwe" in data
 
 
 def _headers_of(res: Any) -> Dict[str, str]:
@@ -85,6 +90,30 @@ def _headers_of(res: Any) -> Dict[str, str]:
         return {str(k).lower(): str(v) for k, v in items()} if callable(items) else {}
     except (TypeError, ValueError):  # a test double without real headers
         return {}
+
+
+def _route(path: str) -> str:
+    route = path.split("?", 1)[0]
+    return route[len("/server/v1/"):] if route.startswith("/server/v1/") else route
+
+
+def _decryption_keys(keys: Optional[Keys]) -> Tuple[Dict[str, str], ...]:
+    if keys is None:
+        return ()
+    try:
+        supplied = [keys] if isinstance(keys, Mapping) else list(keys)
+    except TypeError as exc:
+        raise ValueError("decryption_keys must be a private JWK or an iterable of private JWKs") from exc
+    snapshot = []
+    for key in supplied:
+        if not isinstance(key, Mapping) or not isinstance(key.get("kty"), str):
+            raise ValueError("each decryption key must be a private JWK mapping")
+        snapshot.append(dict(key))
+    return tuple(snapshot)
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ValueError("non-finite values are not valid JSON")
 
 
 def _player(p: Any) -> Dict[str, str]:
@@ -104,10 +133,24 @@ def _option_lists(options: Mapping[str, list]) -> Dict[str, list]:
 class NoworkClient:
     """Server API client authenticated with an X-Server-Key."""
 
-    def __init__(self, base: str, server_key: str, timeout: float = 10.0):
+    def __init__(self, base: str, server_key: str, timeout: float = 10.0, *,
+                 decryption_keys: Optional[Keys] = None, server_code: Optional[str] = None, opener=None):
+        """Private JWK mappings enable automatic delivery decryption (requires cryptography).
+
+        Keys are copied once, including an iterable used for rotation. Configuring keys requires
+        encrypted whitelist replies; other routes may still reply in plaintext. server_code pins
+        the authenticated context to that server; without it the context's kind/route are checked.
+        opener, when supplied, must provide open(request, timeout=...) like urllib's OpenerDirector.
+        """
         self.base = base.rstrip("/")
         self.server_key = server_key
         self.timeout = timeout
+        self._decryption_keys = _decryption_keys(decryption_keys)
+        if server_code is not None and (not isinstance(server_code, str) or not server_code
+                                       or ":" in server_code or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in server_code)):
+            raise ValueError("server_code must be a nonempty server code without colons or whitespace")
+        self._server_code = server_code
+        self._opener = opener
 
     def raw(self, method: str, path: str, query: Optional[dict] = None, body: Any = None) -> RawResponse:
         """Call a Server API route (e.g. "/server/v1/whitelist") and return the reply without decoding
@@ -115,15 +158,44 @@ class NoworkClient:
         return self._send(method, path, query, body)
 
     def _call(self, method: str, path: str, query: Optional[dict] = None, body: Any = None, allow_list: bool = False) -> Any:
-        """Decoded data; an encrypted reply raises EncryptionError instead (fail closed)."""
+        """Decoded data; unusable encrypted replies and whitelist downgrades fail closed."""
         res = self._send(method, path, query, body)
-        if res.encrypted:
-            route = path[len("/server/v1/"):] if path.startswith("/server/v1/") else path
-            raise EncryptionError(route, "no decryption key configured")
+        route = _route(path)
         data = res.data
+        if res.encrypted:
+            if not self._decryption_keys:
+                raise EncryptionError(route, "no decryption key configured")
+            data = self._open(data, route)
+            if route == "whitelist" and (not isinstance(data, dict) or type(data.get("mode")) is not int
+                                         or data["mode"] not in (0, 1, 2)):
+                raise EncryptionError(route, "decrypted whitelist must contain an integer mode from 0 to 2")
+            if route == "whitelist/check" and (not isinstance(data, dict) or type(data.get("allowed")) is not bool):
+                raise EncryptionError(route, "decrypted join check must contain a boolean allowed")
+        elif self._decryption_keys and route in _SEALED_ROUTES:
+            raise EncryptionError(route, "plain reply while decryption keys are configured")
         if not isinstance(data, dict) and not (allow_list and isinstance(data, list)):
+            if res.encrypted:
+                raise EncryptionError(route, "decrypted data has an invalid shape")
             raise TransportError(f"invalid response (http {res.status}): missing data")
         return data
+
+    def _open(self, data: Any, route: str) -> Any:
+        jwe = data.get("jwe") if _is_jwe_data(data) else None
+        if not isinstance(jwe, str) or not jwe:
+            raise EncryptionError(route, "encrypted reply without a JWE")
+        try:
+            plain, header = decrypt_jwe(jwe, self._decryption_keys)
+        except (DecryptError, ValueError, TypeError, AttributeError, KeyError, IndexError, OverflowError, RecursionError) as exc:
+            raise EncryptionError(route, "the JWE did not open") from exc
+        ctx = header.get("ctx") if isinstance(header, dict) else None
+        parts = ctx.split(":", 2) if isinstance(ctx, str) else []
+        if (len(parts) != 3 or parts[0] != "server" or not parts[1] or parts[2] != route
+                or (self._server_code is not None and parts[1] != self._server_code)):
+            raise EncryptionError(route, "envelope ctx mismatch")
+        try:
+            return json.loads(plain, parse_constant=_reject_json_constant)
+        except (ValueError, TypeError, RecursionError) as exc:
+            raise EncryptionError(route, "decrypted data is not JSON") from exc
 
     def _send(self, method: str, path: str, query: Optional[dict] = None, body: Any = None) -> RawResponse:
         url = self.base + path
@@ -139,18 +211,21 @@ class NoworkClient:
         if data is not None:
             req.add_header("Content-Type", "application/json")
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as res:
-                raw, status, headers = res.read(), int(getattr(res, "status", 200) or 200), _headers_of(res)
+            send = self._opener.open if self._opener is not None else urllib.request.urlopen
+            with send(req, timeout=self.timeout) as res:
+                raw, status, headers = res.read(MAX_RESPONSE_BYTES + 1), int(getattr(res, "status", 200) or 200), _headers_of(res)
         except urllib.error.HTTPError as e:
             try:
-                raw, status, headers = e.read(), e.code, _headers_of(e)
+                raw, status, headers = e.read(MAX_RESPONSE_BYTES + 1), e.code, _headers_of(e)
             finally:
                 e.close()
         except (urllib.error.URLError, OSError) as e:
             raise TransportError(str(e)) from e
+        if len(raw) > MAX_RESPONSE_BYTES:
+            raise TransportError(f"response exceeds {MAX_RESPONSE_BYTES // (1024 * 1024)} MiB")
         try:
-            env = json.loads(raw.decode("utf-8"))
-        except ValueError as e:
+            env = json.loads(raw.decode("utf-8"), parse_constant=_reject_json_constant)
+        except (ValueError, RecursionError) as e:
             raise TransportError(f"invalid json (http {status}): {e}") from e
         if not isinstance(env, dict):
             raise TransportError(f"invalid response (http {status}): not an object")
@@ -309,6 +384,27 @@ class NoworkClient:
         if reason:
             body["reason"] = reason
         return int(self._call("POST", "/server/v1/bans/lift", body=body).get("uid", 0) or 0)
+
+    # ---- Custom per-app values (module "delivery", DELIVERY.md section 8) ----
+
+    def entitlements(self, uid: int = 0, sub: str = "") -> EntitlementValues:
+        """Every custom value this server stored for a user. Name the user by uid, or by the sub
+        this server sees (required by a pairwise delivery profile)."""
+        return EntitlementValues.from_dict(self._call("GET", "/server/v1/delivery/entitlements", entitlement_query(uid, sub)))
+
+    def put_entitlement(self, uid: int = 0, sub: str = "", key: str = "", value: Any = None) -> Entitlement:
+        """Store one key for a user and return what the backend stored. The key must start with a
+        letter and hold only letters, digits and ". _ -" (at most 64 bytes); the value may be any
+        JSON up to 4096 bytes, and a profile holds at most 50 keys per user."""
+        return Entitlement.from_dict(self._call("PUT", "/server/v1/delivery/entitlements", body=entitlement_body(uid, sub, key, value)))
+
+    def delete_entitlement(self, uid: int = 0, sub: str = "", key: str = "") -> Entitlement:
+        """Remove one key. Removing a key that was never written is not an error."""
+        q = entitlement_query(uid, sub)
+        q["key"] = (key or "").strip()
+        if not q["key"]:
+            raise ValueError("entitlement key is required")
+        return Entitlement.from_dict(self._call("DELETE", "/server/v1/delivery/entitlements", q))
 
 
 def _user_path(uid: int) -> str:

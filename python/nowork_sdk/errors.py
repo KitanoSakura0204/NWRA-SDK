@@ -7,7 +7,8 @@ class TransportError(NoWorkError):
 
 
 class EncryptionError(NoWorkError):
-    """A Server API reply was encrypted and could not be used (no decryption key configured).
+    """An encrypted Server API reply could not be used (no keys, decryption/context/data failure),
+    or a whitelist reply was plaintext while decryption keys were configured.
 
     Not a TransportError on purpose: the data was never read, so never fail open on it (an
     unreadable whitelist is not a disabled whitelist).
