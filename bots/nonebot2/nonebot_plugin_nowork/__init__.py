@@ -12,7 +12,7 @@ import asyncio
 import contextlib
 from typing import Optional
 
-from nonebot import get_driver, get_plugin_config, logger, on_command, on_message
+from nonebot import get_driver, get_plugin_config, logger, on_message
 from nonebot.adapters import Bot, Event
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
@@ -23,6 +23,7 @@ from . import logic
 from .config import Config
 from .convert import chat_id_of, chat_type_of, nowork_message_to_text, sender_name_of
 from .platform import platform_of
+from .delivery import deliver, select_bot
 
 __plugin_meta__ = PluginMetadata(
     name="休息室账号",
@@ -57,9 +58,17 @@ def _chat_allowed(chat_id: str) -> bool:
     return logic.chat_allowed(plugin_config.nowork_allowed_chats, chat_id)
 
 
-bind_cmd = on_command("bind", aliases={"绑定"}, priority=5, block=True)
-unbind_cmd = on_command("unbind", aliases={"解绑"}, priority=5, block=True)
-me_cmd = on_command("me", aliases={"我的"}, priority=5, block=True)
+def _command_rule(*names: str):
+    def matches(event: Event) -> bool:
+        parts = event.get_plaintext().strip().split(maxsplit=1)
+        prefix = plugin_config.nowork_command_prefix
+        return bool(parts) and parts[0] in {prefix + name for name in names}
+    return matches
+
+
+bind_cmd = on_message(rule=_command_rule("bind", "绑定"), priority=5, block=True)
+unbind_cmd = on_message(rule=_command_rule("unbind", "解绑"), priority=5, block=True)
+me_cmd = on_message(rule=_command_rule("me", "我的"), priority=5, block=True)
 # Lowest priority, not blocking: anything another plugin didn't already consume goes here.
 passthrough = on_message(rule=to_me(), priority=900, block=False)
 
@@ -111,17 +120,8 @@ async def _start_events() -> None:
         text = nowork_message_to_text(ev.message)
         if not text:
             return
-        for bot in get_driver().bots.values():
-            try:
-                target_user = ev.target.get("userId")
-                target_chat = ev.target.get("chatId") or target_user
-                if target_chat is None:
-                    continue
-                await bot.send_msg(user_id=target_user, group_id=ev.target.get("chatId"), message=text)  # type: ignore[call-arg]
-                return
-            except Exception as exc:  # noqa: BLE001 - adapters raise different types; try the next bot
-                logger.debug(f"nowork: notify send attempt failed on {bot.self_id}: {exc}")
-        logger.warning("nowork: no connected bot could deliver a notification")
+        bot = select_bot(get_driver().bots.values(), plugin_config.nowork_notification_bot_id)
+        await deliver(bot, ev.target, text)
 
     async def run() -> None:
         await connect_events(plugin_config.nowork_base_url, plugin_config.nowork_bot_token, on_event, stop=_events_stop)
