@@ -7,6 +7,8 @@
 | 目录 | 语言 | 内容 | 测试 |
 | --- | --- | --- | --- |
 | [game-server-go](game-server-go/) | Go | 最小游戏服务器：白名单同步与加入校验（含加密响应与降级策略）、心跳 TPS / 在线玩家、GM 面板（类型化操作、选项列表、命令回执）、Webhook 踢出被冻结 / 删除的账号、SDK 登录页客户端流程 | `go vet ./... && go test ./...` |
+| [gm-sso-python](gm-sso-python/README.md) | Python | 独立角色 GM RP：浏览器会话、PKCE、state、一次性兑换 | `python -m pytest test_server.py` |
+| [chat-relay](../go/examples/chat-relay/main.go) | Go | 游戏聊天中继、成功输出后 ACK、游戏消息上报 | 包含于 SDK/go 检查 |
 | [paper-plugin](paper-plugin/) | Java | Paper 1.21 插件骨架：异步加入校验、心跳、GM 面板 | 未在本仓库构建（需 Gradle 与 Paper API） |
 | [webhook-receiver-go](webhook-receiver-go/) | Go | Webhook 接收端：签名、JWE 加密投递、幂等、各类事件 | `go vet ./... && go test ./...` |
 | [webhook-receiver-node](webhook-receiver-node/) | TypeScript | 同上，基于 `node:http` | `npm test` |
@@ -25,6 +27,8 @@ Every example depends only on the SDKs in this repository (by relative path) and
 | Directory | Language | What it shows | Tests |
 | --- | --- | --- | --- |
 | [game-server-go](game-server-go/) | Go | Minimal game server: whitelist sync and join checks (encrypted replies, outage policy), heartbeat TPS / players, GM channel (typed actions, option lists, results), webhooks that kick frozen or deleted accounts, the SDK login page client flow | `go vet ./... && go test ./...` |
+| [gm-sso-python](gm-sso-python/README.md) | Python | Character GM relying party with browser session, PKCE and one-use exchange | `python -m pytest test_server.py` |
+| [chat-relay](../go/examples/chat-relay/main.go) | Go | Console relay with ACK after output and in-game posting | Included in SDK/go checks |
 | [paper-plugin](paper-plugin/) | Java | Paper 1.21 plugin skeleton: async join check, heartbeat, GM channel | not built here (needs Gradle and the Paper API) |
 | [webhook-receiver-go](webhook-receiver-go/) | Go | Webhook receiver: signature, encrypted (JWE) deliveries, idempotency, events | `go vet ./... && go test ./...` |
 | [webhook-receiver-node](webhook-receiver-node/) | TypeScript | The same on `node:http` | `npm test` |
