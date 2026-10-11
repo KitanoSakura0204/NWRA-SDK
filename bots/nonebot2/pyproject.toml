@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nonebot-plugin-nowork"
-version = "0.1.0"
+version = "1.2.0"
 description = "NoWork Account bind/unbind/me and command bridge for NoneBot2 (OneBot v11, QQ, Feishu, Telegram adapters)"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -12,7 +12,7 @@ license = { text = "UNLICENSED" }
 dependencies = [
     "nonebot2>=2.3.0,<3.0.0",
     "pydantic>=1.10.0,<3.0.0",
-    "nowork-bot-client @ file:///../python-client",
+    "nowork-bot-client==1.2.0",
 ]
 
 [project.optional-dependencies]
