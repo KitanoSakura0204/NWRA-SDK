@@ -12,3 +12,6 @@ csharp/**/obj/
 php/vendor/
 .DS_Store
 typescript/package-lock.json
+
+# Gradle/IDE build output of the Paper example
+examples/paper-plugin/bin/
