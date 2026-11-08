@@ -42,6 +42,10 @@ SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL
 
 `data-device`（`pc` / `mobile`）与 `data-theme`（`light` / `dark`）可直接用于 CSS 选择器；`lang` 是玩家的语言。
 
+宿主页提供简体中文、繁體中文、English和日本語切换，`ui_locales`仍只作用于本次SDK页面，不改写用户中心的语言偏好。切换时宿主更新URL的`ui_locales`，原始state、nonce、回调及PKCE参数保持；不会重新发起认证或消费授权码。
+
+模板收到新增的`locale`事件时，`ready()`返回的同一配置对象中的`locale`、`branding`、`texts`和`registrationRegions`已经更新，`NoworkLogin.t()`立即读取新词条。事件不重置表单、不重开桥状态，也不清除正在进行的两步验证。模板可通过`NoworkLogin.on('locale', () => renderTexts())`更新自身DOM；新版标准模板已经处理。已有自定义模板中的硬编码文案需自行替换，或重新载入新版标准模板作为起点。
+
 ## 3. 设备选择
 
 每台服务器的 PC 与手机各自选择标准或自定义模板，互不影响。页面按以下顺序决定设备：
@@ -66,7 +70,7 @@ SDK 登录页（`/sdk/login/{serverCode}`，协议见 [PROTOCOL.md §6](PROTOCOL
 | --- | --- | --- |
 | `ready()` | — | 握手并返回配置（§6）；可重复调用，返回同一个 Promise |
 | `t(key, params?)` | 文案键、占位参数 | 用户中心的文案（§7），如 `t('cont.as', { name })` |
-| `on(name, fn)` | 事件名、回调 | 订阅宿主事件，返回取消订阅的函数；目前只有 `reset` |
+| `on(name, fn)` | 事件名、回调 | 订阅宿主事件，返回取消订阅的函数；支持 `reset` 和 `locale` |
 | `signInWithPassword(p)` | `{ username, password, remember }` | 密码登录；站点开启了人机验证时，宿主会先弹出验证 |
 | `sendCode(p)` | `{ target }` | 向邮箱 / 手机发送登录验证码 |
 | `signInWithCode(p)` | `{ target, code, remember }` | 验证码登录 |
