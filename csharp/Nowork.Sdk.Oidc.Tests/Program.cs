@@ -17,6 +17,7 @@ internal static class Program
         {
             ("fixed unauthenticated metadata routes and lossless fields", MetadataRoutes),
             ("invalid status and malformed/incomplete metadata fail closed", InvalidMetadata),
+            ("invalid UTF-8 in unknown discovery and JWK strings fails closed", InvalidUtf8Metadata),
             ("default credentials are rejected without modifying the client", DefaultCredentials),
             ("declared/chunked bodies respect both response limits", ResponseLimits),
             ("body timeout and caller cancellation remain effective", Cancellation),
@@ -25,6 +26,43 @@ internal static class Program
         };
         foreach (var (name, run) in tests) { await run(); Console.WriteLine("PASS " + name); }
         Console.WriteLine($"{tests.Length} tests passed on {RuntimeInformation.FrameworkDescription}.");
+    }
+
+    private static async Task InvalidUtf8Metadata()
+    {
+        var accepted = new List<string>();
+        foreach (var discovery in new[] { true, false })
+        {
+            foreach (var invalid in new[] { new byte[] { 0xff }, new byte[] { 0xc2 }, new byte[] { 0xc0, 0xaf }, new byte[] { 0xed, 0xa0, 0x80 } })
+            {
+                var prefix = discovery ? Discovery()[..^1] + ",\"unknown\":\"" : "{\"keys\":[{\"future\":\"";
+                var suffix = discovery ? "\"}" : "\"}]}";
+                var bytes = Encoding.UTF8.GetBytes(prefix).Concat(invalid).Concat(Encoding.UTF8.GetBytes(suffix)).ToArray();
+                foreach (var streamed in new[] { false, true })
+                {
+                    using var handler = new FakeHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                    { Content = streamed ? new StreamContent(new NonSeekableStream(bytes)) : new ByteArrayContent(bytes) }));
+                    using var http = new HttpClient(handler);
+                    var oidc = new NoworkOidc(Issuer, "client", http: http);
+                    try
+                    {
+                        if (discovery) await oidc.DiscoverAsync(); else await oidc.JwksAsync();
+                        accepted.Add($"{(discovery ? "DiscoverAsync" : "JwksAsync")}({Convert.ToHexString(invalid)}, streamed={streamed})");
+                    }
+                    catch (TransportException error) { True(error.InnerException is DecoderFallbackException); }
+                }
+            }
+        }
+        if (accepted.Count != 0) throw new Exception("Invalid UTF-8 was accepted by " + string.Join(", ", accepted));
+        const string unicode = "未来🙂";
+        var validDiscovery = Discovery()[..^1] + ",\"unknown\":\"" + unicode + "\"}";
+        var validJwks = "{\"keys\":[{\"future\":\"" + unicode + "\"}]}";
+        using var validHandler = new FakeHandler((request, _) => Task.FromResult(Raw(
+            request.RequestUri!.AbsolutePath == "/jwks.json" ? validJwks : validDiscovery)));
+        using var validHttp = new HttpClient(validHandler);
+        var validOidc = new NoworkOidc(Issuer, "client", http: validHttp);
+        Eq(unicode, (await validOidc.DiscoverAsync()).GetProperty("unknown").GetString());
+        Eq(validJwks, await validOidc.JwksAsync());
     }
 
     private static Task SignedNonce()

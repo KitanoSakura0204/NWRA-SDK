@@ -20,6 +20,7 @@ public sealed class NoworkOidc
     private readonly HttpClient _http;
     private readonly string _issuer, _clientId, _clientSecret, _redirectUri;
     private const int MaxMetadataBytes = 1024 * 1024;
+    private static readonly UTF8Encoding MetadataUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
     private static readonly HashSet<string> PublicDefaultHeaders = new(StringComparer.OrdinalIgnoreCase)
     { "Accept", "Accept-Encoding", "Accept-Language", "User-Agent" };
 
@@ -78,7 +79,9 @@ public sealed class NoworkOidc
             }
             token.ThrowIfCancellationRequested();
             var bytes = buffer.GetBuffer().AsMemory(0, (int)buffer.Length);
-            using var document = JsonDocument.Parse(bytes);
+            // JsonDocument can defer UTF-8 validation for unread string fields. Validate the whole body first.
+            var json = MetadataUtf8.GetString(bytes.Span);
+            using var document = JsonDocument.Parse(json);
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object) throw new TransportException("Metadata JSON must be an object.");
             if (discovery)
@@ -93,11 +96,11 @@ public sealed class NoworkOidc
                 keys.EnumerateArray().Any(key => key.ValueKind != JsonValueKind.Object))
                 throw new TransportException("JWKS keys must be an array of objects.");
             token.ThrowIfCancellationRequested();
-            return (Encoding.UTF8.GetString(bytes.Span), root.Clone());
+            return (json, root.Clone());
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw new OperationCanceledException(ct); }
         catch (OperationCanceledException e) { throw new TransportException("Metadata request timed out.", e); }
-        catch (Exception e) when (e is HttpRequestException or IOException or JsonException)
+        catch (Exception e) when (e is HttpRequestException or IOException or JsonException or DecoderFallbackException)
         { throw new TransportException("Metadata transport or JSON decoding failed.", e); }
     }
 
