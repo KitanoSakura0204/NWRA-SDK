@@ -271,7 +271,7 @@ public final class NoWorkDelivery {
     }
 
     /** Opens a signed-then-encrypted ID token and verifies its inner signature, claims and nonce. */
-    public static Map<String, Object> decryptIdToken(String token, String jwks, String issuer, String audience, String expectedNonce, PrivateJwk... keys) {
+    public static Map<String, Object> decryptIdTokenWithNonce(String token, String jwks, String issuer, String audience, String expectedNonce, PrivateJwk... keys) {
         return verifyIdToken(decrypt(token, keys).text(), jwks, issuer, audience, expectedNonce);
     }
 

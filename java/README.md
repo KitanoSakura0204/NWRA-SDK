@@ -69,7 +69,7 @@ Map<String,Object> me = oidc.userInfo((String) token.get("access_token"));
 加密 ID token 使用同样的 nonce 绑定验证，先解密再验证内部签名和声明：
 
 ```java
-Map<String,Object> claims = NoWorkDelivery.decryptIdToken(
+Map<String,Object> claims = NoWorkDelivery.decryptIdTokenWithNonce(
     encryptedIdToken, jwks, issuer, clientId, nonce, current, previous);
 ```
 
@@ -89,6 +89,6 @@ The authenticated context must exactly match `server:<configured-code>:<request-
 
 OIDC `discover()` returns the complete metadata map and `jwks()` returns validated original JSON. Both use unauthenticated GETs to the configured issuer's fixed discovery/JWKS paths, with no redirects or automatic use of advertised endpoints. Discovery requires four nonblank string fields (`issuer`, `authorization_endpoint`, `token_endpoint`, `jwks_uri`) and an exact configured issuer match after constructor normalization. JWKS requires an array of key objects. Non-2xx, invalid UTF-8/JSON/shape and actual bodies over 1 MiB raise `NoWorkException.Transport`; the existing ten-second timeout also covers body consumption. Unknown fields are preserved.
 
-Pass the authorization session's saved nonempty nonce to `NoWorkDelivery.verifyIdToken(token, jwks, issuer, audience, expectedNonce)`, or to `decryptIdToken(token, jwks, issuer, audience, expectedNonce, PrivateJwk... keys)` for an encrypted ID token. These verify the inner RS256 signature, issuer, audience and time claims before requiring an exact signed string nonce match. Invalid expected nonce or missing/mismatched/non-string claims raise `DecryptException`. Existing overloads remain usable. Validate callback state separately. OIDC application credentials, game Server API keys and account/native credentials serve separate flows.
+Pass the authorization session's saved nonempty nonce to `NoWorkDelivery.verifyIdToken(token, jwks, issuer, audience, expectedNonce)`, or to `decryptIdTokenWithNonce(token, jwks, issuer, audience, expectedNonce, PrivateJwk... keys)` for an encrypted ID token. These verify the inner RS256 signature, issuer, audience and time claims before requiring an exact signed string nonce match. Invalid expected nonce or missing/mismatched/non-string claims raise `DecryptException`. Existing signatures remain usable, including null entries preceding a valid decryption key. Validate callback state separately. OIDC application credentials, game Server API keys and account/native credentials serve separate flows.
 
 The [Paper example](../examples/paper-plugin/) uses the unkeyed constructor by default. Configure the constructor as above when adapting it for an encrypted server. The example requires JDK 21, Gradle 8.5+ and the declared Paper API dependency; SDK checks alone do not verify a Paper build or runtime. `SelfCheck`, `EncryptedTransportTest`, `GameDataClientTest` and `OidcTest` are executable offline test classes, not JUnit tests; run them explicitly after compilation.

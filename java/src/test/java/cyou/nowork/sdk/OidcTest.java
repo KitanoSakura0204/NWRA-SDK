@@ -72,7 +72,7 @@ public final class OidcTest implements AutoCloseable {
 
     public static void main(String[] args) throws Exception {
         try (OidcTest test = new OidcTest(Path.of(args.length == 0 ? "../go/testdata/vectors.json" : args[0]))) {
-            test.metadata(); test.nonces();
+            test.unicodeEscapes(); test.metadata(); test.nonces();
             test.server.stop(0);
             test.expect(NoWorkException.Transport.class, test.oidc::discover);
             test.expect(NoWorkException.Transport.class, test.oidc::jwks);
@@ -104,7 +104,27 @@ public final class OidcTest implements AutoCloseable {
         throw new AssertionError("expected " + type.getName());
     }
 
+    private void unicodeEscapes() throws Exception {
+        String escape = "\\" + "u";
+        for (String malformed : List.of(escape + "\uff10\uff10\uff14\uff11", escape + "00\uff26F", escape + "00\uff10a")) {
+            use(200, "{\"keys\":[],\"x\":\"" + malformed + "\"}");
+            expect(NoWorkException.Transport.class, oidc::jwks);
+            Map<String, Object> metadata = document(); metadata.put("extension", "MARKER");
+            use(200, NoworkClient.encode(metadata).replace("\"MARKER\"", "\"" + malformed + "\""));
+            expect(NoWorkException.Transport.class, oidc::discover);
+        }
+        String valid = "{\"keys\":[],\"x\":\"" + escape + "0041" + escape + "00eF" + escape + "00Af\"}";
+        use(200, valid); check(valid.equals(oidc.jwks()), "ASCII hexadecimal Unicode escapes stay valid");
+        check(GameDataModels.object(GameDataModels.parse(valid)).get("x").equals("A\u00ef\u00af"), "ASCII Unicode escapes decode correctly");
+        // A literal backslash followed by u and fullwidth text is valid JSON, not an escape.
+        String literal = escape + "\uff10\uff10\uff14\uff11";
+        Map<String, Object> metadata = document(); metadata.put("extension", literal);
+        use(200, NoworkClient.encode(metadata));
+        check(literal.equals(oidc.discover().get("extension")), "escaped literal backslash and fullwidth text are preserved");
+    }
+
     private void metadata() throws Exception {
+        requests.clear();
         use(200, NoworkClient.encode(document()));
         Map<String, Object> found = oidc.discover();
         check(issuer.equals(found.get("issuer")) && found.get("extension") instanceof Map, "exact normalized issuer and unknown fields");
@@ -225,20 +245,21 @@ public final class OidcTest implements AutoCloseable {
                 () -> NoWorkDelivery.verifyIdToken(tampered, jwks, issuer, "test-client", ""));
         check(failed.getMessage().contains("signature"), "signature precedes nonce");
         String encrypted = seal(token);
-        check(NoWorkDelivery.decryptIdToken(encrypted, jwks, issuer, "test-client", "expected-nonce", privateKey).get("nonce").equals("expected-nonce"), "encrypted nonce match");
+        check(NoWorkDelivery.decryptIdToken(encrypted, jwks, issuer, "test-client", null, privateKey).get("nonce").equals("expected-nonce"), "legacy null-plus-key call compiles and skips the null key");
+        check(NoWorkDelivery.decryptIdTokenWithNonce(encrypted, jwks, issuer, "test-client", "expected-nonce", privateKey).get("nonce").equals("expected-nonce"), "encrypted nonce match");
         for (String nonce : new String[] {null, "", "wrong"})
-            expect(NoWorkDelivery.DecryptException.class, () -> NoWorkDelivery.decryptIdToken(encrypted, jwks, issuer, "test-client", nonce, privateKey));
+            expect(NoWorkDelivery.DecryptException.class, () -> NoWorkDelivery.decryptIdTokenWithNonce(encrypted, jwks, issuer, "test-client", nonce, privateKey));
         check(NoWorkDelivery.decryptIdToken(seal(noNonce), jwks, issuer, "test-client", privateKey).get("sub").equals("fixture-user"), "old encrypted signature stays usable");
-        expect(NoWorkDelivery.DecryptException.class, () -> NoWorkDelivery.decryptIdToken(seal(noNonce), jwks, issuer, "test-client", "expected-nonce", privateKey));
+        expect(NoWorkDelivery.DecryptException.class, () -> NoWorkDelivery.decryptIdTokenWithNonce(seal(noNonce), jwks, issuer, "test-client", "expected-nonce", privateKey));
         Map<String, Object> badNonce = claims(); badNonce.put("nonce", 123);
-        expect(NoWorkDelivery.DecryptException.class, () -> NoWorkDelivery.decryptIdToken(seal(sign(badNonce)), jwks, issuer, "test-client", "expected-nonce", privateKey));
+        expect(NoWorkDelivery.DecryptException.class, () -> NoWorkDelivery.decryptIdTokenWithNonce(seal(sign(badNonce)), jwks, issuer, "test-client", "expected-nonce", privateKey));
         Map<String, Object> badIssuer = claims(); badIssuer.put("iss", "https://wrong.example");
-        expect(NoWorkDelivery.DecryptException.class, () -> NoWorkDelivery.decryptIdToken(seal(sign(badIssuer)), jwks, issuer, "test-client", "expected-nonce", privateKey));
-        expect(NoWorkDelivery.DecryptException.class, () -> NoWorkDelivery.decryptIdToken(seal(tampered), jwks, issuer, "test-client", "expected-nonce", privateKey));
-        expect(NoWorkDelivery.DecryptException.class, () -> NoWorkDelivery.decryptIdToken(seal(NoworkClient.encode(claims())), jwks, issuer, "test-client", "expected-nonce", privateKey));
+        expect(NoWorkDelivery.DecryptException.class, () -> NoWorkDelivery.decryptIdTokenWithNonce(seal(sign(badIssuer)), jwks, issuer, "test-client", "expected-nonce", privateKey));
+        expect(NoWorkDelivery.DecryptException.class, () -> NoWorkDelivery.decryptIdTokenWithNonce(seal(tampered), jwks, issuer, "test-client", "expected-nonce", privateKey));
+        expect(NoWorkDelivery.DecryptException.class, () -> NoWorkDelivery.decryptIdTokenWithNonce(seal(NoworkClient.encode(claims())), jwks, issuer, "test-client", "expected-nonce", privateKey));
         Map<String, Object> nested = ((List<?>) vectors.get("vectors")).stream().map(GameDataModels::object)
                 .filter(v -> "nested-id-token".equals(v.get("name"))).findFirst().orElseThrow();
-        check(NoWorkDelivery.decryptIdToken((String) nested.get("compact"), NoworkClient.encode(vectors.get("signing")),
+        check(NoWorkDelivery.decryptIdTokenWithNonce((String) nested.get("compact"), NoworkClient.encode(vectors.get("signing")),
                 "https://account.example.com", "vector-app", "n-vector", privateKey).get("nonce").equals("n-vector"), "committed backend nested ID-token vector");
     }
 

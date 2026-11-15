@@ -331,7 +331,10 @@ public final class GameDataModels {
             if (offset + 4 > text.length()) throw malformed();
             int value = 0;
             for (int n = 0; n < 4; n++) {
-                int digit = Character.digit(text.charAt(offset++), 16);
+                char hex = text.charAt(offset++);
+                int digit = hex >= '0' && hex <= '9' ? hex - '0'
+                        : hex >= 'a' && hex <= 'f' ? hex - 'a' + 10
+                        : hex >= 'A' && hex <= 'F' ? hex - 'A' + 10 : -1;
                 if (digit < 0) throw malformed();
                 value = (value << 4) | digit;
             }
