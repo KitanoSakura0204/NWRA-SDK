@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import http.client
 import json
 import urllib.error
 import urllib.parse
@@ -56,14 +57,15 @@ class NoworkOIDC:
         # urllib's default proxy handling, including configured proxy auth, stays available.
         opener = urllib.request.build_opener(_NoMetadataRedirect())
         try:
-            with opener.open(req, timeout=self.timeout) as res:
-                raw, status = res.read(_MAX_METADATA_BYTES + 1), int(res.status)
-        except urllib.error.HTTPError as exc:
             try:
-                raw, status = exc.read(_MAX_METADATA_BYTES + 1), exc.code
-            finally:
-                exc.close()
-        except (urllib.error.URLError, OSError) as exc:
+                with opener.open(req, timeout=self.timeout) as res:
+                    raw, status = res.read(_MAX_METADATA_BYTES + 1), int(res.status)
+            except urllib.error.HTTPError as exc:
+                try:
+                    raw, status = exc.read(_MAX_METADATA_BYTES + 1), exc.code
+                finally:
+                    exc.close()
+        except (urllib.error.URLError, OSError, http.client.HTTPException) as exc:
             raise TransportError(str(exc)) from exc
         if len(raw) > _MAX_METADATA_BYTES:
             raise TransportError("metadata response exceeds 1 MiB")

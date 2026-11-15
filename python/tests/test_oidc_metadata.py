@@ -1,5 +1,6 @@
 """Public OIDC metadata stays on the configured issuer and carries no credentials."""
 
+import http.client
 import io
 import json
 import unittest
@@ -41,6 +42,16 @@ class Reply(io.BytesIO):
     def read(self, size=-1):
         self.read_sizes.append(size)
         return super().read(size)
+
+
+class FailingReadReply(Reply):
+    def __init__(self, error):
+        super().__init__(b"")
+        self.error = error
+
+    def read(self, size=-1):
+        self.read_sizes.append(size)
+        raise self.error
 
 
 class OIDCMetadataTests(unittest.TestCase):
@@ -171,6 +182,30 @@ class OIDCMetadataTests(unittest.TestCase):
             self.oidc.jwks()
         self.assertTrue(stream.closed)
         self.assertTrue(all(0 <= size <= LIMIT + 1 for size in stream.read_sizes))
+
+    def test_failed_success_response_read_is_transport_error_and_closes_stream(self):
+        for method in (self.oidc.discover, self.oidc.jwks):
+            for error in (OSError("response read failed"), http.client.IncompleteRead(b"partial", 20)):
+                with self.subTest(method=method.__name__, error=type(error).__name__):
+                    reply = FailingReadReply(error)
+                    self.transport.return_value = reply
+                    with self.assertRaises(TransportError) as caught:
+                        method()
+                    self.assertIs(caught.exception.__cause__, error)
+                    self.assertEqual(reply.read_sizes, [LIMIT + 1])
+                    self.assertTrue(reply.closed)
+
+    def test_failed_http_error_body_read_is_transport_error_and_closes_stream(self):
+        for method in (self.oidc.discover, self.oidc.jwks):
+            for error in (OSError("error response read failed"), http.client.IncompleteRead(b"partial", 20)):
+                with self.subTest(method=method.__name__, error=type(error).__name__):
+                    reply = FailingReadReply(error)
+                    self.transport.side_effect = urllib.error.HTTPError(ISSUER, 503, "unavailable", {}, reply)
+                    with self.assertRaises(TransportError) as caught:
+                        method()
+                    self.assertIs(caught.exception.__cause__, error)
+                    self.assertEqual(reply.read_sizes, [LIMIT + 1])
+                    self.assertTrue(reply.closed)
 
 
 if __name__ == "__main__":
