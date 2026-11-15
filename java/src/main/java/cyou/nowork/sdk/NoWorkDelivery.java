@@ -250,9 +250,29 @@ public final class NoWorkDelivery {
         return claims;
     }
 
+    /**
+     * Verifies the signature, issuer, audience and time claims, then binds the signed nonce to the
+     * authorization request. The explicitly supplied expected nonce must be non-null and nonempty.
+     */
+    public static Map<String, Object> verifyIdToken(String token, String jwks, String issuer, String audience, String expectedNonce) {
+        Map<String, Object> claims = verifyIdToken(token, jwks, issuer, audience);
+        if (expectedNonce == null || expectedNonce.isEmpty()) {
+            throw new DecryptException("expected ID token nonce must be nonempty");
+        }
+        if (!(claims.get("nonce") instanceof String nonce) || !expectedNonce.equals(nonce)) {
+            throw new DecryptException("ID token nonce mismatch");
+        }
+        return claims;
+    }
+
     /** Opens a signed-then-encrypted ID token and verifies the inner token. */
     public static Map<String, Object> decryptIdToken(String token, String jwks, String issuer, String audience, PrivateJwk... keys) {
         return verifyIdToken(decrypt(token, keys).text(), jwks, issuer, audience);
+    }
+
+    /** Opens a signed-then-encrypted ID token and verifies its inner signature, claims and nonce. */
+    public static Map<String, Object> decryptIdToken(String token, String jwks, String issuer, String audience, String expectedNonce, PrivateJwk... keys) {
+        return verifyIdToken(decrypt(token, keys).text(), jwks, issuer, audience, expectedNonce);
     }
 
     /**

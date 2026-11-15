@@ -51,14 +51,33 @@ SDK 本身的目标是 Java 17；Paper 示例另需 JDK 21、Gradle 8.5+ 和其�
 
 ```java
 NoworkOidc oidc = new NoworkOidc(issuer, clientId, clientSecret, redirectUri);
+Map<String,Object> discovery = oidc.discover();
+String jwks = oidc.jwks();
 String url = oidc.authorizeUrl(state, nonce, "openid profile email game_roles", null);
 Map<String,Object> token = oidc.exchange(code, null);
+Map<String,Object> claims = NoWorkDelivery.verifyIdToken(
+    (String) token.get("id_token"), jwks, issuer, clientId, nonce);
 Map<String,Object> me = oidc.userInfo((String) token.get("access_token"));
 ```
 
+`issuer` 应使用配置的规范值（无尾部 `/`），`state` 与非空 `nonce` 由应用生成并绑定到本次授权会话；回调先校验 `state`，然后把保存的 `nonce` 传给验证器。不要从收到的 ID token 中取 nonce 作为期望值。`verifyIdToken(token, jwks, issuer, audience, expectedNonce)` 先验证 RS256 签名、发行者、受众和有效期，再要求已签名的字符串 nonce 精确匹配。显式传入 `null`、空字符串、缺失/非字符串/不匹配的 nonce 均抛 `NoWorkDelivery.DecryptException`；四参数旧签名保留原来的行为。
+
+`discover()` 返回完整的 `Map<String,Object>`，`jwks()` 返回通过结构校验的原始 JSON 文本，未知字段保留。它们分别对配置发行者的固定 `/.well-known/openid-configuration` 和 `/jwks.json` 发起无认证 GET，不发送客户端密钥、Bearer token 或服务器密钥，也不跟随 HTTP 重定向或元数据中公布的地址。发现文档必须包含非空字符串 `issuer`、`authorization_endpoint`、`token_endpoint`、`jwks_uri`，其中发行者必须精确等于构造器去掉尾部 `/` 后的配置值；JWKS 的 `keys` 必须是对象数组。非 2xx、超过 1 MiB 的实际响应正文、无效 UTF-8/JSON 或结构错误均抛 `NoWorkException.Transport`，不能静默采用其他发行者或未验证的文档。复用现有 HTTP 客户端，连接和请求使用原有 10 秒超时；正文消费也受 10 秒限制。
+
+元数据请求只接受有效的 HTTP(S) 发行者地址，可包含发行者路径，但不能包含 URL 用户凭据、查询串、片段或 `.` / `..` 路径段；无效配置抛 `Transport`，不会发出请求。
+
+加密 ID token 使用同样的 nonce 绑定验证，先解密再验证内部签名和声明：
+
+```java
+Map<String,Object> claims = NoWorkDelivery.decryptIdToken(
+    encryptedIdToken, jwks, issuer, clientId, nonce, current, previous);
+```
+
+旧的 `decryptIdToken(token, jwks, issuer, audience, PrivateJwk... keys)` 签名仍可使用。OIDC 客户端凭据用于应用授权；`NoworkClient` 的服务器密钥用于游戏 Server API，账号/原生凭据属于独立流程。
+
 ## 离线自检
 
-`src/test/java/cyou/nowork/sdk/` 下的 `SelfCheck`、`EncryptedTransportTest`、`GameDataClientTest` 都是可执行 `main` 类，不依赖 JUnit，也不会由 Maven/Gradle 的空测试任务自动执行。编译 SDK 和这些测试类后分别运行；`EncryptedTransportTest` 可接收 `SDK/go/testdata/vectors.json` 的路径作为唯一参数（从 `SDK/java` 运行时默认 `../go/testdata/vectors.json`）。测试只读取仓库测试密钥并请求本机 HTTP fixture，不需要账号服务或 Paper。
+`src/test/java/cyou/nowork/sdk/` 下的 `SelfCheck`、`EncryptedTransportTest`、`GameDataClientTest`、`OidcTest` 都是可执行 `main` 类，不依赖 JUnit，也不会由 Maven/Gradle 的空测试任务自动执行。编译 SDK 和这些测试类后分别运行；`EncryptedTransportTest`、`OidcTest` 可接收 `SDK/go/testdata/vectors.json` 的路径作为唯一参数（从 `SDK/java` 运行时默认 `../go/testdata/vectors.json`）。测试只读取仓库测试密钥并请求本机 HTTP fixture，不需要账号服务或 Paper。`OidcTest` 检查固定发现/JWKS 路径、无认证请求、严格 JSON 和字节限制、正文超时/中断、nonce 失败，以及后端签名再加密的 ID token 向量；包括一个实际等待 10 秒的正文超时检查。
 
 ---
 
@@ -68,4 +87,8 @@ Java 17+, no third-party runtime dependencies. Existing `NoworkClient(base, serv
 
 The authenticated context must exactly match `server:<configured-code>:<request-route>` without the query string. Only `whitelist` and `whitelist/check` require encrypted success when keys are configured; ordinary plaintext heartbeat, module and GM replies remain valid. Wrong context/key, malformed encrypted data and plaintext downgrades raise `Encryption`, which must never enter an outage admission policy. Genuine network errors remain `Transport`; nonzero API codes remain `Api`. `raw` keeps valid original response bodies undecoded, with normal HTTP/envelope validation.
 
-The [Paper example](../examples/paper-plugin/) uses the unkeyed constructor by default. Configure the constructor as above when adapting it for an encrypted server. The example requires JDK 21, Gradle 8.5+ and the declared Paper API dependency; SDK checks alone do not verify a Paper build or runtime. `SelfCheck`, `EncryptedTransportTest` and `GameDataClientTest` are executable offline test classes, not JUnit tests; run them explicitly after compilation.
+OIDC `discover()` returns the complete metadata map and `jwks()` returns validated original JSON. Both use unauthenticated GETs to the configured issuer's fixed discovery/JWKS paths, with no redirects or automatic use of advertised endpoints. Discovery requires four nonblank string fields (`issuer`, `authorization_endpoint`, `token_endpoint`, `jwks_uri`) and an exact configured issuer match after constructor normalization. JWKS requires an array of key objects. Non-2xx, invalid UTF-8/JSON/shape and actual bodies over 1 MiB raise `NoWorkException.Transport`; the existing ten-second timeout also covers body consumption. Unknown fields are preserved.
+
+Pass the authorization session's saved nonempty nonce to `NoWorkDelivery.verifyIdToken(token, jwks, issuer, audience, expectedNonce)`, or to `decryptIdToken(token, jwks, issuer, audience, expectedNonce, PrivateJwk... keys)` for an encrypted ID token. These verify the inner RS256 signature, issuer, audience and time claims before requiring an exact signed string nonce match. Invalid expected nonce or missing/mismatched/non-string claims raise `DecryptException`. Existing overloads remain usable. Validate callback state separately. OIDC application credentials, game Server API keys and account/native credentials serve separate flows.
+
+The [Paper example](../examples/paper-plugin/) uses the unkeyed constructor by default. Configure the constructor as above when adapting it for an encrypted server. The example requires JDK 21, Gradle 8.5+ and the declared Paper API dependency; SDK checks alone do not verify a Paper build or runtime. `SelfCheck`, `EncryptedTransportTest`, `GameDataClientTest` and `OidcTest` are executable offline test classes, not JUnit tests; run them explicitly after compilation.
