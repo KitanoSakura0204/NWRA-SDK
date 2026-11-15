@@ -21,6 +21,59 @@ token = oidc.exchange(code)
 me = oidc.userinfo(token["access_token"])
 ```
 
+## OIDC discovery、JWKS 与 nonce 校验
+
+`NoworkOIDC.discover()` 和 `jwks()` 返回保留扩展字段的字典，分别读取配置 issuer 的 `/.well-known/openid-configuration` 与 `/jwks.json`。Discovery 的 `issuer` 必须与构造函数去掉末尾 `/` 后的 issuer 完全相同，且 `authorization_endpoint`、`token_endpoint`、`jwks_uri` 都必须是非空字符串；JWKS 的 `keys` 必须是对象数组。SDK 不跟随元数据公布的 URL，也不跟随这两个读取请求的 HTTP 重定向。原有授权和 token 方法继续使用固定 NoWork 路径。
+
+这两个公开 GET 不携带 `client_secret`、Bearer token、`X-Server-Key` 或登录 cookie。每次读取使用独立的 urllib opener，隔离通过 `urllib.request.install_opener()` 安装的认证、cookie 和额外请求头；标准环境代理（包括用户配置的代理认证）继续生效。它们使用现有 `timeout`，不新增 OIDC 传输注入参数；原有 OAuth 请求仍使用 `urllib.request.urlopen()`。非 2xx、超过 1 MiB、无效 JSON、错误根类型、缺失字段和 issuer 不匹配都会抛出 `TransportError`，不会回退到其他 issuer 或未校验的文档。
+
+ID token 的签名及 nonce 校验需要可选依赖 `cryptography`，discovery 和 JWKS 读取本身只使用标准库：
+
+```python
+from nowork_sdk import NoworkOIDC, create_pkce_pair, create_state, parse_login_callback
+from nowork_sdk.delivery import verify_id_token
+
+oidc = NoworkOIDC(issuer, client_id, client_secret, redirect_uri)
+metadata = oidc.discover()
+signing_keys = oidc.jwks()
+pkce = create_pkce_pair()
+login_context = {"state": create_state(), "nonce": create_state(), "verifier": pkce.verifier}
+# 在服务端会话中保存 login_context，回调时读取，并在完成后一次性删除。
+url = oidc.authorize_url(login_context["state"], login_context["nonce"], code_challenge=pkce.challenge)
+
+# 收到浏览器回调后先验证 state，再交换授权码并验证 ID token。
+code = parse_login_callback(callback_url, login_context["state"], oidc.issuer)
+tokens = oidc.exchange(code, login_context["verifier"])
+claims = verify_id_token(
+    tokens["id_token"], signing_keys, oidc.issuer, oidc.client_id,
+    expected_nonce=login_context["nonce"],
+)
+```
+
+`verify_id_token(token, jwks, issuer=None, audience=None, now=None, expected_nonce=None)` 先执行 RS256 签名、issuer、audience 和 `exp` / `nbf` 校验（沿用 60 秒时钟宽限），再校验 nonce；返回原始签名声明，不改写时间。显式提供的 `expected_nonce` 必须是非空字符串，并与签名中的字符串 `nonce` 完全相同；空值、缺失声明、类型错误或不匹配都会抛出 `DecryptError`。省略它或传入 `None` 保留旧行为，原有第五个位置参数 `now` 不变。
+
+加密 ID token 使用应用自己的解密私钥，并同样校验内层 JWT 签名和 nonce：
+
+```python
+from nowork_sdk.delivery import decrypt_id_token
+
+claims = decrypt_id_token(
+    tokens["id_token"], app_private_keys, signing_keys, oidc.issuer, oidc.client_id,
+    expected_nonce=login_context["nonce"],
+)
+```
+
+`decrypt_id_token(token, keys, jwks, issuer=None, audience=None, expected_nonce=None)` 的 nonce 参数追加在原有参数之后。OIDC 应用私钥、OAuth client credentials、账户 Bearer token 和游戏服务器 `X-Server-Key` 分别用于各自协议。
+
+Public metadata reads preserve the standard environment proxy configuration and the existing timeout while isolating global urllib authentication/cookie handlers. Both fixed endpoints reject redirects, invalid documents and responses larger than 1 MiB. Pass the nonce saved for this login attempt to `verify_id_token(..., expected_nonce=nonce)` or `decrypt_id_token(..., expected_nonce=nonce)`; both validate the inner RS256 token before checking nonce, and omitted nonce arguments retain existing behavior.
+
+Python 测试从仓库根目录运行（安装 `cryptography` 后可运行全部加密测试）：
+
+```powershell
+$env:PYTHONPATH = "$PWD/python"
+python -m unittest discover -s python/tests -v
+```
+
 ## 服务器响应加密
 
 服务器开启交付加密后，`whitelist` / `whitelist/check` 返回 JWE。未配置私钥时，SDK 抛出 `EncryptionError`，不能将其当成网络异常而放行玩家。配置私钥后，这两个接口必须返回密文，明文响应也会被拒绝；心跳、GM、玩家数据和其他当前未加密接口继续接受正常明文响应。

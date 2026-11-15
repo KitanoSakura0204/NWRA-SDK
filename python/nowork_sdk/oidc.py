@@ -11,6 +11,18 @@ from .entitlements import Entitlement, EntitlementValues, entitlement_body, enti
 from .errors import ApiError, OAuthError, TransportError
 
 
+_MAX_METADATA_BYTES = 1024 * 1024
+
+
+class _NoMetadataRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ValueError("invalid JSON constant: " + value)
+
+
 class NoworkOIDC:
     """Minimal OIDC relying-party helper (authorization code + PKCE, refresh, userinfo, introspection)."""
 
@@ -20,6 +32,50 @@ class NoworkOIDC:
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
         self.timeout = timeout
+
+    def discover(self) -> dict:
+        """Read public discovery from the configured issuer; advertised URLs are not followed."""
+        body = self._metadata("/.well-known/openid-configuration")
+        for field in ("issuer", "authorization_endpoint", "token_endpoint", "jwks_uri"):
+            if not isinstance(body.get(field), str) or not body[field].strip():
+                raise TransportError("invalid discovery: missing or invalid " + field)
+        if body["issuer"] != self.issuer:
+            raise TransportError("discovery issuer mismatch")
+        return body
+
+    def jwks(self) -> dict:
+        """Read public signing keys from the configured issuer's fixed /jwks.json path."""
+        body = self._metadata("/jwks.json")
+        if not isinstance(body.get("keys"), list) or any(not isinstance(key, dict) for key in body["keys"]):
+            raise TransportError("invalid JWKS: keys must be an array of objects")
+        return body
+
+    def _metadata(self, path: str) -> dict:
+        req = urllib.request.Request(self.issuer + path, method="GET", headers={"Accept": "application/json"})
+        # A fresh opener has no global login/auth/cookie handlers or shared mutable headers.
+        # urllib's default proxy handling, including configured proxy auth, stays available.
+        opener = urllib.request.build_opener(_NoMetadataRedirect())
+        try:
+            with opener.open(req, timeout=self.timeout) as res:
+                raw, status = res.read(_MAX_METADATA_BYTES + 1), int(res.status)
+        except urllib.error.HTTPError as exc:
+            try:
+                raw, status = exc.read(_MAX_METADATA_BYTES + 1), exc.code
+            finally:
+                exc.close()
+        except (urllib.error.URLError, OSError) as exc:
+            raise TransportError(str(exc)) from exc
+        if len(raw) > _MAX_METADATA_BYTES:
+            raise TransportError("metadata response exceeds 1 MiB")
+        if not 200 <= status < 300:
+            raise TransportError(f"http {status}")
+        try:
+            body = json.loads(raw.decode("utf-8"), parse_constant=_reject_json_constant)
+        except ValueError as exc:
+            raise TransportError(f"invalid json (http {status}): {exc}") from exc
+        if not isinstance(body, dict):
+            raise TransportError(f"invalid response (http {status}): not an object")
+        return body
 
     def authorize_url(self, state: str, nonce: str = "", scope: str = "openid profile email", code_challenge: str = "") -> str:
         q = {

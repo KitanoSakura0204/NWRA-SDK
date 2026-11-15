@@ -95,9 +95,11 @@ def decrypt_jwe(compact: str, keys: Keys) -> Tuple[bytes, Dict[str, Any]]:
 
 
 def verify_id_token(token: str, jwks: Union[str, Mapping[str, Any]], issuer: Optional[str] = None,
-                    audience: Optional[str] = None, now: Optional[int] = None) -> Dict[str, Any]:
+                    audience: Optional[str] = None, now: Optional[int] = None,
+                    expected_nonce: Optional[str] = None) -> Dict[str, Any]:
     """Verify an RS256 ID token against the provider JWKS (GET BASE/jwks.json): signature, iss,
-    aud and exp / nbf with 60 s leeway. Returns the claims."""
+    aud and exp / nbf with 60 s leeway. If supplied, expected_nonce must be a nonempty
+    string equal to the signed nonce claim. Returns the claims unchanged."""
     hashes, _, padding, rsa = _crypto()[:4]
     parts = token.split(".")
     if len(parts) != 3:
@@ -125,14 +127,19 @@ def verify_id_token(token: str, jwks: Union[str, Mapping[str, Any]], issuer: Opt
         raise DecryptError("ID token expired")
     if isinstance(claims.get("nbf"), (int, float)) and claims["nbf"] - 60 > now:
         raise DecryptError("ID token not valid yet")
+    if expected_nonce is not None:
+        if not isinstance(expected_nonce, str) or not expected_nonce:
+            raise DecryptError("expected nonce must be a nonempty string")
+        if not isinstance(claims.get("nonce"), str) or claims["nonce"] != expected_nonce:
+            raise DecryptError("ID token nonce mismatch")
     return claims
 
 
 def decrypt_id_token(token: str, keys: Keys, jwks: Union[str, Mapping[str, Any]], issuer: Optional[str] = None,
-                     audience: Optional[str] = None) -> Dict[str, Any]:
-    """Open a signed-then-encrypted ID token (id_token_encrypted_response_alg) and verify it."""
+                     audience: Optional[str] = None, expected_nonce: Optional[str] = None) -> Dict[str, Any]:
+    """Open a signed-then-encrypted ID token and verify it, including an optional nonce."""
     inner, _ = decrypt_jwe(token, keys)
-    return verify_id_token(inner.decode(), jwks, issuer, audience)
+    return verify_id_token(inner.decode(), jwks, issuer, audience, expected_nonce=expected_nonce)
 
 
 def open_server_data(response: Union[str, bytes, Mapping[str, Any]], keys: Keys, ctx: Optional[str] = None) -> Any:
