@@ -46,14 +46,47 @@ _ = whitelist
 
 Configured keys automatically decrypt typed Server API calls using the existing Delivery helpers. Only the two whitelist routes require encryption when keys are set; plaintext heartbeat and GM replies remain valid. The authenticated route is always checked, and `WithServerCode` adds an exact server binding. Treat `EncryptionError` as a refusal. `Raw` retains the original response for manual processing.
 
-OIDC：
+## OIDC 登录与 nonce 校验
+
+OIDC 使用应用的 `clientID` / `clientSecret`，与游戏服务器的 `WithServerKey`、账户 JWT、原生客户端凭据分别配置。发起授权前生成随机 `state` 和 `nonce`，保存在服务端会话中；回调先核对 `state`，再取出该次请求保存的 nonce。
 
 ```go
 o := nowork.NewOIDC(issuer, clientID, clientSecret, redirectURI)
 http.Redirect(w, r, o.AuthorizeURL(state, nonce, "openid profile email game_roles"), 302)
-// 回调
-tok, _ := o.Exchange(ctx, r.URL.Query().Get("code"))
-me, _  := o.UserInfo(ctx, tok.AccessToken)
 ```
+
+在返回 error 的回调函数中，`expectedNonce` 必须来自这次授权请求的服务端会话：
+
+```go
+if _, err := o.Discover(ctx); err != nil {
+    return err
+}
+jwks, err := o.JWKS(ctx)
+if err != nil {
+    return err
+}
+tok, err := o.Exchange(ctx, r.URL.Query().Get("code"))
+if err != nil {
+    return err
+}
+claims, err := nowork.VerifyIDTokenWithNonce(
+    tok.IDToken, jwks, o.Issuer, o.ClientID, expectedNonce, time.Now(),
+)
+if err != nil {
+    return err
+}
+me, err := o.UserInfo(ctx, tok.AccessToken)
+if err != nil {
+    return err
+}
+_ = claims
+_ = me
+```
+
+`Discover(ctx)` 返回 `map[string]any`，保留未知元数据；它要求 `issuer` 精确等于 `NewOIDC` 去掉末尾斜杠后的配置值，并要求 `issuer`、`authorization_endpoint`、`token_endpoint`、`jwks_uri` 都是非空字符串。`JWKS(ctx)` 返回完整 `[]byte`，保留未知 JWK 字段，并要求 `keys` 是对象数组。
+
+两者固定请求配置 issuer 下的 `/.well-known/openid-configuration` 和 `/jwks.json`，使用无凭证 JSON GET，不跟随元数据声明的地址或 HTTP 重定向，SDK 不附带 `client_secret`、Bearer token、服务器密钥或 Cookie；自定义 HTTP 传输也应保持这两条请求无凭证。带用户名密码、查询参数或片段的 issuer 会被拒绝；默认 HTTP 超时仍为 10 秒，调用受 `ctx` 控制。非 2xx、读取失败、格式错误、错误根类型和超过 1 MiB 的响应都返回 `*TransportError`；大小错误可用 `errors.Is(err, nowork.ErrResponseTooLarge)` 识别，恰好 1 MiB 的合法响应可以接受。失败后不要改用未验证的 issuer 或 discovery 文档。
+
+`VerifyIDTokenWithNonce` 先执行现有 RS256 签名、issuer、audience、`exp` / `nbf` 校验（60 秒容差），再要求非空 expected nonce 与签名中的字符串 `nonce` 精确相等；缺失、非字符串、空 expected nonce 或不匹配都失败。已启用 ID token Delivery 加密的应用改用 `DecryptIDTokenWithNonce(tok.IDToken, jwks, o.Issuer, o.ClientID, expectedNonce, key)`，轮换期间可追加多把私有解密密钥；它会解密并校验内部签名和 nonce。原有 `VerifyIDToken` 和 `DecryptIDToken` 的签名与行为保持兼容，仍不绑定 nonce。以上功能只依赖标准库，最低版本仍为 Go 1.21。
 
 示例：`go run ./examples/paper-check`（需要 `NOWORK_SERVER_KEY`）。

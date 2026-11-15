@@ -37,6 +37,86 @@ func NewOIDC(issuer, clientID, clientSecret, redirectURI string) *OIDC {
 		http: &http.Client{Timeout: 10 * time.Second}}
 }
 
+// Discover reads the configured issuer's /.well-known/openid-configuration without
+// credentials. The issuer must match exactly and the four required endpoint fields must
+// be nonempty strings. Unknown fields are preserved; advertised endpoints are not followed.
+func (o *OIDC) Discover(ctx context.Context) (map[string]any, error) {
+	_, metadata, err := o.publicJSON(ctx, "/.well-known/openid-configuration")
+	if err != nil {
+		return nil, err
+	}
+	for _, field := range []string{"issuer", "authorization_endpoint", "token_endpoint", "jwks_uri"} {
+		value, ok := metadata[field].(string)
+		if !ok || strings.TrimSpace(value) == "" {
+			return nil, &TransportError{fmt.Errorf("incomplete OIDC discovery: invalid %s", field)}
+		}
+	}
+	if metadata["issuer"] != o.Issuer {
+		return nil, &TransportError{fmt.Errorf("OIDC discovery issuer mismatch")}
+	}
+	return metadata, nil
+}
+
+// JWKS reads the configured issuer's /jwks.json without credentials. It requires keys
+// to be an array of objects and preserves the complete response bytes and unknown fields.
+func (o *OIDC) JWKS(ctx context.Context) ([]byte, error) {
+	raw, metadata, err := o.publicJSON(ctx, "/jwks.json")
+	if err != nil {
+		return nil, err
+	}
+	keys, ok := metadata["keys"].([]any)
+	if !ok {
+		return nil, &TransportError{fmt.Errorf("invalid JWKS: keys must be an array of objects")}
+	}
+	for _, key := range keys {
+		if _, ok := key.(map[string]any); !ok {
+			return nil, &TransportError{fmt.Errorf("invalid JWKS: keys must be an array of objects")}
+		}
+	}
+	return raw, nil
+}
+
+// publicJSON bounds unauthenticated metadata reads to 1 MiB, retaining the configured
+// HTTP client's transport and timeout. Redirects and cookies cannot change the issuer or
+// turn a public metadata request into an authenticated one.
+func (o *OIDC) publicJSON(ctx context.Context, path string) ([]byte, map[string]any, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, o.Issuer+path, nil)
+	if err != nil {
+		return nil, nil, &TransportError{err}
+	}
+	if req.URL.User != nil || req.URL.RawQuery != "" || req.URL.Fragment != "" {
+		return nil, nil, &TransportError{fmt.Errorf("OIDC issuer must not contain credentials, a query or a fragment")}
+	}
+	req.Header.Set("Accept", "application/json")
+	h := *o.http
+	h.Jar = nil
+	h.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	res, err := h.Do(req)
+	if err != nil {
+		return nil, nil, &TransportError{err}
+	}
+	defer res.Body.Close()
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return nil, nil, &TransportError{fmt.Errorf("http %d", res.StatusCode)}
+	}
+	const limit = 1 << 20
+	raw, err := io.ReadAll(io.LimitReader(res.Body, limit+1))
+	if err != nil {
+		return nil, nil, &TransportError{err}
+	}
+	if len(raw) > limit {
+		return nil, nil, &TransportError{fmt.Errorf("%w (%d bytes)", ErrResponseTooLarge, limit)}
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		return nil, nil, &TransportError{err}
+	}
+	if metadata == nil {
+		return nil, nil, &TransportError{fmt.Errorf("OIDC metadata must be a JSON object")}
+	}
+	return raw, metadata, nil
+}
+
 // Token is the token endpoint response.
 type Token struct {
 	AccessToken  string `json:"access_token"`

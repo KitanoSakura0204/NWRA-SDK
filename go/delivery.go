@@ -263,6 +263,23 @@ func VerifyIDToken(token string, jwks []byte, issuer, audience string, now time.
 	return claims, nil
 }
 
+// VerifyIDTokenWithNonce performs VerifyIDToken's signature, issuer, audience and time
+// checks first, then requires a nonempty expected nonce equal to the signed string claim.
+func VerifyIDTokenWithNonce(token string, jwks []byte, issuer, audience, nonce string, now time.Time) (map[string]any, error) {
+	claims, err := VerifyIDToken(token, jwks, issuer, audience, now)
+	if err != nil {
+		return nil, err
+	}
+	if nonce == "" {
+		return nil, errors.New("nowork: expected ID token nonce must not be empty")
+	}
+	signedNonce, ok := claims["nonce"].(string)
+	if !ok || signedNonce != nonce {
+		return nil, errors.New("nowork: ID token nonce mismatch")
+	}
+	return claims, nil
+}
+
 func hasAudience(aud any, want string) bool {
 	switch v := aud.(type) {
 	case string:
@@ -285,6 +302,16 @@ func DecryptIDToken(token string, jwks []byte, issuer, audience string, keys ...
 		return nil, err
 	}
 	return VerifyIDToken(string(inner), jwks, issuer, audience, time.Now())
+}
+
+// DecryptIDTokenWithNonce opens a signed-then-encrypted ID token and verifies the inner
+// signature, issuer, audience, time and nonce using VerifyIDTokenWithNonce.
+func DecryptIDTokenWithNonce(token string, jwks []byte, issuer, audience, nonce string, keys ...*DecryptionKey) (map[string]any, error) {
+	inner, _, err := DecryptJWE(token, keys...)
+	if err != nil {
+		return nil, err
+	}
+	return VerifyIDTokenWithNonce(string(inner), jwks, issuer, audience, nonce, time.Now())
 }
 
 // OpenServerData opens the plugin-API envelope: data {"jwe": "..."} of a response that carried
