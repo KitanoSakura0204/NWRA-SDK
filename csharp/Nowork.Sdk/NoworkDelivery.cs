@@ -172,6 +172,16 @@ public static class NoWorkDelivery
         return claims;
     }
 
+    /// <summary>Verifies an RS256 ID token and then binds its signed nonce to a nonempty expected value.</summary>
+    public static JsonElement VerifyIdToken(string token, string jwks, string? issuer, string? audience, string expectedNonce)
+    {
+        var claims = VerifyIdToken(token, jwks, issuer, audience);
+        if (string.IsNullOrEmpty(expectedNonce)) throw new DecryptException("expected ID token nonce must be nonempty");
+        if (!string.Equals(Str(claims, "nonce"), expectedNonce, StringComparison.Ordinal))
+            throw new DecryptException("ID token nonce mismatch");
+        return claims;
+    }
+
     private static bool HasAudience(JsonElement claims, string audience)
     {
         if (!claims.TryGetProperty("aud", out var aud)) return false;
@@ -182,6 +192,10 @@ public static class NoWorkDelivery
     /// <summary>Opens a signed-then-encrypted ID token and verifies the inner token.</summary>
     public static JsonElement DecryptIdToken(string token, string jwks, string? issuer, string? audience, params string[] privateJwks) =>
         VerifyIdToken(Decrypt(token, privateJwks).Text, jwks, issuer, audience);
+
+    /// <summary>Opens an encrypted ID token, verifies the inner RS256 token, and checks its signed nonce.</summary>
+    public static JsonElement DecryptIdTokenWithNonce(string token, string jwks, string? issuer, string? audience, string expectedNonce, params string[] privateJwks) =>
+        VerifyIdToken(Decrypt(token, privateJwks).Text, jwks, issuer, audience, expectedNonce);
 
     /// <summary>
     /// Opens the plugin-API envelope (data {"jwe"}, or the whole response body) and returns the plaintext JSON.
