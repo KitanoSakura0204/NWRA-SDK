@@ -40,6 +40,31 @@ final class CurlTransport
      */
     public function __invoke(string $method, string $url, array $headers, ?string $body, float $timeout): array
     {
+        return $this->request($method, $url, $headers, $body, $timeout, null);
+    }
+
+    /**
+     * Bound a metadata download while reading and disable redirects / cURL origin authentication.
+     * Caller timeout/proxy/TLS options remain in effect, as does an existing write callback's stricter limit.
+     * Custom transport callables retain the five-argument __invoke contract.
+     *
+     * @param array<string, string> $headers
+     * @return array{int, string, array<string, string>}
+     */
+    public function sendBounded(string $method, string $url, array $headers, ?string $body, float $timeout, int $maxResponseBytes): array
+    {
+        if ($maxResponseBytes < 1) {
+            throw new \InvalidArgumentException('response byte limit must be positive');
+        }
+
+        return $this->request($method, $url, $headers, $body, $timeout, $maxResponseBytes);
+    }
+
+    /** @param array<string, string> $headers
+     *  @return array{int, string, array<string, string>}
+     */
+    private function request(string $method, string $url, array $headers, ?string $body, float $timeout, ?int $maxResponseBytes): array
+    {
         $ch = curl_init();
         if ($ch === false) {
             throw new TransportError('curl_init failed');
@@ -71,6 +96,40 @@ final class CurlTransport
         if ($body !== null) {
             $required[CURLOPT_POSTFIELDS] = $body;
         }
+        $download = '';
+        $exceeded = false;
+        if ($maxResponseBytes !== null) {
+            $onWrite = $this->options[CURLOPT_WRITEFUNCTION] ?? null;
+            $required[CURLOPT_RETURNTRANSFER] = false;
+            $required[CURLOPT_FOLLOWLOCATION] = false;
+            $required[CURLOPT_HTTPAUTH] = CURLAUTH_NONE;
+            $required[CURLOPT_USERPWD] = null;
+            $required[CURLOPT_USERNAME] = '';
+            $required[CURLOPT_PASSWORD] = '';
+            if (defined('CURLOPT_XOAUTH2_BEARER')) {
+                $required[CURLOPT_XOAUTH2_BEARER] = null;
+            }
+            $required[CURLOPT_NETRC] = CURL_NETRC_IGNORED;
+            if ($method === 'GET' && $body === null) {
+                $required[CURLOPT_POSTFIELDS] = null;
+                $required[CURLOPT_HTTPGET] = true;
+            }
+            $required[CURLOPT_WRITEFUNCTION] = static function ($handle, string $chunk) use (&$download, &$exceeded, $maxResponseBytes, $onWrite): int {
+                $length = strlen($chunk);
+                if ($length > $maxResponseBytes - strlen($download)) {
+                    $exceeded = true;
+                    return 0;
+                }
+                if ($onWrite !== null) {
+                    $accepted = $onWrite($handle, $chunk);
+                    if ($accepted !== $length) {
+                        return $accepted;
+                    }
+                }
+                $download .= $chunk;
+                return $length;
+            };
+        }
         $defaults = [
             CURLOPT_CONNECTTIMEOUT_MS => $ms,
             CURLOPT_TIMEOUT_MS => $ms,
@@ -78,18 +137,26 @@ final class CurlTransport
             CURLOPT_FAILONERROR => false,
         ];
         try {
-            // precedence: required > caller options > defaults
-            if (!curl_setopt_array($ch, $required + $this->options + $defaults)) {
+            // Bounded calls set required options last: CURLOPT_FILE and other caller options can otherwise
+            // replace PHP's write callback as a side effect and bypass the download limit.
+            // Effective precedence remains required > caller options > defaults.
+            $configured = $maxResponseBytes === null
+                ? curl_setopt_array($ch, $required + $this->options + $defaults)
+                : curl_setopt_array($ch, $this->options + $defaults) && curl_setopt_array($ch, $required);
+            if (!$configured) {
                 throw new TransportError('invalid curl option: ' . curl_error($ch), curl_errno($ch));
             }
             $raw = curl_exec($ch);
             if ($raw === false) {
                 $errno = curl_errno($ch);
+                if ($exceeded) {
+                    throw new TransportError('metadata response exceeds ' . $maxResponseBytes . ' bytes', $errno);
+                }
                 throw new TransportError(sprintf('curl error %d: %s', $errno, curl_error($ch)), $errno);
             }
             $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
 
-            return [$status, is_string($raw) ? $raw : '', $received];
+            return [$status, $maxResponseBytes !== null ? $download : (is_string($raw) ? $raw : ''), $received];
         } finally {
             curl_close($ch);
         }

@@ -10,7 +10,7 @@ use NoWork\Sdk\Exceptions\DecryptError;
  * Delivery helpers (SDK/docs/DELIVERY.md): decrypt what the user centre sends when an app registered an
  * encryption key. ECDH-ES+A256KW over P-256 (ext-openssl) or X25519 (ext-sodium), enc A256GCM.
  * RSA-OAEP-256 is not offered: ext-openssl cannot select SHA-256 OAEP on PHP 8.1 - 8.4, so register an
- * EC P-256 or X25519 key for PHP apps. Unverified: no PHP interpreter was available when this was written.
+ * EC P-256 or X25519 key for PHP apps.
  */
 final class Delivery
 {
@@ -118,12 +118,13 @@ final class Delivery
 
     /**
      * Verify an RS256 ID token against the provider JWKS (GET BASE/jwks.json): signature, iss, aud and
-     * exp / nbf with 60 s leeway. Returns the claims.
+     * exp / nbf with 60 s leeway. An expected nonce must be nonempty and match the signed string claim.
+     * Returns the claims unchanged; omit $expectedNonce to retain verification without nonce binding.
      *
      * @param array<string, mixed>|string $jwks
      * @return array<string, mixed>
      */
-    public static function verifyIdToken(string $token, array|string $jwks, ?string $issuer = null, ?string $audience = null): array
+    public static function verifyIdToken(string $token, array|string $jwks, ?string $issuer = null, ?string $audience = null, ?string $expectedNonce = null): array
     {
         $parts = explode('.', $token);
         if (count($parts) !== 3) {
@@ -164,19 +165,27 @@ final class Delivery
         if (is_int($claims['nbf'] ?? null) && $claims['nbf'] - 60 > $now) {
             throw new DecryptError('ID token not valid yet');
         }
+        if (func_num_args() >= 5 && ($expectedNonce === null || $expectedNonce === '' || !is_string($claims['nonce'] ?? null)
+            || !hash_equals($expectedNonce, $claims['nonce']))) {
+            throw new DecryptError('ID token nonce mismatch');
+        }
         return $claims;
     }
 
     /**
-     * Open a signed-then-encrypted ID token (id_token_encrypted_response_alg) and verify the inner token.
+     * Open a signed-then-encrypted ID token (id_token_encrypted_response_alg) and verify the inner token,
+     * including the optional expected nonce after signature, issuer, audience and time validation.
      *
      * @param array<string, mixed>|string $jwks
      * @return array<string, mixed>
      */
-    public static function decryptIdToken(string $token, array $keys, array|string $jwks, ?string $issuer = null, ?string $audience = null): array
+    public static function decryptIdToken(string $token, array $keys, array|string $jwks, ?string $issuer = null, ?string $audience = null, ?string $expectedNonce = null): array
     {
         [$inner] = self::decrypt($token, $keys);
-        return self::verifyIdToken($inner, $jwks, $issuer, $audience);
+        if (func_num_args() < 6) {
+            return self::verifyIdToken($inner, $jwks, $issuer, $audience);
+        }
+        return self::verifyIdToken($inner, $jwks, $issuer, $audience, $expectedNonce);
     }
 
     /**

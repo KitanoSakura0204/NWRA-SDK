@@ -18,6 +18,8 @@ use NoWork\Sdk\Internal\Json;
  */
 final class NoworkOidc
 {
+    private const MAX_METADATA_BYTES = 1048576;
+
     private string $issuer;
 
     /** @var callable(string, string, array<string, string>, ?string, float): array{int, string} */
@@ -41,6 +43,46 @@ final class NoworkOidc
     ) {
         $this->issuer = rtrim($issuer, '/');
         $this->transport = $transport ?? new CurlTransport();
+    }
+
+    /**
+     * Read discovery from the configured issuer's fixed path; advertised endpoints are never fetched.
+     *
+     * @return array<string, mixed> complete metadata, including unknown fields
+     */
+    public function discover(): array
+    {
+        [$metadata] = $this->metadata('/.well-known/openid-configuration');
+        foreach (['issuer', 'authorization_endpoint', 'token_endpoint', 'jwks_uri'] as $field) {
+            if (!is_string($metadata[$field] ?? null) || trim($metadata[$field]) === '') {
+                throw new TransportError('incomplete discovery: ' . $field . ' must be a nonempty string');
+            }
+        }
+        if ($metadata['issuer'] !== $this->issuer) {
+            throw new TransportError('discovery issuer mismatch');
+        }
+
+        return $metadata;
+    }
+
+    /**
+     * Read the provider's fixed /jwks.json path, independently of any discovery document.
+     *
+     * @return array<string, mixed> JWKS with a keys array of objects, preserving unknown fields
+     */
+    public function jwks(): array
+    {
+        [$metadata, $object] = $this->metadata('/jwks.json');
+        if (!is_array($object->keys ?? null)) {
+            throw new TransportError('invalid JWKS: keys must be an array of objects');
+        }
+        foreach ($object->keys as $key) {
+            if (!$key instanceof \stdClass) {
+                throw new TransportError('invalid JWKS: keys must be an array of objects');
+            }
+        }
+
+        return $metadata;
     }
 
     /** Build the authorization request URL; `$codeChallenge` (S256) is required for public clients. */
@@ -183,6 +225,46 @@ final class NoworkOidc
         $headers = ['Content-Type' => 'application/x-www-form-urlencoded', 'Accept' => 'application/json'];
 
         return $this->send('POST', $path, $headers, http_build_query($form), $allowEmpty);
+    }
+
+    /**
+     * Keep JSON object/array distinctions for validation while returning the usual associative arrays.
+     * Direct CurlTransport instances bound downloads; custom callables still receive exactly five arguments.
+     *
+     * @return array{array<string, mixed>, \stdClass}
+     */
+    private function metadata(string $path): array
+    {
+        $url = parse_url($this->issuer);
+        if (!is_array($url) || !in_array($url['scheme'] ?? '', ['http', 'https'], true) || empty($url['host'])
+            || isset($url['user']) || isset($url['pass']) || isset($url['query']) || isset($url['fragment'])
+            || preg_match('/[\x00-\x20\x7f]/', $this->issuer)) {
+            throw new TransportError('invalid metadata issuer URL');
+        }
+        $transport = $this->transport;
+        if ($transport instanceof CurlTransport) {
+            $curl = $transport;
+            $transport = static fn (string $method, string $url, array $headers, ?string $body, float $timeout): array =>
+                $curl->sendBounded($method, $url, $headers, $body, $timeout, self::MAX_METADATA_BYTES);
+        }
+        [$status, $raw] = Json::send($transport, 'GET', $this->issuer . $path, ['Accept' => 'application/json'], null, $this->timeout);
+        if (strlen($raw) > self::MAX_METADATA_BYTES) {
+            throw new TransportError('metadata response exceeds 1 MiB');
+        }
+        if ($status < 200 || $status >= 300) {
+            throw new TransportError(sprintf('http %d', $status));
+        }
+        try {
+            $object = json_decode($raw, false, 512, JSON_THROW_ON_ERROR);
+            if (!$object instanceof \stdClass) {
+                throw new TransportError('invalid metadata response: not an object');
+            }
+            $metadata = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            throw new TransportError('invalid metadata json: ' . $e->getMessage());
+        }
+
+        return [$metadata, $object];
     }
 
     /**
