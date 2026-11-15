@@ -23,6 +23,47 @@ const token = await oidc.exchange(code, verifier);
 const me = await oidc.userInfo(token.access_token);
 ```
 
+## OIDC Discovery、JWKS 与 nonce 校验
+
+`discover(signal?: AbortSignal)` 返回 `OIDCMetadata`，`jwks(signal?: AbortSignal)` 返回 `JWKS`。
+二者仅对配置 issuer 的 `/.well-known/openid-configuration` 和 `/jwks.json` 发起无认证 GET，
+不会发送 ClientSecret、ServerKey、Bearer 或浏览器 Cookie，也不跟随 HTTP 重定向或元数据中的 URL。
+未知元数据字段和 JWK 扩展字段保留；`JWK` 包含标准 WebCrypto 字段和 `unknown` 扩展值。
+Discovery 必须包含非空字符串 `issuer`、`authorization_endpoint`、`token_endpoint`、`jwks_uri`，
+其中 issuer 必须精确匹配构造器去除末尾 `/` 后的配置值；JWKS 的 `keys` 必须为对象数组。
+HTTP 非 2xx、无效 JSON/根类型、字段错误及超过 **1 MiB** 的响应均抛出 `TransportError`。
+
+第五个构造参数继续支持注入 `fetch`，第六个可选参数为正整数 `timeoutMs`（默认 `10_000`）；
+超时覆盖 OIDC 请求和响应体读取，两个读取方法还支持调用者取消。原生 Fetch 流在解析前限制字节数；
+只提供 `text()` / `json()` 的自定义适配器会在读取后检查大小，应自行限制底层下载并遵守传入的 signal。
+
+```ts
+import { NoworkOIDC, verifyIdToken, decryptIdToken, type PrivateJwk } from '@nowork/sdk';
+
+const issuer = 'https://account.example.com';
+const oidc = new NoworkOIDC(issuer, clientId, '', redirectUri, fetch, 10_000);
+const metadata = await oidc.discover();
+const jwks = await oidc.jwks(); // 始终读取配置 issuer 的固定路径
+const tokens = await oidc.exchange(code, savedVerifier);
+const options = { issuer: metadata.issuer, audience: clientId, expectedNonce: savedNonce };
+const claims = await verifyIdToken(tokens.id_token!, jwks, options);
+
+// 启用 ID token 加密时，私钥只用于本地解密；内层 RS256 签名及相同 options 仍须通过校验。
+declare const appPrivateJwk: PrivateJwk;
+const encryptedClaims = await decryptIdToken(tokens.id_token!, appPrivateJwk, jwks, options);
+```
+
+登录发起前生成并保存独立的 state、nonce 与 PKCE verifier；回调先核对 state，再使用同一次登录的
+`expectedNonce` 校验 ID token。`verifyIdToken` 先校验 RS256 签名、issuer/audience 和 exp/nbf（60 秒容差），
+再核对 nonce。显式传入的 expectedNonce 必须为非空字符串，签名内 nonce 缺失、非字符串或不匹配均抛出
+`DecryptError`；显式 `undefined` 也会拒绝。省略该选项保留原有行为，返回的签名声明不会被改写。
+OIDC 客户端身份与游戏服务器 ServerKey、站点账号 JWT 分别管理。
+
+Discovery and JWKS use only the configured issuer's fixed unauthenticated paths, retain extensions,
+reject redirects, invalid documents and responses above 1 MiB, and honor injected fetch, timeouts and caller aborts.
+Bind each login with `VerifyOptions.expectedNonce`; signed and encrypted ID tokens both validate the signature,
+issuer, audience and time before enforcing an exact nonempty nonce match.
+
 ## Server API 自动解密
 
 服务器启用数据投递加密后，把对应的私钥 JWK 传给 `NoworkClient`。复用

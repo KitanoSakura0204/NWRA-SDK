@@ -59,8 +59,8 @@ async function concatKdf(z: Uint8Array, alg: string, apu: Uint8Array, apv: Uint8
 }
 
 /** Keep only the members WebCrypto needs (alg / use / key_ops of the file must not interfere). */
-function only(jwk: PrivateJwk, names: string[]): JsonWebKey {
-  const out: Record<string, string> = {};
+function only(jwk: Record<string, unknown>, names: string[]): JsonWebKey {
+  const out: Record<string, unknown> = {};
   for (const n of names) if (jwk[n] !== undefined) out[n] = jwk[n];
   return out as JsonWebKey;
 }
@@ -133,16 +133,18 @@ export interface VerifyOptions {
   audience?: string;
   /** Unix seconds (default: now). */
   now?: number;
+  /** Bind to the nonce saved with this login; explicitly supplied values must be nonempty. */
+  expectedNonce?: string;
 }
 
-/** Verify an RS256 ID token against the provider JWKS (GET BASE/jwks.json): signature, iss, aud, exp / nbf (60 s leeway). */
-export async function verifyIdToken(token: string, jwks: { keys: Record<string, string>[] } | string, opts: VerifyOptions = {}): Promise<Record<string, any>> {
+/** Verify RS256, iss, aud, exp / nbf (60 s leeway), then an explicitly supplied nonce. */
+export async function verifyIdToken(token: string, jwks: { keys: Record<string, unknown>[] } | string, opts: VerifyOptions = {}): Promise<Record<string, any>> {
   const parts = token.split('.');
   if (parts.length !== 3) throw new DecryptError('not a signed JWT');
   const hdr = JSON.parse(dec.decode(b64u(parts[0])));
   if (hdr.alg !== 'RS256') throw new DecryptError('ID token must be RS256');
   const set = typeof jwks === 'string' ? JSON.parse(jwks) : jwks;
-  const jwk = (set.keys as Record<string, string>[]).find((k) => k.kty === 'RSA' && (!hdr.kid || k.kid === hdr.kid));
+  const jwk = (set.keys as Record<string, unknown>[]).find((k) => k.kty === 'RSA' && (!hdr.kid || k.kid === hdr.kid));
   if (!jwk) throw new DecryptError('signing key not in the JWKS');
   const s = subtle();
   const pub = await s.importKey('jwk', only(jwk, ['kty', 'n', 'e']), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
@@ -156,11 +158,15 @@ export async function verifyIdToken(token: string, jwks: { keys: Record<string, 
   if (opts.audience && aud !== opts.audience && !(Array.isArray(aud) && aud.includes(opts.audience))) throw new DecryptError('ID token audience mismatch');
   if (typeof claims.exp !== 'number' || claims.exp + 60 < now) throw new DecryptError('ID token expired');
   if (typeof claims.nbf === 'number' && claims.nbf - 60 > now) throw new DecryptError('ID token not valid yet');
+  if ('expectedNonce' in opts) {
+    if (typeof opts.expectedNonce !== 'string' || opts.expectedNonce.length === 0) throw new DecryptError('expected ID token nonce must be a nonempty string');
+    if (typeof claims.nonce !== 'string' || claims.nonce !== opts.expectedNonce) throw new DecryptError('ID token nonce mismatch');
+  }
   return claims;
 }
 
 /** Open a signed-then-encrypted ID token (id_token_encrypted_response_alg) and verify the inner token. */
-export async function decryptIdToken(token: string, keys: PrivateJwk | PrivateJwk[], jwks: { keys: Record<string, string>[] } | string, opts: VerifyOptions = {}): Promise<Record<string, any>> {
+export async function decryptIdToken(token: string, keys: PrivateJwk | PrivateJwk[], jwks: { keys: Record<string, unknown>[] } | string, opts: VerifyOptions = {}): Promise<Record<string, any>> {
   return verifyIdToken((await decryptJwe(token, keys)).text, jwks, opts);
 }
 

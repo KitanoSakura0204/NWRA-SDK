@@ -606,6 +606,73 @@ export interface UserInfo {
   game_roles?: { server: string; server_name: string; name: string; uuid: string }[];
 }
 
+/** Discovery fields required by this client, with provider extensions retained. */
+export interface OIDCMetadata {
+  issuer: string;
+  authorization_endpoint: string;
+  token_endpoint: string;
+  jwks_uri: string;
+  [key: string]: unknown;
+}
+
+/** Standard JWK members and any provider-specific extensions. */
+export type JWK = JsonWebKey & Record<string, unknown>;
+export interface JWKS {
+  keys: JWK[];
+  [key: string]: unknown;
+}
+
+const OIDC_RESPONSE_LIMIT = 1024 * 1024;
+
+function isOidcObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Bound UTF-8 wire bytes before decoding; retain text/json-only fetch adapter support. */
+async function readOidcDocument(response: Response, signal: AbortSignal): Promise<unknown> {
+  const tooLarge = () => new TransportError(`OIDC response exceeds ${OIDC_RESPONSE_LIMIT}-byte limit`);
+  const declared = response.headers?.get?.('Content-Length');
+  if (declared && /^\d+$/.test(declared) && Number(declared) > OIDC_RESPONSE_LIMIT) {
+    void response.body?.cancel().catch(() => {});
+    throw tooLarge();
+  }
+  if (signal.aborted) {
+    void response.body?.cancel(signal.reason).catch(() => {});
+    throw signal.reason;
+  }
+  if (!response.body) {
+    // Adapters without a stream cannot expose wire size before materializing their body.
+    const text = typeof response.text === 'function' ? await response.text() : JSON.stringify(await response.json());
+    if (typeof text !== 'string') throw new TransportError('invalid OIDC JSON');
+    if (text.length > OIDC_RESPONSE_LIMIT || new TextEncoder().encode(text).byteLength > OIDC_RESPONSE_LIMIT) throw tooLarge();
+    return JSON.parse(text);
+  }
+  const reader = response.body.getReader();
+  const cancel = () => { void reader.cancel(signal.reason).catch(() => {}); };
+  signal.addEventListener('abort', cancel, { once: true });
+  const decoder = new TextDecoder('utf-8', { fatal: true });
+  const chunks: string[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (signal.aborted) throw signal.reason;
+      if (done) break;
+      size += value.byteLength;
+      if (size > OIDC_RESPONSE_LIMIT) throw tooLarge();
+      chunks.push(decoder.decode(value, { stream: true }));
+    }
+    chunks.push(decoder.decode());
+    return JSON.parse(chunks.join(''));
+  } catch (error) {
+    void reader.cancel(error).catch(() => {});
+    throw error;
+  } finally {
+    signal.removeEventListener('abort', cancel);
+    reader.releaseLock();
+  }
+}
+
 /** Minimal OIDC relying-party helper. */
 export class NoworkOIDC {
   private readonly issuer: string;
@@ -615,9 +682,74 @@ export class NoworkOIDC {
     private readonly clientId: string,
     private readonly clientSecret = '',
     private readonly redirectUri = '',
-    private readonly f: typeof fetch = fetch
+    private readonly f: typeof fetch = fetch,
+    private readonly timeoutMs = 10_000
   ) {
     this.issuer = issuer.replace(/\/+$/, '');
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 2_147_483_647) {
+      throw new RangeError('timeoutMs must be a positive 32-bit integer');
+    }
+  }
+
+  private async request<T>(operation: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
+    const ctrl = new AbortController();
+    const forwardAbort = () => ctrl.abort(signal?.reason);
+    signal?.addEventListener('abort', forwardAbort, { once: true });
+    const timer = setTimeout(() => ctrl.abort(), this.timeoutMs);
+    let onAbort: () => void = () => {};
+    try {
+      if (signal?.aborted) forwardAbort();
+      if (ctrl.signal.aborted) throw ctrl.signal.reason;
+      const aborted = new Promise<never>((_resolve, reject) => {
+        onAbort = () => reject(ctrl.signal.reason);
+        ctrl.signal.addEventListener('abort', onAbort, { once: true });
+      });
+      return await Promise.race([operation(ctrl.signal), aborted]);
+    } catch (error) {
+      if (error instanceof TransportError || error instanceof OAuthError) throw error;
+      throw new TransportError(String(error), error);
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', forwardAbort);
+      ctrl.signal.removeEventListener('abort', onAbort);
+    }
+  }
+
+  private getDocument(path: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    return this.request(async requestSignal => {
+      const res = await this.f(this.issuer + path, {
+        method: 'GET', headers: { Accept: 'application/json' },
+        credentials: 'omit', redirect: 'error', signal: requestSignal,
+      });
+      if (res.status < 200 || res.status >= 300 || res.redirected) {
+        void res.body?.cancel().catch(() => {});
+        throw new TransportError(`http ${res.status}${res.redirected ? ' (redirected)' : ''}`);
+      }
+      const document = await readOidcDocument(res, requestSignal);
+      if (!isOidcObject(document)) throw new TransportError('invalid OIDC JSON object');
+      return document;
+    }, signal);
+  }
+
+  /** Read only the configured issuer's fixed discovery path; never follow advertised URLs. */
+  async discover(signal?: AbortSignal): Promise<OIDCMetadata> {
+    const document = await this.getDocument('/.well-known/openid-configuration', signal);
+    for (const field of ['issuer', 'authorization_endpoint', 'token_endpoint', 'jwks_uri']) {
+      if (typeof document[field] !== 'string' || document[field].length === 0) {
+        throw new TransportError(`incomplete OIDC discovery: ${field}`);
+      }
+    }
+    if (document.issuer !== this.issuer) throw new TransportError('OIDC discovery issuer mismatch');
+    return document as OIDCMetadata;
+  }
+
+  /** Read only the configured issuer's /jwks.json; preserve every JWK extension. */
+  async jwks(signal?: AbortSignal): Promise<JWKS> {
+    const document = await this.getDocument('/jwks.json', signal);
+    if (!Array.isArray(document.keys) || !document.keys.every(isOidcObject)) {
+      throw new TransportError('invalid JWKS: keys must be an array of objects');
+    }
+    return document as unknown as JWKS;
   }
 
   authorizeUrl(state: string, nonce?: string, scope = 'openid profile email', codeChallenge?: string): string {
@@ -636,44 +768,41 @@ export class NoworkOIDC {
   }
 
   private async post<T>(path: string, form: Record<string, string | undefined>): Promise<T> {
-    const body = new URLSearchParams();
-    for (const [k, v] of Object.entries(form)) {
-      if (v) body.set(k, v);
-    }
-    body.set('client_id', this.clientId);
-    if (this.clientSecret) body.set('client_secret', this.clientSecret);
-    let res: Response;
-    try {
-      res = await this.f(this.issuer + path, {
+    return this.request(async signal => {
+      const body = new URLSearchParams();
+      for (const [k, v] of Object.entries(form)) {
+        if (v) body.set(k, v);
+      }
+      body.set('client_id', this.clientId);
+      if (this.clientSecret) body.set('client_secret', this.clientSecret);
+      const res = await this.f(this.issuer + path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-        body
+        body, signal
       });
-    } catch (e) {
-      throw new TransportError(String(e), e);
-    }
-    const text = await res.text();
-    let json: any = null;
-    if (text) {
-      try {
-        json = JSON.parse(text);
-      } catch {
-        json = null;
+      const text = await res.text();
+      let json: any = null;
+      if (text) {
+        try {
+          json = JSON.parse(text);
+        } catch {
+          json = null;
+        }
       }
-    }
-    if (res.status >= 400) {
-      if (json && typeof json === 'object' && json.error) {
-        throw new OAuthError(String(json.error), json.error_description ?? '', res.status);
+      if (res.status >= 400) {
+        if (json && typeof json === 'object' && json.error) {
+          throw new OAuthError(String(json.error), json.error_description ?? '', res.status);
+        }
+        throw new TransportError(`http ${res.status}`);
       }
-      throw new TransportError(`http ${res.status}`);
-    }
-    if (!text) {
-      // only revocation may answer with an empty body
-      if (path === '/oauth2/revoke') return {} as T;
-      throw new TransportError(`empty response (${res.status})`);
-    }
-    if (!json || typeof json !== 'object') throw new TransportError(`invalid json (${res.status})`);
-    return json as T;
+      if (!text) {
+        // only revocation may answer with an empty body
+        if (path === '/oauth2/revoke') return {} as T;
+        throw new TransportError(`empty response (${res.status})`);
+      }
+      if (!json || typeof json !== 'object') throw new TransportError(`invalid json (${res.status})`);
+      return json as T;
+    });
   }
 
   exchange(code: string, codeVerifier?: string): Promise<TokenResponse> {
@@ -702,27 +831,24 @@ export class NoworkOIDC {
   }
 
   async userInfo(accessToken: string): Promise<UserInfo> {
-    let res: Response;
-    try {
-      res = await this.f(this.issuer + '/oauth2/userinfo', {
-        headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }
+    return this.request(async signal => {
+      const res = await this.f(this.issuer + '/oauth2/userinfo', {
+        headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }, signal
       });
-    } catch (e) {
-      throw new TransportError(String(e), e);
-    }
-    let json: any;
-    try {
-      json = await res.json();
-    } catch (e) {
-      throw new TransportError(`invalid json (${res.status})`, e);
-    }
-    if (res.status >= 400) {
-      if (json && typeof json === 'object' && json.error) {
-        throw new OAuthError(String(json.error), json.error_description ?? '', res.status);
+      let json: any;
+      try {
+        json = await res.json();
+      } catch (e) {
+        throw new TransportError(`invalid json (${res.status})`, e);
       }
-      throw new TransportError(`http ${res.status}`);
-    }
-    return json as UserInfo;
+      if (res.status >= 400) {
+        if (json && typeof json === 'object' && json.error) {
+          throw new OAuthError(String(json.error), json.error_description ?? '', res.status);
+        }
+        throw new TransportError(`http ${res.status}`);
+      }
+      return json as UserInfo;
+    });
   }
 
   logoutUrl(idToken?: string, postLogoutRedirectUri?: string, state?: string): string {
