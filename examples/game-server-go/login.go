@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -27,8 +28,17 @@ type loginConfig struct {
 }
 
 // login opens (prints) the login page URL and waits for the code: on the loopback redirect, or
-// typed by the player in code-display mode. Then it exchanges the code and reads userinfo.
+// typed by the player in code-display mode. Success requires a nonce-bound signed
+// ID Token and a matching UserInfo subject.
 func login(ctx context.Context, c loginConfig) error {
+	return runLogin(ctx, c, os.Stdin, os.Stdout)
+}
+
+func runLogin(ctx context.Context, c loginConfig, input io.Reader, output io.Writer) error {
+	oidc := nowork.NewOIDC(c.issuer, c.clientID, "", c.redirect)
+	if _, err := oidc.Discover(ctx); err != nil {
+		return errors.New("provider discovery failed")
+	}
 	pkce, err := nowork.NewPKCE()
 	if err != nil {
 		return err
@@ -37,42 +47,74 @@ func login(ctx context.Context, c loginConfig) error {
 	if err != nil {
 		return err
 	}
+	nonce, err := nowork.NewState()
+	if err != nil {
+		return err
+	}
 	page, err := nowork.BuildLoginURL(c.frontend, nowork.LoginURLParams{
 		ServerCode: c.server, RedirectURI: c.redirect, State: state, CodeChallenge: pkce.Challenge,
-		Scope: "openid profile", UILocales: c.locale,
+		Scope: "openid profile", UILocales: c.locale, Nonce: nonce,
 	})
 	if err != nil {
 		return err
 	}
-	fmt.Println("Open this page in a browser and sign in:")
-	fmt.Println("  " + page)
+	fmt.Fprintln(output, "Open this page in a browser and sign in:")
+	fmt.Fprintln(output, "  "+page)
 
 	var code string
 	if c.redirect == "" {
-		code, err = typedCode()
+		code, err = readLoginCode(input, output)
 	} else {
 		code, err = awaitRedirect(ctx, c.redirect, state, c.issuer)
 	}
 	if err != nil {
 		return err
 	}
-	oidc := nowork.NewOIDC(c.issuer, c.clientID, "", c.redirect)
 	tok, err := oidc.Exchange(ctx, code, pkce.Verifier)
+	if err != nil || tok.IDToken == "" || tok.AccessToken == "" || !strings.EqualFold(tok.TokenType, "Bearer") {
+		// Do not copy provider error bodies into terminal logs: they can contain
+		// credentials or tokens. The stage is enough to diagnose this demo.
+		return errors.New("token exchange failed or did not return a signed ID Token and bearer access token")
+	}
+	jwks, err := oidc.JWKS(ctx)
 	if err != nil {
-		return fmt.Errorf("token exchange: %w", err)
+		return errors.New("provider signing keys unavailable")
+	}
+	claims, err := nowork.VerifyIDTokenWithNonce(tok.IDToken, jwks, oidc.Issuer, oidc.ClientID, nonce, time.Now())
+	if err != nil {
+		return errors.New("ID Token verification failed")
+	}
+	sub, ok := claims["sub"].(string)
+	if !ok || sub == "" {
+		return errors.New("ID Token has no subject")
+	}
+	azp, hasAZP := claims["azp"]
+	audiences, multiple := claims["aud"].([]any)
+	if (hasAZP && azp != oidc.ClientID) || (multiple && len(audiences) > 1 && azp != oidc.ClientID) {
+		return errors.New("ID Token authorized party mismatch")
+	}
+	if !time.Now().Before(time.Unix(int64(claims["exp"].(float64)), 0)) {
+		return errors.New("ID Token expired")
 	}
 	info, err := oidc.UserInfo(ctx, tok.AccessToken)
 	if err != nil {
-		return fmt.Errorf("userinfo: %w", err)
+		return errors.New("UserInfo failed")
 	}
-	fmt.Printf("Signed in: sub=%s uid=%d nickname=%q trust level %d\n", info.Sub, info.UID, info.Nickname, info.SecurityLevel)
+	if info.Sub != sub {
+		return errors.New("UserInfo subject does not match the ID Token")
+	}
+	fmt.Fprintf(output, "Signed in: sub=%s uid=%d nickname=%q trust level %d\n", info.Sub, info.UID, info.Nickname, info.SecurityLevel)
 	return nil
 }
 
 // typedCode reads a code-display code ("ABCD-2345") from the terminal.
 func typedCode() (string, error) {
-	fmt.Print("Login code shown on the page: ")
-	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	return readLoginCode(os.Stdin, os.Stdout)
+}
+
+func readLoginCode(input io.Reader, output io.Writer) (string, error) {
+	fmt.Fprint(output, "Login code shown on the page: ")
+	line, err := bufio.NewReader(input).ReadString('\n')
 	if err != nil && line == "" {
 		return "", err
 	}
@@ -115,7 +157,7 @@ func awaitRedirect(ctx context.Context, redirect, state, issuer string) (string,
 		if err != nil {
 			fmt.Fprintln(w, "Login failed, return to the game.")
 		} else {
-			fmt.Fprintln(w, "Signed in, return to the game.")
+			fmt.Fprintln(w, "Authorization response received. Return to the game for identity verification.")
 		}
 		select {
 		case done <- result{code, err}:
