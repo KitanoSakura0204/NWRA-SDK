@@ -36,6 +36,30 @@ test('discovery and JWKS use fixed issuer paths without credentials and retain e
 
 for (const method of ['discover', 'jwks']) {
   const valid = method === 'discover' ? metadata : keys;
+  test(`${method} rejects malformed metadata issuers before transport without disclosing configuration`, async () => {
+    for (const configured of [
+      issuer + '?client_secret=fixture', issuer + '?', issuer + '#fixture', issuer + '#',
+      'https://user:fixture@account.example', 'https://@account.example',
+      'ftp://account.example', 'file:///fixture', 'account.example', '/tenant',
+      '//account.example', 'https:///tenant', 'https://', '',
+      'https://account.example:invalid', 'https://account.example:65536', 'https://[broken',
+      ' https://account.example', 'https://account.example/\tfixture', 'https://account.example\\fixture',
+    ]) {
+      let calls = 0;
+      const oidc = new NoworkOIDC(configured, 'client', 'client-secret', '', async () => {
+        calls++;
+        return json({ ...valid, issuer: configured.replace(/\/+$/, '') });
+      });
+      await assert.rejects(oidc[method](), error => {
+        assert.ok(error instanceof TransportError);
+        assert.equal(error.message, 'nowork: transport error: invalid metadata issuer URL');
+        assert.equal(error.cause, undefined);
+        return true;
+      }, configured);
+      assert.equal(calls, 0, configured);
+    }
+  });
+
   test(`${method} rejects every non-2xx status, malformed JSON, and wrong root type`, async () => {
     for (const status of [199, 301, 302, 304, 400, 401, 500]) {
       // Injected adapters may surface statuses outside native Response's constructor range.
@@ -142,7 +166,7 @@ for (const method of ['discover', 'jwks']) {
 
 test('discovery requires nonempty string fields and the exactly normalized configured issuer', async () => {
   for (const field of ['issuer', 'authorization_endpoint', 'token_endpoint', 'jwks_uri']) {
-    for (const value of [undefined, null, '', 7, [], {}]) {
+    for (const value of [undefined, null, '', '   ', '\t', '\n', 7, [], {}]) {
       const oidc = new NoworkOIDC(issuer, 'client', '', '', async () => json({ ...metadata, [field]: value }));
       await assert.rejects(oidc.discover(), /incomplete OIDC discovery/);
     }
@@ -150,6 +174,21 @@ test('discovery requires nonempty string fields and the exactly normalized confi
   for (const value of [issuer + '/', 'https://other.example', issuer.toUpperCase()]) {
     const oidc = new NoworkOIDC(issuer, 'client', '', '', async () => json({ ...metadata, issuer: value }));
     await assert.rejects(oidc.discover(), /issuer mismatch/);
+  }
+});
+
+test('metadata preserves valid issuer subpaths, case, trailing slashes and endpoint contents', async () => {
+  for (const configured of ['https://account.example', issuer + '/v1///', 'HTTPS://Account.Example/tenant', 'http://localhost:8080/tenant']) {
+    const expected = configured.replace(/\/+$/, '');
+    const document = { ...metadata, issuer: expected, authorization_endpoint: ' https://account.example/authorize ' };
+    const calls = [];
+    const oidc = new NoworkOIDC(configured, 'client', '', '', async url => {
+      calls.push(url);
+      return json(url.endsWith('/jwks.json') ? keys : document);
+    });
+    assert.deepEqual(await oidc.discover(), document);
+    assert.deepEqual(await oidc.jwks(), keys);
+    assert.deepEqual(calls, [expected + '/.well-known/openid-configuration', expected + '/jwks.json']);
   }
 });
 

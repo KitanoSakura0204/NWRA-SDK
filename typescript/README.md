@@ -2,8 +2,10 @@
 
 零依赖，Node 18+（全局 `fetch`），也可在浏览器/启动器（Electron/Tauri）中使用。
 
+使用本地 1.3.0 源码见[独立工程的本地构建、安装与类型化导入](../docs/LOCAL_SETUP.md#typescript构建本地包再按包名导入)。下面的远程命令仅在 npm 已发布该版本时使用：
+
 ```bash
-npm i @nowork/sdk
+npm i @nowork/sdk@1.3.0
 ```
 
 ```ts
@@ -61,6 +63,10 @@ OIDC 客户端身份与游戏服务器 ServerKey、站点账号 JWT 分别管理
 
 Discovery and JWKS use only the configured issuer's fixed unauthenticated paths, retain extensions,
 reject redirects, invalid documents and responses above 1 MiB, and honor injected fetch, timeouts and caller aborts.
+Before calling fetch, metadata methods reject invalid/nonabsolute HTTP(S) issuers, missing hosts, URL credentials,
+query/fragment delimiters (including empty ones), whitespace/control characters and backslashes with a `TransportError`
+that does not include the configured URL. Valid issuer case and path prefixes are retained alongside the existing
+trailing-slash behavior. Mandatory discovery strings must contain non-whitespace text; accepted field contents remain unchanged.
 Bind each login with `VerifyOptions.expectedNonce`; signed and encrypted ID tokens both validate the signature,
 issuer, audience and time before enforcing an exact nonempty nonce match.
 

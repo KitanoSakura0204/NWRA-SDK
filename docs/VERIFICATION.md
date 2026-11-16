@@ -7,6 +7,7 @@
 | 要求 | 交付 | 证据 |
 | --- | --- | --- |
 | 六语言 SDK 更新 | 1.3.0 discovery/JWKS 和 nonce-bound 验证，保留旧签名 | 六语言测试、逐任务独立评审、版本一致性检查 |
+| 六语言本地消费 | [本地接入步骤](LOCAL_SETUP.md)，直接引用这份源码 | 六个独立工程导入／构建并调用新增 JWKS 方法，无 provider 请求 |
 | 完整游戏服对接 | [游戏服务器指南](GAME_SERVER_INTEGRATION.md)及更新后的 Go 游戏示例 | 指南 Go 程序编译、示例 test/vet、源码契约核对 |
 | 完整 OIDC 对接 | [OIDC 指南](OIDC_INTEGRATION.md)及[可运行 RP](../examples/oidc-rp-go/README.md) | 模拟 OP 的完整登录、拒绝、重放、并发和本地会话测试 |
 | 完整项目对接 | [项目指南](PROJECT_INTEGRATION.md)、[接口索引](API_REFERENCE.md)、[离线契约](reference/openapi.json) | 后端生成器检查、SDK 快照哈希和内部引用检查 |
@@ -19,13 +20,15 @@
 | 语言 | 实测环境 | 结果 | 最低版本与限制 |
 | --- | --- | --- | --- |
 | Go | Go 1.26.8 | SDK `go test ./...`、`go vet ./...`；两个 Go 示例同样通过 | 保持 go 1.21；1.21.13 下载遇到 EOF，未在 1.21 实跑 |
-| Python | Python 3.14.8、cryptography 50.0.2、pytest 9.1.1 | pytest 146 tests＋242 subtests；修复阶段 unittest 63 项，无跳过 | Python 3.9 grammar 检查通过，未运行 3.9 解释器 |
-| TypeScript | Node 24.21.0；另实跑 Node 18.20.8 | TypeScript build、88/88 测试；导出声明消费检查通过 | Node 18 使用 `--experimental-global-webcrypto`；X25519 有实验功能提示 |
+| Python | Python 3.14.8、cryptography 50.0.2、pytest 9.1.1 | 最终修复后 pytest 148 tests＋286 subtests；unittest 65 项，无跳过 | 修改文件的 Python 3.9 grammar 检查通过，未运行 3.9 解释器 |
+| TypeScript | Node 24.21.0；另实跑 Node 18.20.8 | 最终修复后 TypeScript build；两种 Node 各 91/91 测试；独立包名导入与声明编译通过 | Node 18 使用 `--experimental-global-webcrypto`；X25519 有实验功能提示 |
 | Java | JDK 25.0.4.1，`--release 17`；修复后另实跑 JDK 17.0.20.1 | SelfCheck 通过；EncryptedTransport 109、GameData 27、OIDC 152 项通过 | 实际 JDK 17 已执行；未运行 Maven、Paper 或 Velocity 构建 |
 | C# | .NET SDK 10.0.402，实际 runtime 6.0.36 | net6.0 Release 构建；OIDC 8 组、GameData 12 组通过 | 未隐藏警告：构建有 439 个 CS1591 XML 文档警告，console 项目有 NETSDK1138 提示；0 构建错误 |
 | PHP | PHP 8.4.27，curl/openssl/sodium 已启用 | 基础 36 项、GameData 12 组、OIDC 14 组通过；30 文件 lint 通过 | PHP 8.1 语法兼容已审查，未在 8.1 实跑；便携运行时未全局安装 |
 
 新增测试覆盖固定 issuer 路径、无认证公共请求、issuer 与文档结构、错误状态、严格 JSON/UTF-8、1 MiB 边界、nonce 错误及 JWE 内层验签。各语言的 transport 注入、流式读取和取消能力不同，见对应 README；自定义适配器不能依赖 SDK 替它取消已经发生的外部副作用或限制已经物化的下载。
+
+2026-11-16 最终修复增加了 Python／TypeScript 的传输前 issuer 校验，以及 TypeScript 空白字段拒绝。RED 阶段 Python 的 40 个无效 issuer 子用例失败；TypeScript 的两个 issuer 测试与空白字段测试失败。GREEN 阶段 Python 元数据 14 tests＋113 subtests、TypeScript 元数据 22 tests 通过，然后执行上表更新后的完整 Python／TypeScript 套件。测试确认无效 issuer 不调用 transport，合法子路径、大小写、已有末尾斜杠规则和扩展字段保留。Go、C#、PHP 的原有完整套件结果保留，本轮只增加独立消费验证。
 
 ## 重现命令
 
@@ -72,9 +75,9 @@ $sdkJavaSources = @(Get-ChildItem java/src/main/java/cyou/nowork/sdk -Filter '*.
 New-Item -ItemType Directory -Force java/target/verification | Out-Null
 javac --release 17 -encoding UTF-8 -d java/target/verification $sdkJavaSources
 java -cp java/target/verification cyou.nowork.sdk.SelfCheck
-java -cp java/target/verification cyou.nowork.sdk.EncryptedTransportTest
+java -cp java/target/verification cyou.nowork.sdk.EncryptedTransportTest go/testdata/vectors.json
 java -cp java/target/verification cyou.nowork.sdk.GameDataClientTest
-java -cp java/target/verification cyou.nowork.sdk.OidcTest
+java -cp java/target/verification cyou.nowork.sdk.OidcTest go/testdata/vectors.json
 
 dotnet build csharp/Nowork.Sdk/Nowork.Sdk.csproj -c Release
 dotnet run --project csharp/Nowork.Sdk.Oidc.Tests/Nowork.Sdk.Oidc.Tests.csproj -c Release
@@ -90,6 +93,21 @@ Get-ChildItem php/src,php/tests -Recurse -Filter '*.php' | ForEach-Object {
 ```
 
 本机 PHP 不在 PATH，实际使用经过 SHA-256 校验的便携 `php.exe`。上面的 `php` 命令适用于已配置 PATH 的环境；没有依赖运行时下载链接才能阅读或使用本交付。
+
+Java 的两个显式向量参数命令已从 SDK 根目录实际执行，使用 JDK 17.0.20.1 重新编译到 `java/target/verification`，分别通过 EncryptedTransport 109 和 OIDC 152 项；SelfCheck／GameData 的上表结果来自前一轮完整检查。
+
+## 独立本地消费验证
+
+[本地接入指南](LOCAL_SETUP.md)中的源码已逐段提取到 `artifacts/sdk-1.3.0/local-consumers`，六个消费工程分别执行成功。每个工程检查本地版本为 1.3.0，并调用新 JWKS 方法拒绝带查询串的 issuer；C# 的该配置错误实际是 `ArgumentException`，其他五语言使用各自的 Transport 错误类型。这些 smoke check 没有 provider 请求，不能替代真实登录联调。
+
+| 语言 | 实际本地接入路径与结果 |
+| --- | --- |
+| Go | Go 1.26.8；独立 `go.mod` 保持 go 1.21，require v1.3.0 加本地 replace，`go run .` 通过 |
+| Python | Python 3.14.8；消费工程通过 `PYTHONPATH` 指向 SDK/python，导入与调用通过；可选 pip editable 路线未执行 |
+| TypeScript | `npm run build` 后，独立工程 `npm install --offline` 本地目录；NodeNext/strict 编译按 `@nowork/sdk` 导入，Node 24.21.0 和 18.20.8 均运行通过 |
+| Java | JDK 17.0.20.1；`javac --release 17` 构建 SDK 并打本地 jar，独立 Consumer 编译／运行通过，无 Maven |
+| C# | SDK 10.0.402；独立 net6.0 ProjectReference，空本地 NuGet source restore 后 Release 运行通过；实际 runtime 6.0.36，保留 439 个 CS1591 与 NETSDK1138 警告 |
+| PHP | PHP 8.4.27；独立 PSR-4 autoload 映射本地 php/src 后调用通过，无 Composer |
 
 ## 示例验证边界
 
@@ -117,7 +135,7 @@ git diff --check
 
 后端检查通过，并输出既有未引用 schema 提示；SDK 检查验证快照与源文件同字节、索引、JSON 内部引用、鉴权方案及版本。文档脚本检查本地文件链接和 UTF-8 替换字符，不声称验证外站可用性或所有 Markdown fragment。独立 SDK checkout 缺少同级 Backend 时，生成器明确报告仅检查本地快照一致性。
 
-本次还将生成器、索引和快照复制到没有同级 Backend 的独立目录，实际通过 standalone 检查。文档检查通过 25 份文件、178 个本地链接；版本检查通过 11 处核心声明、manifest 和 README 标题。
+本次还将生成器、索引和快照复制到没有同级 Backend 的独立目录，实际通过 standalone 检查。最终修复后文档检查通过 26 份文件、191 个本地链接；版本检查通过 11 处核心声明、manifest 和 README 标题。
 
 ## 实现取舍
 

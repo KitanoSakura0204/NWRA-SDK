@@ -2,8 +2,10 @@
 
 Python 3.9+，普通请求使用标准库；加密交付可选安装 `cryptography`。
 
+使用本地 1.3.0 源码见[独立工程的 Python 路径／editable 安装](../docs/LOCAL_SETUP.md#python直接使用本地包路径)。下面的远程命令仅在 PyPI 已发布该版本时使用：
+
 ```bash
-pip install nowork-sdk   # 或 pip install -e ./python
+pip install nowork-sdk==1.3.0
 ```
 
 ```python
@@ -24,6 +26,8 @@ me = oidc.userinfo(token["access_token"])
 ## OIDC discovery、JWKS 与 nonce 校验
 
 `NoworkOIDC.discover()` 和 `jwks()` 返回保留扩展字段的字典，分别读取配置 issuer 的 `/.well-known/openid-configuration` 与 `/jwks.json`。Discovery 的 `issuer` 必须与构造函数去掉末尾 `/` 后的 issuer 完全相同，且 `authorization_endpoint`、`token_endpoint`、`jwks_uri` 都必须是非空字符串；JWKS 的 `keys` 必须是对象数组。SDK 不跟随元数据公布的 URL，也不跟随这两个读取请求的 HTTP 重定向。原有授权和 token 方法继续使用固定 NoWork 路径。
+
+元数据方法在传输前验证 issuer 是有效的绝对 HTTP(S) URL，拒绝缺失主机、URL 用户凭据、查询串／片段（含空 `?`／`#`）、空白／控制字符和反斜杠。错误为不包含原始配置的 `TransportError`。有效的发行者子路径与大小写原样保留，只沿用构造器已有的末尾 `/` 处理，不通过 URL 规范化让不相同的 issuer 匹配。
 
 这两个公开 GET 不携带 `client_secret`、Bearer token、`X-Server-Key` 或登录 cookie。每次读取使用独立的 urllib opener，隔离通过 `urllib.request.install_opener()` 安装的认证、cookie 和额外请求头；标准环境代理（包括用户配置的代理认证）继续生效。它们使用现有 `timeout`，不新增 OIDC 传输注入参数；原有 OAuth 请求仍使用 `urllib.request.urlopen()`。非 2xx、超过 1 MiB、无效 JSON、错误根类型、缺失字段和 issuer 不匹配都会抛出 `TransportError`，不会回退到其他 issuer 或未校验的文档。
 

@@ -97,6 +97,39 @@ class OIDCMetadataTests(unittest.TestCase):
         self.assertIsNone(request.get_header("X-server-key"))
         self.assertEqual(global_opener.addheaders[0], ("Authorization", "Bearer global-token"))
 
+    def test_invalid_metadata_issuers_fail_before_transport_without_disclosing_configuration(self):
+        invalid = (
+            ISSUER + "?client_secret=fixture", ISSUER + "?", ISSUER + "#fixture", ISSUER + "#",
+            "https://user:fixture@account.example", "https://@account.example",
+            "ftp://account.example", "file:///fixture", "account.example", "/tenant",
+            "//account.example", "https:///tenant", "https://", "",
+            "https://account.example:invalid", "https://account.example:65536", "https://[broken",
+            " https://account.example", "https://account.example/\tfixture", "https://account.example\\fixture",
+        )
+        for configured in invalid:
+            for method in ("discover", "jwks"):
+                with self.subTest(issuer=configured, method=method):
+                    # Capture all schemes, including malformed URLs, without any real network I/O.
+                    with patch("urllib.request.OpenerDirector.open", return_value=Reply({
+                        **DISCOVERY, "issuer": configured.rstrip("/"), "keys": [],
+                    })) as transport:
+                        with self.assertRaises(TransportError) as raised:
+                            getattr(NoworkOIDC(configured, "client", "client-secret"), method)()
+                        transport.assert_not_called()
+                    self.assertEqual(str(raised.exception), "invalid metadata issuer URL")
+
+    def test_metadata_preserves_valid_issuer_subpaths_case_and_trailing_slash_contract(self):
+        for configured in (ISSUER, ISSUER + "/tenant/v1///", "HTTPS://Account.Example/tenant", "http://localhost:8080/tenant"):
+            with self.subTest(issuer=configured):
+                expected = configured.rstrip("/")
+                document = dict(DISCOVERY, issuer=expected)
+                with patch("urllib.request.OpenerDirector.open", side_effect=[Reply(document), Reply({"keys": []})]) as transport:
+                    oidc = NoworkOIDC(configured, "client")
+                    self.assertEqual(oidc.discover(), document)
+                    self.assertEqual(oidc.jwks(), {"keys": []})
+                self.assertEqual([call.args[0].full_url for call in transport.call_args_list], [
+                    expected + "/.well-known/openid-configuration", expected + "/jwks.json"])
+
     def test_redirects_are_rejected_without_a_second_request(self):
         for status in (301, 302, 303, 307, 308):
             with self.subTest(status=status):

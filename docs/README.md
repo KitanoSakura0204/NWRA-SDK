@@ -8,6 +8,7 @@
 4. [全接口索引](API_REFERENCE.md)：所有操作及分组；[OpenAPI 快照](reference/openapi.json)包含全部字段／请求／响应／schema，[manifest](reference/manifest.json)记录来源和校验值。
 5. [验证记录](VERIFICATION.md)：本次实际测试、环境版本、限制和交付信息。
 6. [时间与浏览器时区](TIME_HANDLING.md)：请求级时区转换、时间戳规则、历史数据和更新要求。
+7. [六语言本地接入](LOCAL_SETUP.md)：在独立工程引用本地 1.3.0 源码、构建和执行无 provider 请求的消费示例。
 
 ## 专题协议
 

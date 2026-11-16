@@ -52,6 +52,19 @@ class NoworkOIDC:
         return body
 
     def _metadata(self, path: str) -> dict:
+        # Validate before constructing a request; parsers may discard empty delimiters
+        # or whitespace. Keep the original issuer for exact matching and path prefixes.
+        try:
+            configured = urllib.parse.urlsplit(self.issuer)
+            if (configured.scheme.lower() not in ("http", "https") or not configured.hostname
+                    or configured.username is not None or configured.password is not None
+                    or any(char in self.issuer for char in ("?", "#", "\\"))
+                    or any(ord(char) <= 32 or ord(char) == 127 for char in self.issuer)):
+                raise ValueError("invalid issuer")
+            # Accessing port also checks its syntax and range in urllib.parse.
+            configured.port
+        except ValueError:
+            raise TransportError("invalid metadata issuer URL") from None
         req = urllib.request.Request(self.issuer + path, method="GET", headers={"Accept": "application/json"})
         # A fresh opener has no global login/auth/cookie handlers or shared mutable headers.
         # urllib's default proxy handling, including configured proxy auth, stays available.

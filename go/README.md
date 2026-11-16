@@ -1,7 +1,9 @@
 # nowork-sdk-go
 
+使用本地 1.3.0 源码请先完成[独立工程的 require / replace 与调用示例](../docs/LOCAL_SETUP.md#go本地-require--replace)。下面的远程命令仅在仓库已发布对应 tag 时使用：
+
 ```bash
-go get github.com/wangework/nowork-sdk-go
+go get github.com/wangework/nowork-sdk-go@v1.3.0
 ```
 
 ```go

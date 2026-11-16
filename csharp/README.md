@@ -2,6 +2,8 @@
 
 零第三方依赖，适用于 Unity 服务端 / 独立 .NET 游戏服务器 / ASP.NET 应用。
 
+本次为本地源码 1.3.0；按[独立消费工程的 ProjectReference 步骤](../docs/LOCAL_SETUP.md#c独立工程-projectreference)构建和调用 SDK，不需要先发布 NuGet 包。
+
 ```csharp
 var client = new NoworkClient("https://account.example.com", Environment.GetEnvironmentVariable("NOWORK_SERVER_KEY")!);
 var r = await client.CheckWhitelistAsync(player.Name, player.Uuid);

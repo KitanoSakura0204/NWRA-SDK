@@ -717,6 +717,19 @@ export class NoworkOIDC {
 
   private getDocument(path: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
     return this.request(async requestSignal => {
+      // URL accepts and normalizes some malformed inputs. Check the literal issuer
+      // first, then use URL only for validation; never replace the configured value.
+      try {
+        const authority = /^https?:\/\/([^/]+)/i.exec(this.issuer)?.[1];
+        if (!authority || authority.includes('@') || /[\u0000-\u0020\u007f\\?#]/.test(this.issuer)) {
+          throw new Error('invalid issuer');
+        }
+        const configured = new URL(this.issuer);
+        if (!configured.hostname || configured.username || configured.password) throw new Error('invalid issuer');
+      } catch {
+        // URL parser errors can contain the configured URL, including credentials.
+        throw new TransportError('invalid metadata issuer URL');
+      }
       const res = await this.f(this.issuer + path, {
         method: 'GET', headers: { Accept: 'application/json' },
         credentials: 'omit', redirect: 'error', signal: requestSignal,
@@ -735,7 +748,7 @@ export class NoworkOIDC {
   async discover(signal?: AbortSignal): Promise<OIDCMetadata> {
     const document = await this.getDocument('/.well-known/openid-configuration', signal);
     for (const field of ['issuer', 'authorization_endpoint', 'token_endpoint', 'jwks_uri']) {
-      if (typeof document[field] !== 'string' || document[field].length === 0) {
+      if (typeof document[field] !== 'string' || document[field].trim().length === 0) {
         throw new TransportError(`incomplete OIDC discovery: ${field}`);
       }
     }

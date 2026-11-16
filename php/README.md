@@ -3,8 +3,10 @@
 PHP 8.1+，仅依赖 `ext-curl` 与 `ext-json`（PHP 自带扩展，无第三方包），可用于 Laravel / Symfony / ThinkPHP 或原生 PHP 项目。
 ID Token 的 RS256 校验与 EC P-256 解密另需 `ext-openssl`；X25519 解密另需 `ext-sodium`。
 
+使用本地 1.3.0 源码见[独立工程的本地 autoload 接入](../docs/LOCAL_SETUP.md#php本地-psr-4-autoload无需-composer)，无需安装 Composer。下面的远程命令仅在包仓库已发布该版本时使用：
+
 ```bash
-composer require nowork/sdk
+composer require nowork/sdk:1.3.0
 ```
 
 ## Server API（游戏服务器）

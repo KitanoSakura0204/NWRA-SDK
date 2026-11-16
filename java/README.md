@@ -2,6 +2,8 @@
 
 零依赖（Java 17+，`java.net.http`），可直接放进 Paper / Spigot / Velocity / Fabric 服务端插件。
 
+使用本地 1.3.0 源码见[独立工程的 javac / jar 接入](../docs/LOCAL_SETUP.md#javajavac--jar无需-maven)，无需安装 Maven。下面的 Maven 依赖仅在所用仓库已发布该版本时可直接解析：
+
 ```xml
 <dependency>
   <groupId>cyou.nowork</groupId>

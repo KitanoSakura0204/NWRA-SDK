@@ -57,7 +57,7 @@ $result.data
 
 成功结果外层为 `{"code":0,"message":"...","data":...}`。`data` 默认包含 `server`、`mode`、`count`、`entries`。启用加密后需要使用已配置解密钥的 SDK，不能直接把 `data.jwe` 当成白名单数组。
 
-Go 最小进服校验程序如下。创建 Go 工程后，按 [Go SDK 安装说明](../go/README.md) 使用本地 module replacement 或实际已发布版本；不要假定本次本地 1.3.0 已经发布到远程。
+Go 最小进服校验程序如下。创建 Go 工程后，按[本地接入的 Go require / replace 步骤](LOCAL_SETUP.md#go本地-require--replace)引用这份源码；语言能力见 [Go README](../go/README.md)。不要假定本次本地 1.3.0 已经发布到远程。
 
 ```go
 package main
