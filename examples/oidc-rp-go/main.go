@@ -8,9 +8,11 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -49,7 +51,7 @@ type app struct {
 }
 
 func newApp(c config) (*app, error) {
-	issuer, err := checkedURL(c.issuer, false)
+	_, err := checkedURL(c.issuer, false)
 	if err != nil {
 		return nil, errors.New("NOWORK_ISSUER must be an HTTPS URL (HTTP is allowed for loopback), without credentials, query or fragment")
 	}
@@ -60,22 +62,48 @@ func newApp(c config) (*app, error) {
 	if strings.TrimSpace(c.clientID) == "" {
 		return nil, errors.New("NOWORK_CLIENT_ID is required")
 	}
-	return &app{oidc: nowork.NewOIDC(issuer, c.clientID, c.clientSecret, base+"/callback"), baseURL: base, secure: strings.HasPrefix(base, "https://"), now: time.Now, capacity: 1024, attempts: make(map[string]loginAttempt), sessions: make(map[string]session)}, nil
+	origin := base.String()
+	// Only the application origin is canonicalized. The SDK preserves the
+	// configured issuer for exact metadata/token matching (trimming trailing /).
+	return &app{oidc: nowork.NewOIDC(c.issuer, c.clientID, c.clientSecret, origin+"/callback"), baseURL: origin, secure: base.Scheme == "https", now: time.Now, capacity: 1024, attempts: make(map[string]loginAttempt), sessions: make(map[string]session)}, nil
 }
 
-func checkedURL(raw string, originOnly bool) (string, error) {
+func checkedURL(raw string, originOnly bool) (*url.URL, error) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" {
-		return "", errors.New("invalid URL")
+		return nil, errors.New("invalid URL")
 	}
 	if originOnly && u.Path != "" && u.Path != "/" {
-		return "", errors.New("origin required")
+		return nil, errors.New("origin required")
 	}
-	loopback := u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" || u.Hostname() == "::1"
+	host := strings.ToLower(u.Hostname())
+	loopback := host == "localhost" || host == "127.0.0.1" || host == "::1"
 	if u.Scheme != "https" && !(u.Scheme == "http" && loopback) {
-		return "", errors.New("HTTPS required")
+		return nil, errors.New("HTTPS required")
 	}
-	return strings.TrimRight(raw, "/"), nil
+	if originOnly {
+		// Browsers lowercase scheme/host, normalize IP literals and ports, and
+		// omit the scheme's default port when serializing an Origin header.
+		if address, err := netip.ParseAddr(host); err == nil {
+			host = address.String()
+		}
+		if strings.Contains(host, ":") {
+			host = "[" + host + "]"
+		}
+		port := u.Port()
+		if port != "" {
+			number, err := strconv.ParseUint(port, 10, 16)
+			if err != nil {
+				return nil, errors.New("invalid application port")
+			}
+			port = strconv.FormatUint(number, 10)
+		}
+		if port != "" && !(u.Scheme == "https" && port == "443") && !(u.Scheme == "http" && port == "80") {
+			host += ":" + port
+		}
+		u.Host, u.Path, u.RawPath = host, "", ""
+	}
+	return u, nil
 }
 
 func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {

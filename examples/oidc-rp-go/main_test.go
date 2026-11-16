@@ -408,52 +408,106 @@ func TestSessionCapacityDoesNotEvictActiveUsers(t *testing.T) {
 }
 
 func TestHTTPSCookiesAreSecureAndLogoutChecksOrigin(t *testing.T) {
+	for _, tc := range []struct{ name, configured, origin string }{
+		{"canonical", "https://rp.example", "https://rp.example"},
+		{"mixed-case scheme", "HTTPS://rp.example", "https://rp.example"},
+		{"mixed-case host", "https://RP.Example", "https://rp.example"},
+		{"default port", "https://rp.example:443", "https://rp.example"},
+		{"padded default port", "HTTPS://RP.EXAMPLE:0443/", "https://rp.example"},
+		{"nondefault port", "HTTPS://RP.EXAMPLE:8443", "https://rp.example:8443"},
+		{"IPv6", "HTTPS://[2001:0DB8:0:0:0:0:0:1]:443", "https://[2001:db8::1]"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := provider(t)
+			a, err := newApp(config{issuer: p.server.URL, clientID: "test-client", baseURL: tc.configured})
+			if err != nil {
+				t.Fatal(err)
+			}
+			w := httptest.NewRecorder()
+			a.ServeHTTP(w, httptest.NewRequest("GET", tc.origin+"/login", nil))
+			res := w.Result()
+			defer res.Body.Close()
+			c := cookieNamed(res, "nowork_attempt")
+			if c == nil {
+				t.Fatal("no login attempt cookie")
+			}
+			if !c.Secure || !c.HttpOnly || c.Domain != "" || c.SameSite != http.SameSiteLaxMode {
+				t.Errorf("unsafe HTTPS cookie: %+v", c)
+			}
+			u, err := url.Parse(res.Header.Get("Location"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := u.Query().Get("redirect_uri"); got != tc.origin+"/callback" {
+				t.Errorf("redirect URI %q does not use browser origin %q", got, tc.origin)
+			}
+			p.mu.Lock()
+			p.request = u.Query()
+			p.mu.Unlock()
+			r := httptest.NewRequest("GET", tc.origin+"/callback?"+url.Values{"state": {u.Query().Get("state")}, "code": {"test-code"}}.Encode(), nil)
+			r.AddCookie(c)
+			w = httptest.NewRecorder()
+			a.ServeHTTP(w, r)
+			res = w.Result()
+			defer res.Body.Close()
+			s := cookieNamed(res, "nowork_session")
+			if s == nil {
+				t.Fatal("no login session cookie")
+			}
+			if !s.Secure {
+				t.Error("HTTPS session cookie is not Secure")
+			}
+			r = httptest.NewRequest("GET", tc.origin+"/", nil)
+			r.AddCookie(s)
+			w = httptest.NewRecorder()
+			a.ServeHTTP(w, r)
+			csrf := regexp.MustCompile(`name="csrf" value="([^"]+)"`).FindStringSubmatch(w.Body.String())
+			if len(csrf) != 2 {
+				t.Fatal("no signed-in logout form")
+			}
+			for _, origin := range []string{"https://other.example", tc.origin} {
+				r = httptest.NewRequest("POST", tc.origin+"/logout", strings.NewReader("csrf="+csrf[1]))
+				r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				r.Header.Set("Origin", origin)
+				r.AddCookie(s)
+				w = httptest.NewRecorder()
+				a.ServeHTTP(w, r)
+				if origin != tc.origin {
+					if w.Code != http.StatusForbidden {
+						t.Fatal("cross-origin logout was accepted")
+					}
+				} else {
+					if w.Code != http.StatusSeeOther {
+						t.Errorf("normalized browser Origin was rejected: %d", w.Code)
+						continue
+					}
+					res = w.Result()
+					defer res.Body.Close()
+					for _, name := range []string{"nowork_attempt", "nowork_session"} {
+						cleared := cookieNamed(res, name)
+						if cleared == nil || !cleared.Secure || cleared.MaxAge != -1 {
+							t.Errorf("logout did not securely clear %s", name)
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestApplicationOriginNormalizationPreservesExactIssuerMatch(t *testing.T) {
 	p := provider(t)
-	a, err := newApp(config{issuer: p.server.URL, clientID: "test-client", baseURL: "https://rp.example"})
+	// Discovery returns a lowercase scheme; the configured issuer must still
+	// match literally. Normalization applies only to the application's origin.
+	issuer := strings.Replace(p.server.URL, "http://", "HTTP://", 1)
+	a, err := newApp(config{issuer: issuer, clientID: "test-client", baseURL: "HTTPS://RP.EXAMPLE:443"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	w := httptest.NewRecorder()
 	a.ServeHTTP(w, httptest.NewRequest("GET", "https://rp.example/login", nil))
-	res := w.Result()
-	defer res.Body.Close()
-	c := cookieNamed(res, "nowork_attempt")
-	if c == nil || !c.Secure || !c.HttpOnly || c.Domain != "" || c.SameSite != http.SameSiteLaxMode {
-		t.Fatalf("unsafe HTTPS cookie: %+v", c)
-	}
-	u, err := url.Parse(res.Header.Get("Location"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	p.mu.Lock()
-	p.request = u.Query()
-	p.mu.Unlock()
-	r := httptest.NewRequest("GET", "https://rp.example/callback?"+url.Values{"state": {u.Query().Get("state")}, "code": {"test-code"}}.Encode(), nil)
-	r.AddCookie(c)
-	w = httptest.NewRecorder()
-	a.ServeHTTP(w, r)
-	res = w.Result()
-	defer res.Body.Close()
-	s := cookieNamed(res, "nowork_session")
-	if s == nil || !s.Secure {
-		t.Fatal("HTTPS session cookie is not Secure")
-	}
-	r = httptest.NewRequest("GET", "https://rp.example/", nil)
-	r.AddCookie(s)
-	w = httptest.NewRecorder()
-	a.ServeHTTP(w, r)
-	csrf := regexp.MustCompile(`name="csrf" value="([^"]+)"`).FindStringSubmatch(w.Body.String())
-	if len(csrf) != 2 {
-		t.Fatal("no signed-in logout form")
-	}
-	r = httptest.NewRequest("POST", "https://rp.example/logout", strings.NewReader("csrf="+csrf[1]))
-	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	r.Header.Set("Origin", "https://other.example")
-	r.AddCookie(s)
-	w = httptest.NewRecorder()
-	a.ServeHTTP(w, r)
-	if w.Code != http.StatusForbidden {
-		t.Fatal("cross-origin logout was accepted")
+	if w.Code != http.StatusBadGateway {
+		t.Fatal("application normalization silently changed the configured issuer")
 	}
 }
 

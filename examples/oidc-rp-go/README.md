@@ -42,9 +42,9 @@ Both `go run .` and the tests use `replace github.com/wangework/nowork-sdk-go =>
 | `NOWORK_ISSUER` | Required | Configured NoWork issuer; trailing slashes are normalized. HTTPS required except loopback HTTP. |
 | `NOWORK_CLIENT_ID` | Required | The registered OIDC application client ID. |
 | `NOWORK_CLIENT_SECRET` | Empty | Optional confidential-client secret; never placed in browser URLs. |
-| `APP_BASE_URL` | `http://127.0.0.1:8080` | Browser-facing origin. Redirect URI is this origin plus `/callback`; no path, credentials, query or fragment. |
+| `APP_BASE_URL` | `http://127.0.0.1:8080` | Browser-facing origin. Scheme/host casing, IP literals and default ports are normalized; redirect URI is the normalized origin plus `/callback`. No path, credentials, query or fragment. |
 
-The listener always binds **`127.0.0.1:8080`**. `APP_BASE_URL` changes the public origin and cookie security, not the listening address. For HTTPS, terminate TLS at a reverse proxy forwarding to this listener and set `APP_BASE_URL` to the public HTTPS origin. Register its exact `/callback` address. Do not switch between `localhost` and `127.0.0.1` during a login: browser cookies belong to the chosen host.
+The listener always binds **`127.0.0.1:8080`**. `APP_BASE_URL` changes the public origin and cookie security, not the listening address. For HTTPS, terminate TLS at a reverse proxy forwarding to this listener and set `APP_BASE_URL` to the public HTTPS origin. Register its normalized `/callback` address: for example, `HTTPS://RP.EXAMPLE:443` becomes `https://rp.example/callback`, and all cookies are Secure. This application-origin normalization does not change the SDK's exact issuer-matching contract. Do not switch between `localhost` and `127.0.0.1` during a login: browser cookies belong to the chosen host.
 
 ## Flow and security checks
 
