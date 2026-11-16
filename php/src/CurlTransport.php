@@ -44,7 +44,7 @@ final class CurlTransport
     }
 
     /**
-     * Bound a metadata download while reading and disable redirects / cURL origin authentication.
+     * Bound a metadata download while reading, pin its URL-derived target and disable redirects / origin credentials.
      * Caller timeout/proxy/TLS options remain in effect, as does an existing write callback's stricter limit.
      * Custom transport callables retain the five-argument __invoke contract.
      *
@@ -98,8 +98,21 @@ final class CurlTransport
         }
         $download = '';
         $exceeded = false;
+        $options = $this->options;
         if ($maxResponseBytes !== null) {
-            $onWrite = $this->options[CURLOPT_WRITEFUNCTION] ?? null;
+            // Each request has a fresh handle. Do not enable its cookie engine or attach shared state:
+            // applying then clearing COOKIELIST could mutate the caller's shared cookies or cookie jar.
+            // This local copy leaves ordinary calls and the caller's transport/options unchanged.
+            foreach ([CURLOPT_COOKIE, CURLOPT_COOKIEFILE, CURLOPT_COOKIEJAR, CURLOPT_COOKIELIST,
+                CURLOPT_COOKIESESSION, CURLOPT_SHARE] as $option) {
+                unset($options[$option]);
+            }
+            if (defined('CURLOPT_REQUEST_TARGET')) {
+                // Omit this option on the fresh handle so libcurl derives the target from CURLOPT_URL.
+                // PHP converts a null option value to an empty string instead of restoring that default.
+                unset($options[CURLOPT_REQUEST_TARGET]);
+            }
+            $onWrite = $options[CURLOPT_WRITEFUNCTION] ?? null;
             $required[CURLOPT_RETURNTRANSFER] = false;
             $required[CURLOPT_FOLLOWLOCATION] = false;
             $required[CURLOPT_HTTPAUTH] = CURLAUTH_NONE;
@@ -142,7 +155,7 @@ final class CurlTransport
             // Effective precedence remains required > caller options > defaults.
             $configured = $maxResponseBytes === null
                 ? curl_setopt_array($ch, $required + $this->options + $defaults)
-                : curl_setopt_array($ch, $this->options + $defaults) && curl_setopt_array($ch, $required);
+                : curl_setopt_array($ch, $options + $defaults) && curl_setopt_array($ch, $required);
             if (!$configured) {
                 throw new TransportError('invalid curl option: ' . curl_error($ch), curl_errno($ch));
             }

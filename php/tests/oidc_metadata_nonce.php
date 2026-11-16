@@ -5,8 +5,10 @@ declare(strict_types=1);
 // Run: php tests/oidc_metadata_nonce.php. All HTTP fixtures stay on loopback.
 if (PHP_SAPI === 'cli-server') {
     $path = (string) parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+    $wire = ['target' => $_SERVER['REQUEST_URI'], 'cookie' => $_SERVER['HTTP_COOKIE'] ?? null];
     header('Content-Type: application/json');
-    if ($_SERVER['REQUEST_METHOD'] !== 'GET' || isset($_SERVER['HTTP_AUTHORIZATION']) || isset($_SERVER['HTTP_X_SERVER_KEY']) || $_GET !== []
+    header('Set-Cookie: fixture_cookie=response-cookie; Path=/');
+    if ($_SERVER['REQUEST_METHOD'] !== 'GET' || isset($_SERVER['HTTP_AUTHORIZATION']) || isset($_SERVER['HTTP_X_SERVER_KEY'])
         || file_get_contents('php://input') !== '') {
         http_response_code(400);
         echo '{}';
@@ -26,9 +28,9 @@ if (PHP_SAPI === 'cli-server') {
     } elseif (str_ends_with($path, '/.well-known/openid-configuration')) {
         $issuer = 'http://' . $_SERVER['HTTP_HOST'];
         echo json_encode(['issuer' => $issuer, 'authorization_endpoint' => $issuer . '/oauth2/authorize',
-            'token_endpoint' => $issuer . '/oauth2/token', 'jwks_uri' => 'https://untrusted.example/jwks']);
+            'token_endpoint' => $issuer . '/oauth2/token', 'jwks_uri' => 'https://untrusted.example/jwks', 'wire' => $wire]);
     } else {
-        echo '{"keys":[],"future":true}';
+        echo json_encode(['keys' => [], 'future' => true, 'wire' => $wire]);
     }
     return;
 }
@@ -78,6 +80,31 @@ function om_doc(): array
 function om_oidc(array $response): NoworkOidc
 {
     return new NoworkOidc('https://account.example/prefix/', 'client', 'secret', '', 2.5, static fn () => $response);
+}
+
+function om_loopback(callable $test): void
+{
+    $socket = stream_socket_server('tcp://127.0.0.1:0', $errno, $errstr);
+    om_assert($socket !== false, 'cannot bind loopback');
+    $address = stream_socket_get_name($socket, false);
+    fclose($socket);
+    $null = PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null';
+    $process = proc_open([PHP_BINARY, '-S', $address, __FILE__], [0 => ['pipe', 'r'], 1 => ['file', $null, 'a'], 2 => ['file', $null, 'a']], $pipes, __DIR__);
+    om_assert(is_resource($process), 'could not start loopback server');
+    fclose($pipes[0]);
+    try {
+        $ready = false;
+        for ($i = 0; $i < 100; $i++) {
+            $probe = @stream_socket_client('tcp://' . $address, $errno, $errstr, 0.02);
+            if ($probe !== false) { fclose($probe); $ready = true; break; }
+            usleep(20000);
+        }
+        om_assert($ready, 'loopback server did not become ready');
+        $test('http://' . $address);
+    } finally {
+        proc_terminate($process);
+        proc_close($process);
+    }
 }
 
 function om_b64(string $binary): string
@@ -268,23 +295,7 @@ $tests['encrypted ID tokens retain inner RS256 verification and append the nonce
     om_throws(DecryptError::class, static fn () => Delivery::decryptIdToken(om_encrypt(json_encode($claims), $recipient), $recipient, $jwks, $claims['iss'], 'client', 'session-nonce'), 'signed JWT');
 };
 $tests['default and injected cURL bound downloads reject redirects and retain timeout options'] = static function (): void {
-    $socket = stream_socket_server('tcp://127.0.0.1:0', $errno, $errstr);
-    om_assert($socket !== false, 'cannot bind loopback');
-    $address = stream_socket_get_name($socket, false);
-    fclose($socket);
-    $null = PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null';
-    $process = proc_open([PHP_BINARY, '-S', $address, __FILE__], [0 => ['pipe', 'r'], 1 => ['file', $null, 'a'], 2 => ['file', $null, 'a']], $pipes, __DIR__);
-    om_assert(is_resource($process), 'could not start loopback server');
-    fclose($pipes[0]);
-    try {
-        $ready = false;
-        for ($i = 0; $i < 100; $i++) {
-            $probe = @stream_socket_client('tcp://' . $address, $errno, $errstr, 0.02);
-            if ($probe !== false) { fclose($probe); $ready = true; break; }
-            usleep(20000);
-        }
-        om_assert($ready, 'loopback server did not become ready');
-        $base = 'http://' . $address;
+    om_loopback(static function (string $base): void {
         $oidc = new NoworkOidc($base . '/', 'client', 'secret', timeout: 2.0);
         om_assert($oidc->discover()['issuer'] === $base);
         om_assert($oidc->jwks()['future'] === true);
@@ -320,10 +331,69 @@ $tests['default and injected cURL bound downloads reject redirects and retain ti
         $transport = new CurlTransport([CURLOPT_TIMEOUT_MS => 50]);
         $error = om_throws(TransportError::class, static fn () => (new NoworkOidc($base . '/slow', 'client', timeout: 2.0, transport: $transport))->jwks(), 'curl error');
         om_assert($error->getCode() === CURLE_OPERATION_TIMEDOUT, 'injected cURL deadline changed');
-    } finally {
-        proc_terminate($process);
-        proc_close($process);
-    }
+    });
+};
+$tests['injected cURL cannot replace fixed metadata targets but retains ordinary request targets'] = static function (): void {
+    om_loopback(static function (string $base): void {
+        foreach (['/advertised', '/advertised?client_secret=secret'] as $target) {
+            $transport = new CurlTransport([CURLOPT_REQUEST_TARGET => $target]);
+            $oidc = new NoworkOidc($base, 'client', transport: $transport);
+            om_assert($oidc->jwks()['wire']['target'] === '/jwks.json', 'caller request target replaced fixed JWKS path');
+            om_assert($oidc->discover()['wire']['target'] === '/.well-known/openid-configuration', 'caller request target replaced discovery path');
+            [$status, $raw] = $transport('GET', $base . '/jwks.json', ['Accept' => 'application/json'], null, 2.0);
+            om_assert($status === 200 && json_decode($raw, true)['wire']['target'] === $target, 'metadata changed ordinary transport target');
+        }
+    });
+};
+$tests['injected cURL metadata isolates explicit file list jar and shared cookies'] = static function (): void {
+    om_loopback(static function (string $base): void {
+        $input = tempnam(sys_get_temp_dir(), 'nowork-cookie-input-');
+        $output = tempnam(sys_get_temp_dir(), 'nowork-cookie-output-');
+        om_assert($input !== false && $output !== false);
+        $cookie = "127.0.0.1\tFALSE\t/\tFALSE\t0\tclient_secret\tfile-secret";
+        file_put_contents($input, "# Netscape HTTP Cookie File\n" . $cookie . "\n");
+        $jarSentinel = 'metadata must leave this jar unchanged';
+        file_put_contents($output, $jarSentinel);
+        $share = curl_share_init();
+        om_assert(curl_share_setopt($share, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE));
+        $seed = curl_init();
+        curl_setopt_array($seed, [CURLOPT_SHARE => $share, CURLOPT_COOKIEFILE => '',
+            CURLOPT_COOKIELIST => "127.0.0.1\tFALSE\t/\tFALSE\t0\tbearer_token\tshared-token"]);
+        curl_close($seed);
+        unset($seed);
+        try {
+            $cases = [
+                'explicit' => [[CURLOPT_COOKIE => 'client_secret=secret; bearer_token=token'], 'client_secret=secret'],
+                'file' => [[CURLOPT_COOKIEFILE => $input], 'client_secret=file-secret'],
+                'list' => [[CURLOPT_COOKIEFILE => '', CURLOPT_COOKIELIST => $cookie], 'client_secret=file-secret'],
+                'jar' => [[CURLOPT_COOKIEFILE => $input, CURLOPT_COOKIEJAR => $output, CURLOPT_COOKIESESSION => false], 'client_secret=file-secret'],
+                'shared' => [[CURLOPT_SHARE => $share, CURLOPT_COOKIEFILE => ''], 'bearer_token=shared-token'],
+            ];
+            $errors = [];
+            foreach ($cases as $name => [$options, $expectedCookie]) {
+                $transport = new CurlTransport($options);
+                $oidc = new NoworkOidc($base, 'client', transport: $transport);
+                foreach (['jwks', 'discover'] as $method) {
+                    $wire = $oidc->$method()['wire'];
+                    if ($wire['cookie'] !== null) {
+                        $errors[] = $name . '/' . $method . ' sent ' . $wire['cookie'];
+                    }
+                }
+                if ($name === 'jar' && file_get_contents($output) !== $jarSentinel) {
+                    $errors[] = 'metadata wrote the caller cookie jar';
+                }
+                [$status, $raw] = $transport('GET', $base . '/jwks.json', ['Accept' => 'application/json'], null, 2.0);
+                $wire = json_decode($raw, true)['wire'];
+                om_assert($status === 200 && is_string($wire['cookie']) && str_contains($wire['cookie'], $expectedCookie),
+                    $name . ': metadata changed ordinary transport cookie options or shared state');
+            }
+            om_assert($errors === [], implode('; ', $errors));
+        } finally {
+            curl_share_close($share);
+            unlink($input);
+            unlink($output);
+        }
+    });
 };
 
 $failed = 0;

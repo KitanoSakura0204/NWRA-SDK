@@ -163,7 +163,7 @@ $transport = new CurlTransport([CURLOPT_PROXY => 'http://127.0.0.1:7890', CURLOP
 $client = new NoworkClient($base, $key, timeout: 5.0, transport: $transport);
 ```
 
-元数据读取在默认传输或直接注入的 `CurlTransport` 中使用读取回调，将下载限制在 1 MiB，禁止重定向和 cURL 源站认证，并保留调用方超时、代理、TLS 配置及已有写回调的更严格限制。其它自定义 callable 仍只接收五个参数；SDK 会在收到完整响应后检查 1 MiB 限制，适配器必须自行限制实际下载、禁止元数据重定向并保持请求不带凭据。若把 `CurlTransport` 包装成闭包或 `[$transport, '__invoke']`，它也属于这一类自定义 callable。
+元数据读取在默认传输或直接注入的 `CurlTransport` 中使用读取回调，将下载限制在 1 MiB，固定 URL 派生的请求路径，禁止重定向和 cURL 源站认证，并隔离显式 Cookie、Cookie 文件/列表/jar 与共享 Cookie 状态。它使用局部配置副本，不读写调用方 Cookie jar、不修改复用传输的普通请求配置，并保留调用方超时、代理、TLS 配置及已有写回调的更严格限制。其它自定义 callable 仍只接收五个参数；SDK 会在收到完整响应后检查 1 MiB 限制，适配器必须自行限制实际下载、禁止元数据重定向并保持请求不带凭据。若把 `CurlTransport` 包装成闭包或 `[$transport, '__invoke']`，它也属于这一类自定义 callable。
 
 ## 测试
 
