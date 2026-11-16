@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // OAuthError is an RFC 6749 error returned by the token/introspection endpoints.
@@ -106,6 +107,9 @@ func (o *OIDC) publicJSON(ctx context.Context, path string) ([]byte, map[string]
 	}
 	if len(raw) > limit {
 		return nil, nil, &TransportError{fmt.Errorf("%w (%d bytes)", ErrResponseTooLarge, limit)}
+	}
+	if !utf8.Valid(raw) {
+		return nil, nil, &TransportError{fmt.Errorf("OIDC metadata must be valid UTF-8")}
 	}
 	var metadata map[string]any
 	if err := json.Unmarshal(raw, &metadata); err != nil {

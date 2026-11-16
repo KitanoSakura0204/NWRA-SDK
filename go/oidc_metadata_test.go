@@ -121,6 +121,46 @@ func TestOIDCJWKSRejectsInvalidMetadata(t *testing.T) {
 	}
 }
 
+func TestOIDCMetadataRejectsInvalidUTF8(t *testing.T) {
+	for name, invalid := range map[string]string{
+		"invalid byte":       "\xff",
+		"truncated sequence": "\xe4\xb8",
+		"overlong sequence":  "\xc0\xaf",
+		"encoded surrogate":  "\xed\xa0\x80",
+	} {
+		t.Run("Discover/"+name, func(t *testing.T) {
+			body := strings.TrimSuffix(oidcDiscoveryJSON(t, "https://account.example"), "}") + `,"unknown":"` + invalid + `"}`
+			metadata, err := oidcMetadataClient(body, 200).Discover(context.Background())
+			var transport *TransportError
+			if metadata != nil || !errors.As(err, &transport) {
+				t.Fatalf("accepted invalid UTF-8 discovery extension: %v %v", metadata, err)
+			}
+		})
+		t.Run("JWKS/"+name, func(t *testing.T) {
+			body := `{"keys":[{"kty":"RSA","unknown":"` + invalid + `"}]}`
+			raw, err := oidcMetadataClient(body, 200).JWKS(context.Background())
+			var transport *TransportError
+			if raw != nil || !errors.As(err, &transport) {
+				t.Fatalf("accepted invalid UTF-8 JWK extension: %x %v", raw, err)
+			}
+		})
+	}
+}
+
+func TestOIDCMetadataPreservesUnicode(t *testing.T) {
+	const value = "旅行者🙂�"
+	discovery := strings.TrimSuffix(oidcDiscoveryJSON(t, "https://account.example"), "}") + `,"扩展":"` + value + `"}`
+	metadata, err := oidcMetadataClient(discovery, 200).Discover(context.Background())
+	if err != nil || metadata["扩展"] != value {
+		t.Fatalf("valid Unicode discovery extension changed: %v %v", metadata, err)
+	}
+	jwks := `{"keys":[{"kty":"RSA","扩展":"` + value + `"}],"扩展":"` + value + `"}`
+	raw, err := oidcMetadataClient(jwks, 200).JWKS(context.Background())
+	if err != nil || string(raw) != jwks {
+		t.Fatalf("valid Unicode JWKS bytes changed: %s %v", raw, err)
+	}
+}
+
 func oidcMetadataClient(body string, status int) *OIDC {
 	o := NewOIDC("https://account.example", "client", "secret", "")
 	o.http.Transport = transportTestRoundTripper(func(*http.Request) (*http.Response, error) {
