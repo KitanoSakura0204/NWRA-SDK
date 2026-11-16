@@ -1,7 +1,7 @@
 /** NoWork Account SDK — Server API (whitelist / heartbeat) and OIDC helpers. Requires global fetch (Node 18+). */
 
 /** SDK release this package implements (see CHANGELOG.md). */
-export const SDK_VERSION = '1.2.0';
+export const SDK_VERSION = '1.3.0';
 
 import type { BanOptions, BanTarget, KickEntry, ServerBan, UserData, UserSchema, WriteOptions } from './serverusers.js';
 import { decryptJwe, type PrivateJwk } from './delivery.js';

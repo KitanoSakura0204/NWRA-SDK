@@ -1,0 +1,10 @@
+{
+  "asOf": "2026-11-16",
+  "sdkVersion": "1.3.0",
+  "source": "Backend/internal/modules/devdocs/openapi_full.json",
+  "sha256": "e8acd4d0d99814103840dc2497d997cfcc092b41df647b006944d1bbd2c6e9ea",
+  "operations": 1629,
+  "paths": 1335,
+  "sourceRegisteredOperations": 1623,
+  "schemas": 1368
+}

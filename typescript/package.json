@@ -1,6 +1,6 @@
 {
   "name": "@nowork/sdk",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Server API and OIDC client for the NoWork Account user center",
   "type": "module",
   "main": "./dist/index.js",

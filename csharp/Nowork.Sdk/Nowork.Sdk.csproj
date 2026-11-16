@@ -4,7 +4,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <PackageId>Nowork.Sdk</PackageId>
-    <Version>1.2.0</Version>
+    <Version>1.3.0</Version>
     <Description>Server API and OIDC client for the NoWork Account user center.</Description>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>

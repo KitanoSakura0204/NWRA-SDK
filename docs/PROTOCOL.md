@@ -1,6 +1,6 @@
 # 接入协议
 
-所有 SDK 都按本文档实现，字段名以 JSON 为准。基地址 `BASE` 为用户中心后端对外地址（同时也是 OIDC `issuer`），例如 `https://account.example.com`。
+核心 SDK 按本文档实现，扩展能力和语言差异见 [能力矩阵](../README.md)。完整流程见 [游戏服指南](GAME_SERVER_INTEGRATION.md)、[OIDC 指南](OIDC_INTEGRATION.md) 和 [项目指南](PROJECT_INTEGRATION.md)。字段名以 JSON 为准。基地址 `BASE` 为用户中心后端对外地址（同时也是 OIDC `issuer`），例如 `https://account.example.com`。
 
 ## 1. 统一响应
 
@@ -33,7 +33,7 @@ Server API 与 SPA API 使用同一信封：
 }
 ```
 
-`mode`：`0` 关闭白名单（任何人可进入）、`1` 人工审核、`2` 满足信任等级自动通过。
+`mode`：`0` 关闭白名单、`1` 人工审核、`2` 满足信任等级自动通过。模式 0 不绕过账号、服务器准入、维护或封禁检查；进服以实时 check 的 allowed 为准。
 
 ### 2.2 GET `BASE/server/v1/whitelist/check?name=&uuid=`
 
@@ -44,7 +44,7 @@ Server API 与 SPA API 使用同一信封：
 ```
 
 `reason` 可能为：`not bound`、`pending review`、`banned`、`account locked`、`whitelist disabled`、`maintenance`、`check unavailable`（封禁检查出错，按拒绝处理）。
-白名单关闭的服务器返回 `allowed: true, bound: false`。部分拒绝带 `message`（如服务器封禁的原因，见 [SERVER_USERS.md](SERVER_USERS.md)），应展示给玩家。
+白名单关闭时，符合条件的未绑定玩家可以返回 `allowed: true, bound: false`；已绑定结果可能 bound=true，维护／封禁等条件仍可拒绝。部分拒绝带 `message`（如服务器封禁的原因，见 [SERVER_USERS.md](SERVER_USERS.md)），应展示给玩家。
 
 玩家数据（服主自定义字段的读写）与按服务器生效的封禁（查询、踢出列表、封禁 / 解除）见 [SERVER_USERS.md](SERVER_USERS.md)。
 
@@ -140,9 +140,9 @@ Server API 与 SPA API 使用同一信封：
 | end session | `BASE/oauth2/logout` |
 | JWKS | `BASE/jwks.json` |
 
-支持 `authorization_code`（+PKCE S256）、`refresh_token`、`client_credentials`。客户端鉴权支持 `client_secret_basic` / `client_secret_post` / `none`（公开客户端需 PKCE）。
+支持 `authorization_code`（+PKCE S256）、`refresh_token`、`client_credentials`，可用 grant 以站点策略和 discovery 为准。后端支持 `client_secret_basic` / `client_secret_post` / `none` / `private_key_jwt`；必须使用客户端登记的方式。六语言默认 helper 使用 client_secret_post，公开客户端省略 secret 并使用 PKCE，private_key_jwt 需匹配的断言实现。
 
-Scopes：`openid profile email phone security_level realname game_roles offline_access`。
+常用 scopes：`openid profile email phone security_level realname game_roles offline_access`；完整可用范围以当前 discovery 和客户端配置为准。SDK 1.3.0 新增固定 issuer 的 discovery/JWKS 读取及 nonce-bound 签名／加密 ID Token 验证，见 [OIDC 指南](OIDC_INTEGRATION.md)。
 
 UserInfo 关键字段：
 
@@ -163,7 +163,7 @@ UserInfo 关键字段：
 - Server API 加密响应（响应头 `X-NoWork-Encryption`，或 `data` 恰为 `{"jwe": "..."}`，见 [DELIVERY.md](DELIVERY.md) §5）无法打开时 → `EncryptionError`（未配置私钥、解密失败、`ctx` 不是 `server:<代码>:<本路由>`；配置私钥后 `whitelist` / `whitelist/check` 返回明文也按此拒绝）。它不属于 `TransportError`，插件应按拒绝处理（fail closed），不能走网络异常的放行降级。各 SDK 另提供原始响应访问（Go `Raw`、TypeScript / Python / Java / PHP `raw`、C# `RawAsync`），不解码 `data`。
 - 心跳的 `tps` / `players`（§2.3）与 GM 类型化动作与 `{actions, options}` 发布（§2.4）六种语言 SDK 均已支持；非有限或 ≤ 0 的 TPS 与空玩家列表不发送。
 - OIDC 端点遵循 RFC 6749 错误格式 `{ "error": "...", "error_description": "..." }` → `OAuthError`。
-- 所有 SDK 默认超时 10s，可配置；建议服务器插件对白名单校验做本地缓存与降级（网络异常时按 `mode` 决定放行策略）。
+- Server 客户端默认超时约 10s，具体配置方式见各语言 README；OIDC 超时／取消能力见新版 OIDC 文档。进服请求失败时默认拒绝；如果运营方明确使用有限缓存降级，应设置 TTL 并理解撤销／封禁传播延迟，不能仅凭 mode 放行。
 
 ## 5. Webhook（事件推送）
 
@@ -182,7 +182,7 @@ UserInfo 关键字段：
 | `X-NoWork-Timestamp` | Unix 秒 |
 | `X-NoWork-Signature` | `sha256=` + HMAC-SHA256(secret, `<timestamp>.<body>`) 的十六进制 |
 
-接收方应：校验签名（定时比较）、拒绝时间戳偏差过大的请求（默认 5 分钟；各语言 SDK 的容差参数传 0 / null 表示关闭该检查）、幂等处理同一 `id`，并在 10 秒内返回 2xx；非 2xx 或超时将按 30s / 2m / 10m / 30m / 2h / 6h 退避重试。
+接收方应：校验签名（常量时间比较）、拒绝时间戳偏差过大的请求（默认 5 分钟；容差参数和关闭检查的语义以各语言签名为准）、幂等处理同一 `id`，并在 10 秒内返回 2xx；非 2xx 或超时将按 30s / 2m / 10m / 30m / 2h / 6h 退避重试。
 
 事件：`user.registered` `user.login` `user.login_failed` `user.locked` `user.frozen` `user.level_changed` `user.deleted` `realname.reviewed` `game_role.reviewed` `connection.bound` `connection.unbound` `oauth.consent_granted` `oauth.consent_revoked` `server.offline`。
 
@@ -214,7 +214,7 @@ UserInfo 关键字段：
 ### 6.2 回传方式
 
 - **redirect**：页面跳转到 `redirect_uri?code=…&state=…&iss=…`（失败时为 `error` / `error_description` / `state` / `iss`）。适用于自定义协议（`mygame://auth`、`com.example.game:/cb`）、本机回环（`http://127.0.0.1:47823/cb`，端口须与登记一致）或 https。浏览器可能拦下自定义协议，页面 2.5 秒后给出手动返回的链接。
-- **postMessage**：页面向 `window.opener`（弹窗）或 `window.parent`（内嵌）发送 `{ type: "nowork:sdk-login", code, state, iss, server }`（失败时带 `error`、`error_description`），`targetOrigin` 恒为回调地址的源，从不使用 `*`。接收方必须校验 `event.origin`（登录页的源）、`type` 与 `state`。该模式的回调地址只能是 https 或本机 http。后端托管前端时，该服务器登录页的响应头为 `Content-Security-Policy: frame-ancestors <回调地址的源…>`（其他模式与站内其他页面仍为 `'none'` + `X-Frame-Options: DENY`）；前端由独立 Web 服务器托管时，需为 `/sdk/login/{serverCode}` 自行下发同样的头。内嵌时页面不提供第三方登录（需要整页跳转）；通行密钥需要宿主 iframe 带 `allow="publickey-credentials-get"`。弹窗失去 opener 时页面提供「返回 {host}」按钮，跳转到 redirect 形式的地址。
+- **postMessage**：页面向 `window.opener`（弹窗）或 `window.parent`（内嵌）发送 `{ type: "nowork:sdk-login", code, state, iss, server }`（失败时带 `error`、`error_description`），`targetOrigin` 恒为回调地址的源，从不使用 `*`。接收方必须校验 `event.origin`（登录页的源）、预期窗口的 `event.source`、`type` 与 `state`。该模式的回调地址只能是 https 或本机 http。后端托管前端时，该服务器登录页的响应头为 `Content-Security-Policy: frame-ancestors <回调地址的源…>`（其他模式与站内其他页面仍为 `'none'` + `X-Frame-Options: DENY`）；前端由独立 Web 服务器托管时，需为 `/sdk/login/{serverCode}` 自行下发同样的头。内嵌时页面不提供第三方登录（需要整页跳转）；通行密钥需要宿主 iframe 带 `allow="publickey-credentials-get"`。弹窗失去 opener 时页面提供「返回 {host}」按钮，跳转到 redirect 形式的地址。
 - **code-display**：页面显示 8 位登录码（字母表 `ABCDEFGHJKMNPQRSTVWXYZ23456789`，分两组显示），玩家在客户端输入。登录码就是授权码：单次有效、与普通授权码同一有效期（默认 300 秒）、绑定 PKCE，没有 `code_verifier` 猜中也无用。客户端去掉空格与横线并转大写后作为 `code` 使用（SDK `NormalizeLoginCode` / `normalizeLoginCode`）。适用于主机、电视等无法接收回调的客户端。
 
 ### 6.3 换取令牌
@@ -227,7 +227,7 @@ UserInfo 关键字段：
 
 ### 6.5 安全要点
 
-- 每次登录生成新的 `code_verifier` 与 `state`；收到结果时校验 `state`，有 `iss` 时校验 `iss`（RFC 9207）。
+- 每次登录生成新的 `code_verifier`、`state` 与独立 `nonce`；收到结果时校验 state 与 issuer，换码后验证 ID Token 签名、issuer、audience、时间和 nonce，并要求 UserInfo.sub 与已验证 ID Token 相同。完整流程见 [OIDC 指南](OIDC_INTEGRATION.md)。
 - 回调地址只允许 https、本机 http 与私有协议；`javascript:` `data:` `file:` `blob:` `vbscript:` `intent:` 等协议、`#` 片段、内嵌账号密码一律拒绝。保存与每次读取配置时都会校验，不合格即停止服务（fail closed）。
 - 不要让玩家把登录码告诉他人（页面有提示）；登录码有效期短且单次有效。
 
@@ -251,3 +251,12 @@ SDK：Go `NewPKCE` / `S256Challenge` / `NewState` / `BuildLoginURL` / `ParseLogi
 - [BOTS_SDK.md](BOTS_SDK.md)：Bot API 与 NoneBot2 / Koishi / Wechaty 适配，签名 HTTP 推送、超时和失败不确认。
 
 Python 已增加 `create_pkce_pair` / `s256_challenge` / `create_state` / `build_login_url` / `parse_login_callback` / `normalize_login_code`，与 Go / TypeScript 对齐。三者的 redirect 回调读取现在拒绝空的预期 state 与重复的敏感参数。Go / TypeScript / Python 的登录链接都支持 `device` 与 `prompt=consent`。这些更严格的回调检查不影响 code-display 直接兑换登录码。
+
+
+## 9. 时间、语言和兼容
+
+JWT／Webhook／请求证明的 Unix 时间表示同一个实际瞬间，不能因时区变化加减八小时。带偏移的 RFC3339 可用支持时区的标准库转换显示；没有偏移的历史字符串，必须先确认其源时区，不自动猜成 UTC。
+
+浏览器 Web 对 `/api/*` 可发送 `X-Time-Zone: Asia/Shanghai` 等 IANA 时区，服务端只为该请求转换展示副本。Server API、OIDC 标准端点、原生签名和 SDK 的系统时钟不因此改变。SDK 的日期字段按各自类型保留，直接 HTTP 调用者仍需遵守每个端点的格式。语言使用 X-Lang 等支持的入口；稳定 reason/code 用于程序判断，message 用于显示。
+
+SDK 1.3.0 的 discovery/JWKS 与 nonce API 是向后兼容的新增能力；不同语言的可选参数和错误类型请使用语言 README，完整验证记录见 [VERIFICATION](VERIFICATION.md)。

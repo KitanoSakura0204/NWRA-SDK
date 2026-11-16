@@ -18,7 +18,7 @@ use NoWork\Sdk\Internal\Json;
 final class NoworkClient
 {
     /** SDK release this package implements (see CHANGELOG.md). */
-    public const VERSION = '1.2.0';
+    public const VERSION = '1.3.0';
 
     /** Response header the backend sets on an encrypted Server API reply (DELIVERY.md section 5). */
     public const HEADER_ENCRYPTION = 'X-NoWork-Encryption';

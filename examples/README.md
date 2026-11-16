@@ -2,10 +2,11 @@
 
 > English version below.
 
-每个示例都只依赖本仓库的 SDK（通过相对路径引用），附中英文 README。
+示例优先通过相对路径引用本仓库 SDK。外部框架依赖、运行配置和可用语言说明见各示例 README。
 
 | 目录 | 语言 | 内容 | 测试 |
 | --- | --- | --- | --- |
+| [oidc-rp-go](oidc-rp-go/README.md) | Go | 完整网站 OIDC RP：浏览器绑定、PKCE、state/nonce、ID Token 与 UserInfo 校验、本地会话和退出 | `go test ./... && go vet ./...` |
 | [game-server-go](game-server-go/) | Go | 最小游戏服务器：白名单同步与加入校验（含加密响应与降级策略）、心跳 TPS / 在线玩家、GM 面板（类型化操作、选项列表、命令回执）、Webhook 踢出被冻结 / 删除的账号、SDK 登录页客户端流程 | `go vet ./... && go test ./...` |
 | [gm-sso-python](gm-sso-python/README.md) | Python | 独立角色 GM RP：浏览器会话、PKCE、state、一次性兑换 | `python -m pytest test_server.py` |
 | [chat-relay](../go/examples/chat-relay/main.go) | Go | 游戏聊天中继、成功输出后 ACK、游戏消息上报 | 包含于 SDK/go 检查 |
@@ -22,10 +23,11 @@
 
 # SDK examples
 
-Every example depends only on the SDKs in this repository (by relative path) and has a README in Chinese and English.
+Examples use relative references to this SDK where applicable. Each README describes its external framework dependencies, runtime configuration and available language documentation.
 
 | Directory | Language | What it shows | Tests |
 | --- | --- | --- | --- |
+| [oidc-rp-go](oidc-rp-go/README.md) | Go | Complete local OIDC RP: browser binding, PKCE, state/nonce, token verification, sessions and logout | `go test ./... && go vet ./...` |
 | [game-server-go](game-server-go/) | Go | Minimal game server: whitelist sync and join checks (encrypted replies, outage policy), heartbeat TPS / players, GM channel (typed actions, option lists, results), webhooks that kick frozen or deleted accounts, the SDK login page client flow | `go vet ./... && go test ./...` |
 | [gm-sso-python](gm-sso-python/README.md) | Python | Character GM relying party with browser session, PKCE and one-use exchange | `python -m pytest test_server.py` |
 | [chat-relay](../go/examples/chat-relay/main.go) | Go | Console relay with ACK after output and in-game posting | Included in SDK/go checks |

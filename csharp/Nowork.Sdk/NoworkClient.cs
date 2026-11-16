@@ -85,7 +85,7 @@ public sealed record CheckResult(
 public sealed partial class NoworkClient
 {
     /// <summary>SDK release this client implements (see CHANGELOG.md).</summary>
-    public const string Version = "1.2.0";
+    public const string Version = "1.3.0";
 
     private readonly HttpClient _http;
     private readonly string _base;

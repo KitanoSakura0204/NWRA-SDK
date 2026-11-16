@@ -33,7 +33,7 @@ func (e *TransportError) Error() string { return "nowork: transport error: " + e
 func (e *TransportError) Unwrap() error { return e.Err }
 
 // Version is the SDK release this package implements (see CHANGELOG.md).
-const Version = "1.2.0"
+const Version = "1.3.0"
 
 // HeaderEncryption marks a Server API response whose data is the {"jwe": "..."} envelope
 // (SDK/docs/DELIVERY.md section 5).
